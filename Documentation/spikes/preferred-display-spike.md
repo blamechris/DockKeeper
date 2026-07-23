@@ -58,11 +58,29 @@ SystemState
 - **v1.0 scope:** edge lock is the headline, always-reliable feature. Preferred Display ships as **best-effort**, gated on detecting the Spaces setting, with honest UI copy ("On macOS, the Dock lives on your main display"). No private display APIs in v1.0.
 - **Harden now (cheap, spike-validated):** have `CoreDock.swift` explicitly `dlopen` HIServices instead of relying on transitive AppKit linkage — removes a hidden dependency on link order for the CLI.
 
-## Open questions for the architect
+## Decisions (2026-07-22)
 
-1. Is moving the **menu bar** along with the Dock acceptable for "Preferred Display," or is that a dealbreaker that forces us onto private SkyLight APIs for v1.0?
-2. Do we treat "separate Spaces ON" as **unsupported-for-pinning** (edge-lock still works) and just surface a warning, or invest in the private path to pin regardless?
-3. Priority call: ship v1.0 with **edge-lock only** + "Preferred Display (best-effort)", and promote robust pinning to a v1.5 goal?
+Resolved with the project owner. DockKeeper is a free replacement for an
+expensive closed-source app — the bar is "reliable and honest," not "beat every
+macOS limitation."
+
+1. **Use the safe public-API pinner** (`MainDisplayPinner`, make the target the
+   main display). The menu bar moving along with the Dock is an **accepted,
+   documented consequence** — not a blocker. No private SkyLight APIs.
+2. **Option A** — when "Displays have separate Spaces" is ON (the default), we
+   do **not** fight the OS. Pinning reports `unsupportedSeparateSpaces`; the UI
+   explains it and edge-locking continues to work. No private path.
+3. **Ship the reliable 90%.** v1.0 = always-on edge-lock + best-effort Preferred
+   Display via the public API. Robust pinning in every configuration is
+   explicitly out of scope; keep it simple.
+
+## Superseded open questions
+
+_(kept for history — resolved above)_
+
+1. ~~Is moving the menu bar acceptable?~~ → Yes, documented consequence.
+2. ~~Treat "separate Spaces ON" as unsupported, or build the private path?~~ → Unsupported + inform.
+3. ~~Edge-lock-only v1.0 with best-effort pinning?~~ → Yes.
 
 ## Next steps
 

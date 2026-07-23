@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CoreGraphics
 @testable import DockKeeperCore
 
 @Suite("DockOrientation")
@@ -63,5 +64,64 @@ struct SettingsTests {
         let settings = makeSettings()
         settings.lockEdge = .left
         #expect(settings.lockEdge == .left)
+    }
+}
+
+@Suite("MainDisplayPinner.decide")
+struct DisplayPinnerTests {
+
+    private func display(_ uuid: String, id: CGDirectDisplayID, origin: CGPoint = .zero) -> DisplayInfo {
+        DisplayInfo(
+            id: uuid,
+            displayID: id,
+            name: "Display \(id)",
+            isMain: false,
+            frame: CGRect(origin: origin, size: CGSize(width: 1920, height: 1080))
+        )
+    }
+
+    private func snapshot(_ displays: [DisplayInfo], main: CGDirectDisplayID, separateSpaces: Bool) -> DisplaySnapshot {
+        DisplaySnapshot(displays: displays, mainDisplayID: main, separateSpacesEnabled: separateSpaces)
+    }
+
+    @Test("No preferred UUID is a no-op")
+    func noPreference() {
+        let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: nil) == .terminal(.noPreference))
+    }
+
+    @Test("Single display cannot be pinned")
+    func singleDisplay() {
+        let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "A") == .terminal(.singleDisplay))
+    }
+
+    @Test("Unknown preferred display reports not-connected")
+    func displayNotConnected() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "GONE") == .terminal(.displayNotConnected))
+    }
+
+    @Test("Separate Spaces on declines rather than fighting the OS (Decision 2A)")
+    func unsupportedSeparateSpaces() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .terminal(.unsupportedSeparateSpaces))
+    }
+
+    @Test("Target already main is a no-op")
+    func alreadyOnTarget() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 2, separateSpaces: false)
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .terminal(.alreadyOnTarget))
+    }
+
+    @Test("Valid off-main target on a multi-display, non-separate-Spaces setup reconfigures")
+    func reconfigures() {
+        let snap = snapshot(
+            [display("A", id: 1, origin: .zero),
+             display("B", id: 2, origin: CGPoint(x: 1920, y: 0))],
+            main: 1,
+            separateSpaces: false
+        )
+        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .reconfigure(2))
     }
 }

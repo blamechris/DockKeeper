@@ -22,6 +22,11 @@ public final class DockMonitor {
     private var observers: [NSObjectProtocol] = []
     private var displayCallbackRegistered = false
 
+    /// Invoked after each edge restore (wake, display change, poll, start), so
+    /// callers can re-apply the preferred-display pin on the same events. Set
+    /// by `AppState`.
+    public var additionalRestore: (@MainActor () -> Void)?
+
     public init(controller: DockController, settings: Settings = .shared) {
         self.controller = controller
         self.settings = settings
@@ -69,6 +74,7 @@ public final class DockMonitor {
             if self.controller.restoreToLockedEdge() {
                 Log.dock.info("Restored Dock to locked edge after event")
             }
+            self.additionalRestore?()
         }
     }
 

@@ -24,7 +24,36 @@ struct MenuBarContent: View {
             }
         }
 
+        Menu("Preferred Display") {
+            Button {
+                state.setPreferredDisplay(nil)
+            } label: {
+                HStack {
+                    Text("Any (don't pin)")
+                    if state.preferredDisplayUUID == nil { Image(systemName: "checkmark") }
+                }
+            }
+            if state.displays.count > 1 {
+                Divider()
+                ForEach(state.displays) { display in
+                    Button {
+                        state.setPreferredDisplay(display.id)
+                    } label: {
+                        HStack {
+                            Text(display.name)
+                            if state.preferredDisplayUUID == display.id { Image(systemName: "checkmark") }
+                        }
+                    }
+                }
+            }
+        }
+
         Toggle("Auto Recover", isOn: $state.autoRecover)
+
+        if let message = state.lastPinMessage {
+            Divider()
+            Text(message)
+        }
 
         Divider()
 
