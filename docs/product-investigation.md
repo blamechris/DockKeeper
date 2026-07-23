@@ -40,7 +40,8 @@ All rows CONFIRMED from E-1/E-2/E-3 except as labeled.
 | P-011 | Any-edge + works with Spaces disabled + cross-display vertical Dock | CONFIRMED (claimed, **unreleased**) | E-1 (Pro) | Pro is direct-download → likely non-sandboxed mechanisms, INFERRED (mirrors DockKeeper's approach) |
 | P-012 | Behavior with mirrored displays / clamshell / Stage Manager | UNKNOWN | none | Not documented |
 | P-013 | Subscription nag in Lite | CONFIRMED (user reports, low sample) | E-3 reviews | The pain point DockKeeper's principles delete |
-| P-014 | Actual reliability of P-001/P-006 under the hardware matrix | UNKNOWN | none | Needs black-box testing on an installed copy |
+| P-014 | Actual reliability of P-001/P-006 under the hardware matrix | UNKNOWN | none | Needs black-box testing on an installed copy (Lite is installed on the dev rig — E-5) |
+| P-015 | Ships an "incompatible display" warning (`warn_incompatible_display`) | CONFIRMED | E-5 (installed copy's prefs) | Its bottom-only summon approach is known-fragile on some topologies — observed failing on stacked portrait-above (spike) |
 
 ## 3. The structural insight: the two products cover **opposite macOS modes**
 

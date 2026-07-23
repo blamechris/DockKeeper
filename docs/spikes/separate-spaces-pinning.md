@@ -61,11 +61,38 @@ preference order:
    careful read-only call would corroborate (a) and give exact geometry.
    Signature must be verified before calling (crash risk contained to spike).
 
+## Field observations — 2026-07-23, stacked-portrait rig
+
+**The summon gesture fails on a shared bottom edge.** With the Dell portrait
+display arranged **directly above** the laptop, its bottom edge is a
+pass-through boundary: pushing the pointer down crosses into the laptop
+display instead of dwelling, and holding at the Dell's bottom edge did **not**
+migrate the Dock (owner-observed; DockLock confirmed not running — clean
+observation, CONFIRMED for this arrangement). Whether any harder push can
+summon on a shared edge is UNKNOWN → side-by-side rearrangement test queued.
+
+**The competitor knows.** DockLock Lite's local preferences (black-box read of
+the owner's legitimately installed copy, v1.4.8) contain
+`warn_incompatible_display = 1` — it ships an "incompatible display" warning
+concept — plus `control_mode`/`lock_position` flags and per-workspace rule
+storage. INFERRED: bottom-only summon-based locking is known-fragile on
+topologies like this one.
+
+**Design implication (important).** A re-summon mechanism must be
+**edge-aware**: on stacked arrangements the bottom edge of the upper display
+may be unusable, while its left/right edges are free. DockKeeper's any-edge
+support isn't just a differentiator here — a left/right Dock may be the *only*
+edge that can host/summon on the upper display of a stacked pair. Test queued:
+set Dock edge to left (CLI), attempt summon at the Dell's free left edge.
+
 ## Next steps
 
-- [ ] **Interactive**: owner summons the Dock to the Dell (pointer push at its
-      bottom edge); re-run detection → confirm the sensor tracks migration and
-      note which notifications fire.
+- [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
+      **failed on this topology** (shared edge; see field observations).
+- [ ] **Side-by-side test**: temporarily rearrange Dell beside laptop
+      (programmatic, reversible), retry bottom summon on the freed edge.
+- [ ] **Left-edge test**: `dockkeeper lock left`, attempt summon at the Dell's
+      free left edge in the current stacked arrangement.
 - [ ] Careful `CoreDockGetRect` read-only call (probe script only).
 - [ ] Warp-only summon experiment; if inert, event-synthesis experiment (needs
       a one-time Accessibility grant **for the dev machine only** — a product
