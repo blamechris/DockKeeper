@@ -23,7 +23,7 @@ Central spike done (mechanism + pinning + Spaces gating, owner decisions recorde
 | Deliverable | Answers open question | Risk |
 |---|---|---|
 | UUID-stability spike (reconnect/dock/adapter/reboot table) | #2 | R-003 |
-| CoreDock-persistence spike (does a live set survive `killall Dock`?) | #3 | R-011 |
+| ~~CoreDock-persistence spike~~ ✅ Done 2026-07-22 — write-through to defaults CONFIRMED ([findings](../Documentation/spikes/coredock-defaults-persistence.md)); restarts are benign, no mirroring needed, R-011 closed | #3 | R-011 |
 | Event-burst instrumentation session (real burst profile → debounce width) | #4 | R-005 |
 | Mirroring/clamshell behavior notes | #6 | R-002 |
 
@@ -52,29 +52,25 @@ Built: enumeration + UUID mapping. Remaining (ADR-004):
 
 **Acceptance.** Score table, tie→ambiguous, repair, and migration all unit-tested (traceability rows in the test strategy). **Dependencies.** None (thresholds tuned later on the M6 rig).
 
-## M3 — Dock observation 🟡
+## M3 — Dock observation ✅ (2026-07-22)
 
-Built: all event sources + poll. Remaining:
+- ✅ `DockMonitor` emits typed `DockEvent` values only; all decisions moved to the coordinator.
+- ✅ Debounce + generation-counter coalescing (in `RecoveryCoordinator`, TDD §8.3).
+- ✅ External `UserDefaults` observation via KVO (cross-process; CLI edits reflect live — DK-FR-007-S3).
+- ✅ `stop()` observer removal fixed (per-center lists); unused `DistributedNotificationCenter` dropped (A.4).
+- ~~Dock-restart detection~~ **Dropped**: spike #3 proved restarts benign (CoreDock writes through to defaults); the poll covers the residual gap.
 
-- Split observation from recovery: `DockMonitor` emits typed `DockEvent` values only.
-- Debounce + generation-counter coalescing (TDD §8.3).
-- Dock-restart detection (mechanism UNKNOWN — candidates in §8.1; pick via M0 spike #3).
-- Observe external `UserDefaults` changes (CLI edits reflect live — DK-FR-007-S3).
-- Fix `DockMonitor.stop()` indiscriminate observer removal; drop the unused `DistributedNotificationCenter` registration (A.4).
+**Acceptance met:** synthetic burst → exactly one reconcile (S2 test green in `RecoveryTests.swift`).
 
-**Acceptance.** Synthetic burst → exactly one reconcile (S2 test green). **Dependencies.** Coordinator skeleton (M4) for the event sink; land together.
+## M4 — Dock restoration (the recovery engine) ✅ code complete (2026-07-22)
 
-## M4 — Dock restoration (the recovery engine) 🟡 — **critical path**
+- ✅ `RecoveryCoordinator` + pure `RecoveryMachine` core: retry ladder (0/+1.5/+4 s), cooldown budget (6/60 s → `Error`), echo suppression, generation coalescing, single-owner state machine per TDD §5.1/§8.3.
+- ✅ `DockAdapter` protocol seam (`CoreDockAdapter`/`DefaultsDockAdapter`); `DockController` refactored onto it with `isDegraded` reporting.
+- ✅ Explicit `dlopen` of the ApplicationServices umbrella in `CoreDock` (spike-validated hardening; CLI verified on-device).
+- ✅ Poll default 30 s + poll-caught-drift counter (ADR-005); `autoRecover` removed (ADR-007).
+- ~~Mirror CoreDock sets into defaults~~ **Not needed**: spike #3 confirmed CoreDock writes through (R-011 closed).
 
-Built: basic restore works end-to-end. Remaining — this is the largest single work item:
-
-- `RecoveryCoordinator` with pure `decide(state, event, now)` core: retry ladder (0/+1.5/+4 s), cooldown budget (6/60 s → `Error`), echo suppression, single-owner state machine per TDD §5.1/§8.3.
-- `DockAdapter` protocol seam (`CoreDockAdapter`/`DefaultsAdapter`) — **build first**; it unblocks most unit tests (test-strategy priority).
-- Explicit `dlopen` of HIServices in `CoreDock` (spike-validated hardening for non-AppKit processes).
-- Poll default 2 s → 30 s + poll-caught-drift counter (ADR-005).
-- Mirror CoreDock sets into defaults **iff** M0 spike #3 shows non-persistence (R-011).
-
-**Acceptance.** All DK-FR-003 scenarios S1–S5 unit-green; no oscillation over the reliability suite's 100-restore run. **Risks.** R-005, R-011. **Rollback.** Coordinator sits behind the existing enable flag; the legacy path stays until M4 acceptance passes, then is deleted in its own commit.
+**Acceptance:** all DK-FR-003 scenarios S1–S5 unit-green (`RecoveryTests.swift`, 26 new tests; 39 total passing). The 100-restore no-oscillation run belongs to the reliability suite → verified at **M6**. Legacy restore path deleted in the same change (the coordinator is the only reconciler).
 
 ## M5 — Permission & onboarding ✅ (by elimination)
 
@@ -97,6 +93,6 @@ Developer ID signing + notarization pipeline, `.dmg`/`.zip` artifacts, Homebrew 
 
 ## Cross-cutting debt (fold into the touching milestone)
 
-From TDD A.4, tracked here so it isn't lost: observer-removal fix + dead `DistributedNotificationCenter` (M3) · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · external-defaults observation (M3) · `Log.verbose` static folded into diagnostics rework (M1) · `autoRecover` removal per ADR-007 (M4).
+From TDD A.4, tracked here so it isn't lost: ~~observer-removal fix + dead `DistributedNotificationCenter`~~ ✅ · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · ~~external-defaults observation~~ ✅ · `Log.verbose` static folded into diagnostics rework (M1) · ~~`autoRecover` removal per ADR-007~~ ✅ (all ✅ 2026-07-22 with M3/M4).
 
 **Out of scope for v1.0** (kickoff/TDD non-goals): follow-mouse/window/app modes, Shortcuts/Raycast/AppleScript, per-app rules and profiles, per-display Dock allow/disallow, App Store, auto-update (Sparkle needs a post-v1 ADR), restoring display arrangement on disable (resolved leave-as-is — ADR-006). These deferred modes are exactly the **DockLock Plus/Pro** premium differentiators (follow mouse/active app/active window, per-display allow, automation, Shortcuts/Raycast — CONFIRMED from public product pages); staged parity is intentional per kickoff §17, and parity claims stay evidence-gated (AGENTS rule 17) until `docs/product-investigation.md` exists.

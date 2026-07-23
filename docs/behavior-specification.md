@@ -65,8 +65,8 @@ S3 — Fallback when CoreDock is unavailable
 Given the CoreDock symbols fail to resolve
 When a restore is needed
 Then DockKeeper writes com.apple.dock orientation and restarts the Dock
-And the app enters the Degraded state (surfaced in CLI status today; the
-    menu note is planned — TDD §15 marks state surfacing 🟡)
+And the app enters the Degraded state, surfaced in the menu (2026-07-22)
+    and in CLI status
 And the Dock restart is visible (accepted cost of the fallback)
 
 S4 — Top edge is never offered
@@ -76,7 +76,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 **Failure behavior.** If both the live read and the defaults read fail, the orientation is treated as unknown drift and the desired edge is applied (applying is idempotent and safe — TDD §5.3, PROPOSED). Retry ladder applies (`DK-FR-003`); if exhausted, state → `Error` with the last error surfaced.
 
-**User-visible behavior.** Primary path: instant, flicker-free edge change. Fallback: visible Dock restart plus a "running degraded" note (CLI `status` reports it today; the menu note is planned).
+**User-visible behavior.** Primary path: instant, flicker-free edge change. Fallback: visible Dock restart plus a "running degraded" note in the menu and CLI `status`.
 
 **Testability.** Decision logic unit-testable once the `DockAdapter` seam exists (v0.1 gap — TDD §4.3); model mapping already covered by `DockOrientationTests` (CONFIRMED). See [test-strategy.md](test-strategy.md).
 
@@ -146,7 +146,7 @@ Then the pass is a no-op with a typed outcome (alreadyOnTarget / singleDisplay)
 
 **Preconditions.** Enabled. (`enabled` is the single switch per ADR-007; v0.1's separate `autoRecover` — which gated only the poll — is retired and removed with M4.)
 
-**Trigger.** Any event in TDD §8.1, or a poll tick (default 30 s per ADR-005; v0.1 ships 2 s — change pending).
+**Trigger.** Any event in TDD §8.1, or a poll tick (default 30 s per ADR-005 — shipped 2026-07-22).
 
 **Expected result.**
 
@@ -184,7 +184,7 @@ Then the drift is corrected and the poll-caught occurrence is counted locally
 
 **User-visible behavior.** None when healthy — recovery must be invisible (no oscillation). `Error` state surfaces the last error in the menu.
 
-**Testability.** Pure `decide(state, event, now)` core with synthetic event sequences and a simulated clock (none of S1–S5 is implemented or tested in v0.1 — this is the core M3/M4 work).
+**Testability.** Pure `RecoveryMachine` core with synthetic event sequences and a simulated clock — **implemented and unit-tested 2026-07-22** ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift) covers S1–S5).
 
 **Priority / target.** P0 / v1.0. **Related risks:** R-005, R-006, R-011.
 
@@ -334,8 +334,8 @@ S3 — Running app follows CLI edits
 Given the menu-bar app is running
 When settings change via the CLI
 Then the app's published state refreshes and reconciles if needed
-[PROPOSED — v0.1 gap: the app does not observe external defaults changes
- and shows stale state until relaunch; TDD A.4]
+[Implemented 2026-07-22 — KVO on the shared defaults sees cross-process
+ edits; the menu updates live]
 ```
 
 **Failure behavior.** Unknown arguments → usage text, non-zero exit. CoreDock unavailable in a non-AppKit process → explicit `dlopen` of HIServices hardening (PROPOSED, spike-validated).

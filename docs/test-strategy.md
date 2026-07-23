@@ -56,21 +56,21 @@ Each cell records: pass/fail, macOS version, hardware path, and any drift latenc
 
 ## Requirements → tests traceability
 
-Existing suites (all in [Tests/DockKeeperTests/DockOrientationTests.swift](../Tests/DockKeeperTests/DockOrientationTests.swift), 13 tests — CONFIRMED at 72fbcc2): `DockOrientationTests` (5), `SettingsTests` (2), `DisplayPinnerTests` (6 — every `decide` branch).
+Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5), `SettingsTests` (2), `DisplayPinnerTests` (6 — every `decide` branch) in [DockOrientationTests.swift](../Tests/DockKeeperTests/DockOrientationTests.swift); `RecoveryMachine`/`RecoveryCoordinator` suites (20 — decide, ladder, echo, cooldown, coalescing, poll counter, disable teardown) in [RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift); `DockControllerTests` (6 — adapter seam, fallback, degraded) in [DockControllerTests.swift](../Tests/DockKeeperTests/DockControllerTests.swift).
 
 | Requirement / scenario | Existing coverage | Needed |
 |---|---|---|
-| DK-FR-001 S1–S3 (restore, idempotence, fallback) | — | `RecoveryCoordinator.decide` cases via fake `DockAdapter`; Degraded-state transition test |
+| DK-FR-001 S1–S3 (restore, idempotence, fallback) | ✅ `DockControllerTests` (fake adapters) + `RecoveryMachineTests` (Degraded transition) | — |
 | DK-FR-001 S4 (no top edge) | ✅ `userSelectableExcludesTop`, raw-value mapping | — |
 | DK-FR-002 S1, S5 (pin decisions) | ✅ `DisplayPinnerTests` all six branches | Arrangement-preserving origin math; hardware verification (matrix) |
 | DK-FR-002 S2 (separate Spaces declined) | ✅ `unsupportedSeparateSpaces` | Manual: UI copy shown |
 | DK-FR-002 S3–S4 (absent / re-pin on return) | ✅ `displayNotConnected` (decision only) | Event-sequence test: reconnect → re-pin; `PreferredDisplayMissing` state transitions |
-| DK-FR-003 S1 (wake ladder) | — | Simulated-clock ladder convergence; "wake before displays ready" sequence |
-| DK-FR-003 S2 (burst → single attempt) | — | `testDuplicateDisplayEventsProduceSingleRecoveryAttempt` |
-| DK-FR-003 S3 (echo suppression) | — | Self-inflicted reconfigure swallowed within window |
-| DK-FR-003 S4 (oscillation guard) | — | Budget exceeded → `Error`, corrections stop |
-| DK-FR-003 S5 (poll safety net) | — | Poll-caught drift increments counter; integration tick test |
-| DK-FR-004 (enable/disable) | ✅ `SettingsTests` (persistence) | Disable tears down observers/timers — no residual corrections |
+| DK-FR-003 S1 (wake ladder) | ✅ `RecoveryTests` (machine + coordinator, simulated clock) | — |
+| DK-FR-003 S2 (burst → single attempt) | ✅ `duplicateEventsProduceSingleAttempt` | — |
+| DK-FR-003 S3 (echo suppression) | ✅ machine + coordinator echo tests | — |
+| DK-FR-003 S4 (oscillation guard) | ✅ `oscillationGuard` / `oscillationStops` | — |
+| DK-FR-003 S5 (poll safety net) | ✅ `pollCountsDrift` (unit) | Integration tick test with a real timer |
+| DK-FR-004 (enable/disable) | ✅ `SettingsTests` (persistence) + `disableStrandsPasses` (no residual corrections) | Observer-teardown integration test |
 | DK-FR-005 (login item) | — | Unit: `message(for:)` mapping; manual: approval matrix row |
 | DK-FR-006 (menu bar) | — | Manual; state→copy mapping unit tests where pure |
 | DK-FR-007 (CLI) | — | Argument-parsing table test; `status` snapshot; external-change observation (S3) |
@@ -80,4 +80,4 @@ Existing suites (all in [Tests/DockKeeperTests/DockOrientationTests.swift](../Te
 
 ## Gaps and sequencing
 
-The three big uncovered areas are exactly the three big unbuilt areas: the recovery coordinator (DK-FR-003 — all five scenarios), the `DockAdapter` seam (DK-FR-001), and fingerprint identity (ADR-004). Per the TDD rule, their tests come **with or before** their implementation in M2–M4 ([implementation plan](implementation-plan.md)); the manual matrix (M6) is the only level gated on hardware.
+~~The recovery coordinator and `DockAdapter` seam~~ — landed with tests 2026-07-22 (M3/M4). The remaining uncovered area is fingerprint identity (ADR-004, M2); per the TDD rule its tests come **with or before** implementation. The manual matrix (M6) stays the only level gated on hardware.

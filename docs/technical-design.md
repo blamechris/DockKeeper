@@ -332,7 +332,7 @@ When a fingerprint matches on fallback evidence but the stored UUID differs from
 | Resolution / arrangement changed | `NSApplication.didChangeScreenParametersNotification` | ✅ | Reconcile (coalesced with the CG callback — these fire together) |
 | Active Space changed | `NSWorkspace.activeSpaceDidChangeNotification` | ✅ | Reconcile edge only (cheap read; usually no-op) |
 | Session became active (fast user switching) | `NSWorkspace.sessionDidBecomeActiveNotification` | ✅ | Reconcile |
-| Dock process restarted | UNKNOWN mechanism — candidates: `NSWorkspace.didLaunchApplicationNotification` for `com.apple.dock`, or kqueue `EVFILT_PROC` on the Dock PID | ❌ | Reconcile (a restarted Dock re-reads defaults; our live `CoreDock` writes were also mirrored? **UNKNOWN — spike needed**: does a `CoreDock` set persist the defaults value, or does a Dock restart revert it?) |
+| Dock process restarted | ~~detection needed~~ **Resolved 2026-07-22**: spike CONFIRMED `CoreDockSet` writes through to defaults, so a restarted Dock re-reads the edge we set — restarts are benign; no detection mechanism needed (poll covers residual gaps) | n/a | — |
 | Preference changed externally (CLI while app runs) | KVO on `UserDefaults` / `didChangeNotification` | ❌ | Refresh published state; reconcile if desired edge changed |
 | Poll tick (safety net) | `Timer` | ✅ (2 s — too aggressive, see §8.6) | Silent drift check |
 | Permission events | n/a in v1 | — | — |
@@ -400,7 +400,7 @@ All PROPOSED and stored in `Settings` (the keys exist: `restoreDelay`, `recovery
 
 ### 8.5 Dock restart
 
-`killall Dock` (our own fallback, the user, or macOS) restarts the Dock, which re-reads `com.apple.dock` defaults. Whether a prior live `CoreDock` set survives that restart is **UNKNOWN** — if `CoreDock` writes through to the defaults, restarts are benign; if not, a restart reverts the edge and only the poll catches it (up to one poll interval of wrong-edge Dock). **Spike required**; if writes don't persist, mirror every successful `CoreDock` set into the defaults key (cheap, safe).
+**Resolved 2026-07-22 — CONFIRMED benign.** The on-device spike ([findings](../Documentation/spikes/coredock-defaults-persistence.md)) showed a live `CoreDock` set writes through to the `com.apple.dock` defaults within ~1.5 s (it even creates the key when unset). A restarted Dock therefore re-reads exactly the edge we last set: no mirroring, no Dock-restart detection needed.
 
 ### 8.6 Polling policy
 
@@ -511,16 +511,16 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 |---|---|---|---|
 | CoreDock symbols missing (future macOS) | `dlsym` nil at first use | Fallback to defaults+restart; state `Degraded`; menu note; CLI `status` reports it | ✅ mechanism, 🟡 state surfacing |
 | CoreDock resolves but values unrecognized | nil from `current()` | Treat as unknown → apply desired edge | ✅ |
-| Symbols absent in non-AppKit process | CLI without HIServices loaded | Explicit `dlopen("HIServices")` hardening | ❌ PROPOSED (spike-validated) |
-| Dock process restarted | §8.5 detection | Reconcile; mirror CoreDock writes to defaults if spike shows non-persistence | ❌ |
+| Symbols absent in non-AppKit process | CLI without HIServices loaded | Explicit `dlopen` of the ApplicationServices umbrella | ✅ (2026-07-22) |
+| Dock process restarted | n/a — benign | Spike CONFIRMED CoreDock writes through to defaults; restart re-reads our edge (§8.5) | ✅ resolved |
 | Preferred display missing | Snapshot match fails | `PreferredDisplayMissing`; no fallback pin; re-pin on return | ✅ outcome, ❌ state/re-pin-on-return is event-driven only via generic reconcile (works, INFERRED) |
 | Display identity changed (dock/adapter path) | Fingerprint matches on fallback evidence | Repair stored fingerprint (§7.3) | ❌ |
 | Ambiguous identity (identical twins) | Non-unique max score | Ask user to re-pick; never guess | ❌ |
 | Pin reconfigure fails | `CGError` ≠ success | Typed `.failed`, transaction cancelled cleanly, user message | ✅ |
 | Separate Spaces ON | Defaults read | Decline pin + explain; edge lock continues | ✅ |
-| Restoration loop (external agent fighting us) | Cooldown budget exceeded | Stop, state `Error`, tell user | ❌ |
-| Wake before displays ready | First ladder attempt finds no/one display | Ladder retries at +1.5 s / +4 s | ❌ (single attempt today) |
-| Rapid conflicting display events | Burst | Debounce + generation coalescing | ❌ |
+| Restoration loop (external agent fighting us) | Cooldown budget exceeded | Stop, state `Error`, tell user | ✅ (2026-07-22, unit-tested) |
+| Wake before displays ready | First ladder attempt finds no/one display | Ladder retries at +1.5 s / +4 s | ✅ (2026-07-22, unit-tested) |
+| Rapid conflicting display events | Burst | Debounce + generation coalescing | ✅ (2026-07-22, unit-tested) |
 | Login-item registration fails | `SMAppService` throws / `.requiresApproval` / `.notFound` | Toggle reverts to system truth; guidance + deep link | ✅ |
 | Mirrored displays | `CGDisplayIsInMirrorSet` | UNKNOWN correct behavior — likely decline pin (mirrors share one space); spike | ❌ |
 | Unsupported macOS (< 14) | Package `platforms` gate | Won't build/launch; document in README | ✅ |
@@ -552,7 +552,7 @@ Ordered by risk to v1:
 
 1. **Does main-display relocation actually move the Dock on real multi-monitor hardware, and how does it behave on unplug/replug?** The entire pinning feature is INFERRED. Blocks calling pinning "done." → 2-monitor rig session (spike next-steps already call for this).
 2. **How stable are display UUIDs across reconnects, docking stations, adapters, and reboots?** Determines how much of §7's scored matching is actually needed. UNKNOWN.
-3. **Does a `CoreDock` live set persist across a Dock restart** (i.e., does it write through to defaults)? Determines §8.5 mirroring. UNKNOWN — small spike.
+3. ~~**Does a `CoreDock` live set persist across a Dock restart?**~~ → **Resolved 2026-07-22: yes — CONFIRMED write-through on-device** ([spike](../Documentation/spikes/coredock-defaults-persistence.md)); §8.5 mirroring is unnecessary.
 4. **What is the real event-burst profile around display changes?** Sets debounce width and validates the echo window. UNKNOWN — instrumented logging session.
 5. ~~**Should DockKeeper restore the original display arrangement when pinning is disabled or the app quits?**~~ → **Resolved 2026-07-22 (ADR-006): leave-as-is for v1.0** — no snapshot-and-restore; disabling stops future corrections and the Preferences copy says so.
 6. **Mirroring and clamshell behavior** for both edge lock and pinning. UNKNOWN — hardware matrix.
@@ -606,8 +606,8 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | M0 Research & feasibility | 🟡 central spike done + decisions; remaining spikes in §17 |
 | M1 App shell (menu bar, prefs, login item, diagnostics) | 🟡 built except file diagnostics; ad-hoc-signed app bundle landed on main (`72fbcc2`) |
 | M2 Display registry | 🟡 enumeration + UUID done; fingerprint/scored matching/repair missing |
-| M3 Dock observation | 🟡 events + poll wired; no debounce/coalescing, no Dock-restart detection, observation not separated from recovery |
-| M4 Dock restoration | 🟡 restore works; no retry ladder/cooldown/loop-guard/echo suppression |
+| M3 Dock observation | ✅ (2026-07-22) events-only `DockMonitor` + typed `DockEvent`s; external-defaults KVO; Dock-restart detection dropped (spike: restarts benign) |
+| M4 Dock restoration | ✅ code complete (2026-07-22): `RecoveryCoordinator`/`RecoveryMachine` with ladder, cooldown, echo suppression, coalescing — unit-tested; 100-restore reliability run at M6 |
 | M5 Permission & onboarding | ✅-by-elimination: no permission needed; Login Items UX built |
 | M6 Reliability (hardware matrix) | ❌ blocked on 2-monitor rig; the top project risk |
 | M7 Release (signing, notarization, cask, docs) | 🟡 app bundle + ad-hoc signing exist (`72fbcc2`); Developer ID signing, notarization, cask, icon remain |
@@ -615,11 +615,11 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 
 ### A.4 Known implementation debt (observed during this review)
 
-- `DockMonitor.stop()` removes every observer from all three notification centers indiscriminately, and registers a `DistributedNotificationCenter` it never uses — clean up.
+- ~~`DockMonitor.stop()` removes every observer from all three notification centers indiscriminately, and registers a `DistributedNotificationCenter` it never uses~~ — ✅ fixed 2026-07-22.
 - Menu-bar icon ternary resolves to the same symbol for enabled and disabled ([DockKeeperApp.swift:13](../Sources/DockKeeper/App/DockKeeperApp.swift)).
 - `showMenuBarIcon` setting is dead.
 - Persisting `"cg-<id>"` pseudo-UUIDs as a display preference is unstable (§7.1).
-- App does not observe external `UserDefaults` changes → CLI `lock left` while the app runs leaves the menu showing stale state until relaunch.
+- ~~App does not observe external `UserDefaults` changes~~ — ✅ fixed 2026-07-22 (KVO on the shared defaults; DK-FR-007-S3).
 - `Log.verbose` is `nonisolated(unsafe)` mutable static — benign, but fold into the diagnostics rework.
 
 ## Appendix B — Seed requirements → test traceability
