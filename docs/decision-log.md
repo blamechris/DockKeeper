@@ -45,7 +45,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 ---
 
-## ADR-003: Dock restoration mechanism — private CoreDock API with public fallback ⚠️ needs owner ratification
+## ADR-003: Dock restoration mechanism — private CoreDock API with public fallback
 
 **Context.** There is no public API to set the Dock's edge or display. Kickoff rule 7: *"Use public macOS APIs unless an ADR explicitly approves otherwise"* — this is that ADR. The spike's owner decisions implicitly approve the approach; this record formalizes it.
 
@@ -61,7 +61,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 **Evidence.** Symbols resolve and work live, flicker-free, on-device — CONFIRMED (spike, macOS 26.5 Apple Silicon); fallback path works — CONFIRMED; symbol availability requires HIServices loaded — CONFIRMED (spike).
 
-**Date / Status.** 2026-07-22 · **Proposed — awaiting explicit owner ratification.** The spike decisions cover the pinning mechanism but do not explicitly ratify private-API use for the edge path; kickoff rule 7 requires that sign-off to be recorded here. Everything already ships this way in v0.1, so ratification (or reversal) should be prompt.
+**Date / Status.** 2026-07-22 · **Accepted — ratified by the owner 2026-07-22.** This records the explicit rule-7 sign-off for private-API use on the edge path. Basis: the only alternative primary (defaults + `killall`) visibly restarts the Dock on every correction — strictly worse for a utility whose entire job is invisible reliability — while the private path fails gracefully (unresolved symbol → automatic fallback + `Degraded`, never a crash). Standing obligations: per-macOS-release CoreDock smoke test (R-004), `dlopen` HIServices hardening, and no further private-API use without a new ADR.
 
 ---
 
@@ -94,3 +94,35 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 **Evidence.** All event sources CONFIRMED wired in v0.1; poll work per tick is two C calls — INFERRED negligible either way (the objection to 2 s is principle, not measured cost); gap frequency UNKNOWN pending the drift-source counter.
 
 **Date / Status.** 2026-07-22 · **Accepted** (supersedes the v0.1 de facto 2 s choice; implementation pending).
+
+---
+
+## ADR-006: Disabling pinning (or quitting) leaves the display arrangement as-is
+
+**Context.** A pin changes which display is *main*, and `CGCompleteDisplayConfiguration(.permanently)` persists that change. TDD open question #5: should disable/quit snapshot and restore the pre-pin arrangement?
+
+**Options.** Leave-as-is · snapshot-and-restore on disable/quit · prompt the user each time.
+
+**Decision.** Leave-as-is for v1.0. Disabling means "stop correcting," never "make new changes." The Preferences/menu copy states this plainly.
+
+**Consequences.** No hidden snapshot state that can rot — a stale arrangement restored after the display topology changed would be worse than no restore at all (INFERRED; the failure modes multiply with disconnected displays). If the user wants the old arrangement back, it is one drag in System Settings ▸ Displays. A restore-on-disable option can be revisited post-v1 if users ask (would need topology-validity checks).
+
+**Evidence.** Consistent with owner Decision 3 ("reliable and honest") and AGENTS rule 20 (predictability first); no competitor-behavior data on this edge (UNKNOWN — DockLock's disable behavior not investigated).
+
+**Date / Status.** 2026-07-22 · **Accepted** (owner-delegated call, 2026-07-22).
+
+---
+
+## ADR-007: `enabled` is the single switch; `autoRecover` is retired
+
+**Context.** v0.1 has two overlapping switches: `enabled` and `autoRecover` (which gates only the poll, while events always reconcile) — TDD §11 and open question #9 flagged the confusion.
+
+**Options.** Keep both with sharpened meanings ("watch but only fix when I click") · merge into a single `enabled` switch.
+
+**Decision.** Single switch: `enabled` means DockKeeper corrects drift (events + poll); off means it touches nothing (DK-FR-004). `autoRecover` is removed from the UI and settings schema with the M4 recovery-engine work.
+
+**Consequences.** Simpler, honest mental model; the hypothetical manual-approval mode is cut for v1 (no evidence of demand; reintroducible later as a distinct feature if ever wanted). No user-facing migration burden — there is no public release yet; the leftover defaults key is simply ignored, and `recoveryInterval` remains the poll-tuning knob (ADR-005).
+
+**Evidence.** Two-switch confusion observed in design review (TDD §11 — CONFIRMED by inspection); everything else INFERRED/PROPOSED as a UX judgment.
+
+**Date / Status.** 2026-07-22 · **Accepted** (owner-delegated call, 2026-07-22).

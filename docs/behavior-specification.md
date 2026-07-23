@@ -144,7 +144,7 @@ Then the pass is a no-op with a typed outcome (alreadyOnTarget / singleDisplay)
 
 **Rationale.** These are exactly the moments macOS moves the Dock; recovery is the product. Event catalog: TDD §8.1.
 
-**Preconditions.** Enabled. (`autoRecover` gates the poll only; events always reconcile — v0.1 semantics, flagged for cleanup in TDD §11.)
+**Preconditions.** Enabled. (`enabled` is the single switch per ADR-007; v0.1's separate `autoRecover` — which gated only the poll — is retired and removed with M4.)
 
 **Trigger.** Any event in TDD §8.1, or a poll tick (default 30 s per ADR-005; v0.1 ships 2 s — change pending).
 
@@ -208,7 +208,8 @@ Given DockKeeper is enabled and monitoring
 When the user disables it
 Then all observers and timers are torn down
 And no further corrections occur (zero footprint)
-And the current Dock position is left exactly as-is
+And the current Dock position and display arrangement are left exactly
+    as-is (no snapshot-restore — ADR-006; the UI copy states this)
 
 S2 — Enable reconciles
 Given DockKeeper is disabled

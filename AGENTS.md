@@ -27,7 +27,7 @@ Source: DockKeeper Agent Kickoff Package §14, quoted verbatim (CONFIRMED — re
 ## Repository notes (state as of 2026-07-22)
 
 - **Rule 1:** `docs/product-scope.md` is not yet committed (the kickoff package itself is the interim scope source). Until it lands, treat [docs/technical-design.md](docs/technical-design.md) §2 (Goals/Non-Goals) as the scope boundary.
-- **Rule 7:** the one approved-pending deviation is the private `CoreDock` edge-lock path — see ADR-003 in [docs/decision-log.md](docs/decision-log.md), **awaiting owner ratification**. Do not add further private-API use without a new ADR.
+- **Rule 7:** the one approved deviation is the private `CoreDock` edge-lock path — ADR-003 in [docs/decision-log.md](docs/decision-log.md), **ratified by the owner 2026-07-22**. Do not add further private-API use without a new ADR.
 - **Rule 16:** spikes currently live under `Documentation/spikes/` (to be consolidated into `docs/`-adjacent `spikes/` later — TDD Appendix A.1).
 - **Rule 5/6:** the evidence labels and their definitions are stated at the top of every doc in `docs/`; use them in commit-facing docs and design discussion alike.
 - The full doc suite: [behavior-specification](docs/behavior-specification.md) · [technical-design](docs/technical-design.md) · [test-strategy](docs/test-strategy.md) · [implementation-plan](docs/implementation-plan.md) · [risk-register](docs/risk-register.md) · [decision-log](docs/decision-log.md) · [release-checklist](docs/release-checklist.md).

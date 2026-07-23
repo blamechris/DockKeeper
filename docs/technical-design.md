@@ -451,7 +451,7 @@ Consequences:
 | `enabled` | `true` | ✅ | |
 | `lockEdge` | `.bottom` | ✅ | Int raw value matching CoreDock integers |
 | `preferredDisplayUUID` | nil | ✅ | **Superseded in v1 by `preferredDisplayFingerprint` (Codable, §7.2); migrate: existing UUID → fingerprint with only `uuid` populated** |
-| `autoRecover` | `true` | ✅ | Gates the poll only; events always reconcile — PROPOSED: clarify or merge with `enabled` (two overlapping switches confuse) |
+| `autoRecover` | `true` | ✅ | Gates the poll only in v0.1 — **retire per ADR-007** (2026-07-22): `enabled` is the single switch; key removed with M4 |
 | `launchAtLogin` | `false` | ✅ | Mirror only — `SMAppService` is the source of truth; keep for UI restore, never trust over the system |
 | `showMenuBarIcon` | `true` | ✅ | **Unused in v0.1** — wire up or delete before v1 |
 | `verboseLogging` | `false` | ✅ | |
@@ -532,7 +532,7 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 
 | Approach | Verdict | Reasoning |
 |---|---|---|
-| **CoreDock private API (live set) + defaults fallback** | **Chosen for edge** — needs formal ADR-003 ratification | Only flicker-free mechanism; degrades gracefully via runtime `dlsym` (a removed symbol is a fallback, not a crash); CONFIRMED working. Deviates from "public APIs strongly preferred" — the fallback path *is* the public-ish contingency, and the kickoff allows private APIs with explicit owner approval |
+| **CoreDock private API (live set) + defaults fallback** | **Chosen for edge** — ADR-003, ratified 2026-07-22 | Only flicker-free mechanism; degrades gracefully via runtime `dlsym` (a removed symbol is a fallback, not a crash); CONFIRMED working. Deviates from "public APIs strongly preferred" — the fallback path *is* the public-ish contingency, and the kickoff allows private APIs with explicit owner approval |
 | Defaults write + `killall Dock` as *primary* | Rejected as primary, kept as fallback | Visible Dock restart on every correction; kills Dock state (badges, animations) |
 | Accessibility-driven interaction (AX drag/press on Dock) | Rejected | Requires Accessibility permission (v1 needs none), fragile against Dock UI changes, slow |
 | Pointer simulation / cursor warp | Rejected (spike option 3) | Hijacks the pointer; cannot hold placement |
@@ -554,12 +554,12 @@ Ordered by risk to v1:
 2. **How stable are display UUIDs across reconnects, docking stations, adapters, and reboots?** Determines how much of §7's scored matching is actually needed. UNKNOWN.
 3. **Does a `CoreDock` live set persist across a Dock restart** (i.e., does it write through to defaults)? Determines §8.5 mirroring. UNKNOWN — small spike.
 4. **What is the real event-burst profile around display changes?** Sets debounce width and validates the echo window. UNKNOWN — instrumented logging session.
-5. **Should DockKeeper restore the original display arrangement when pinning is disabled or the app quits?** `CGCompleteDisplayConfiguration(.permanently)` persists our change; "disable" currently leaves the last arrangement in place. Owner call: is leave-as-is (least surprise? or most?) acceptable, or snapshot-and-restore?
+5. ~~**Should DockKeeper restore the original display arrangement when pinning is disabled or the app quits?**~~ → **Resolved 2026-07-22 (ADR-006): leave-as-is for v1.0** — no snapshot-and-restore; disabling stops future corrections and the Preferences copy says so.
 6. **Mirroring and clamshell behavior** for both edge lock and pinning. UNKNOWN — hardware matrix.
 7. **Do notifications ever miss (justifying the poll), and can the poll interval go to 60 s+ or event-only?** Needs the §8.6 drift-source counter running for a while.
 8. **Menu-bar icon design**: enabled/disabled/degraded/paused states (v0.1 uses one symbol for all). Minor, but user-facing.
-9. **`autoRecover` vs `enabled`**: two overlapping switches — merge, or give `autoRecover` a crisp meaning ("correct drift automatically" vs "only when I click")? UX decision.
-10. **Name/trademark check** for "DockKeeper" before public release (kickoff risk register).
+9. ~~**`autoRecover` vs `enabled`**: two overlapping switches?~~ → **Resolved 2026-07-22 (ADR-007): `enabled` is the single user-facing switch; `autoRecover` is retired** (removed with M4).
+10. **Name/trademark check** for "DockKeeper" before public release. Competitor family now identified as **DockLock (Lite/Plus/Pro)** — proximity makes the review substantive, not pro forma (R-010).
 
 ---
 
@@ -574,14 +574,14 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | `docs/product-scope.md` | ❌ | Kickoff package itself not yet committed as scope doc |
 | `docs/product-investigation.md` (Phase 1) | ❌ | No competitor matrix / evidence ledger exists; the project pivoted to build-first. Behaviors were chosen from the kickoff's v1 boundary, not from confirmed competitor observation |
 | Feasibility spikes (Phase 2) | 🟡 | One high-quality spike answers the *central* question (Dock control mechanism + pinning feasibility + Spaces gating) with on-device evidence and recorded owner decisions. Remaining spike questions (UUID stability, Dock-restart persistence, event bursts, mirroring) open — §17 |
-| `docs/behavior-specification.md` (Phase 3) | ❌ | Seed requirement IDs in Appendix B; formalize next |
+| `docs/behavior-specification.md` (Phase 3) | ✅ | Landed 2026-07-22 — Appendix B IDs formalized with G/W/T scenarios |
 | `docs/technical-design.md` | ✅ | This document |
-| `docs/test-strategy.md` | ❌ | §Appendix B sketches traceability; full doc pending |
-| `docs/implementation-plan.md` | ❌ | Milestone deltas sketched in A.3 |
-| `docs/risk-register.md` | ❌ | Carry kickoff §10 rows; retire "no API to move Dock" (solved for edge), add "CoreDock private-API fragility" and "MenuBarExtra memory ceiling" |
-| `docs/decision-log.md` (ADRs) | ❌ | Decisions exist *in the spike* (owner-signed) but not as ADRs. Needed: ADR-001 macOS 14+ (de facto ✅), ADR-002 direct+Homebrew distribution, ADR-003 CoreDock private API w/ fallback (ratify the deviation), ADR-004 fingerprint display identity, ADR-005 hybrid monitoring + 30 s poll |
-| `docs/release-checklist.md` | ❌ | |
-| `AGENTS.md` | ❌ | Kickoff §14 rules not committed |
+| `docs/test-strategy.md` | ✅ | Landed 2026-07-22 — traceability + hardware matrix |
+| `docs/implementation-plan.md` | ✅ | Landed 2026-07-22 — M0–M7 delta plan from A.3 |
+| `docs/risk-register.md` | ✅ | Landed 2026-07-22 — R-001…R-011; R-001 retired for edge |
+| `docs/decision-log.md` (ADRs) | ✅ | Landed 2026-07-22 — ADR-001…007; ADR-003 ratified 2026-07-22 |
+| `docs/release-checklist.md` | ✅ | Landed 2026-07-22 |
+| `AGENTS.md` | ✅ | Landed 2026-07-22 — kickoff §14 rules verbatim |
 | `research/` evidence tree | ❌ | |
 | Repo layout | ⚠️ | Spike lives in `Documentation/spikes/`, not `docs/`+`spikes/`; consolidate into `docs/` when the doc suite lands |
 | Coding gate (§11) | ⚠️ | Production code exists before the gate's doc set. The gate's *substantive* criterion — "a viable restoration approach demonstrated" — was met by the spike before the engine was built; the documentation criteria are being backfilled (this TDD is part of that) |
@@ -594,7 +594,7 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | Donations optional, never interrupting | ✅ passive "Support Development" menu item only |
 | No telemetry / no unnecessary network / offline-capable | ✅ CONFIRMED by construction |
 | Native (no Electron/Tauri/web) | ✅ SwiftUI + AppKit |
-| Public/supported APIs strongly preferred | ⚠️ CoreDock is private — with a public-path fallback and runtime resolution; requires ADR-003 owner ratification (spike decisions implicitly approve, formalize it) |
+| Public/supported APIs strongly preferred | ⚠️ CoreDock is private — with a public-path fallback and runtime resolution; deviation formally ratified via ADR-003 (2026-07-22) |
 | Accessibility only when necessary + explained | ✅ exceeded: not used at all |
 | Event-driven over polling | ⚠️ 2 s poll is polling-first in spirit; §8.6 fixes to 30 s safety net |
 | MIT-suitable codebase | ✅ MIT LICENSE present |
