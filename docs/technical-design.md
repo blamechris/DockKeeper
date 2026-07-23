@@ -487,7 +487,7 @@ Onboarding-completion flag: not needed (no onboarding flow; the app is functiona
 | Mac App Store | **No for v1** | Sandbox blocks `killall` (signaling other processes) — CONFIRMED sandbox policy; private-API use fails review — CONFIRMED App Store policy; a CoreDock-free sandboxed build would have *no* working restore mechanism (defaults write to another app's domain + no restart = nothing). Revisit only if a supported mechanism appears |
 | Source build (`swift build`) | Supported for developers | Documented caveat: `SMAppService` login item needs the packaged `.app` (✅ surfaced in-app today) |
 
-Open packaging work (none exists yet): app bundle structure (SPM executables are not bundles — need an Xcode project or a bundler step), `Info.plist` with `LSUIElement=YES` (menu-bar accessory at the plist level rather than only `setActivationPolicy` at runtime), icon, code signing, notarization pipeline, cask formula, release checklist doc. Auto-update: deferred; evaluate Sparkle post-v1 (ADR later — it adds a network call, which must remain user-consented to honor principle 9).
+Packaging status (updated after main's `72fbcc2` "Package as a signed DockKeeper.app bundle"): the bundle exists — `Scripts/build-app.sh` assembles `dist/DockKeeper.app` from the SwiftPM product with `Info.plist` (`LSUIElement=YES`, bundle id `com.dockkeeper.app`, macOS 14+) and ad-hoc signing against entitlements that document the intentional non-sandboxed stance; verified launching as a background accessory with CoreDock available. Remaining: app icon, Developer ID signing, notarization pipeline, cask formula, release checklist doc. Note: `SMAppService` reports `.notFound` for dev-directory builds — Background Task Management requires the app in `/Applications` with a full signature (CONFIRMED, documented in-app and in README). Auto-update: deferred; evaluate Sparkle post-v1 (ADR later — it adds a network call, which must remain user-consented to honor principle 9).
 
 ---
 
@@ -604,13 +604,13 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | Milestone | Status |
 |---|---|
 | M0 Research & feasibility | 🟡 central spike done + decisions; remaining spikes in §17 |
-| M1 App shell (menu bar, prefs, login item, diagnostics) | 🟡 built except file diagnostics; packaging absent |
+| M1 App shell (menu bar, prefs, login item, diagnostics) | 🟡 built except file diagnostics; ad-hoc-signed app bundle landed on main (`72fbcc2`) |
 | M2 Display registry | 🟡 enumeration + UUID done; fingerprint/scored matching/repair missing |
 | M3 Dock observation | 🟡 events + poll wired; no debounce/coalescing, no Dock-restart detection, observation not separated from recovery |
 | M4 Dock restoration | 🟡 restore works; no retry ladder/cooldown/loop-guard/echo suppression |
 | M5 Permission & onboarding | ✅-by-elimination: no permission needed; Login Items UX built |
 | M6 Reliability (hardware matrix) | ❌ blocked on 2-monitor rig; the top project risk |
-| M7 Release (signing, notarization, cask, docs) | ❌ nothing exists |
+| M7 Release (signing, notarization, cask, docs) | 🟡 app bundle + ad-hoc signing exist (`72fbcc2`); Developer ID signing, notarization, cask, icon remain |
 | (unplanned) CLI | ✅ shipped early — kickoff deferred it post-v1; harmless, keep |
 
 ### A.4 Known implementation debt (observed during this review)
