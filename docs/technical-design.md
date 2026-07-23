@@ -131,7 +131,7 @@ The kickoff package proposed eleven components. The table maps each to what exis
 | DockPlacementController | `DockController` | ✅ | Put `CoreDock`/defaults/`killall` behind a `DockAdapter` protocol for testability |
 | DockStateObserver | `DockMonitor` | 🟡 | Split observation from recovery; add debounce/coalescing; detect Dock process restart |
 | DisplayRegistry | `DisplayManager` | 🟡 | Cache snapshots; emit change events; real display names via `NSScreen.localizedName` |
-| DisplayIdentityResolver | UUID lookup only | 🟡 | Multi-identifier fingerprint + scored matching + stale-preference repair (§7) |
+| DisplayIdentityResolver | `DisplayIdentityResolver` + `FingerprintMatcher` | ✅ (2026-07-23) | Fingerprint + scored matching + repair shipped (§7); thresholds tune on M6 hardware |
 | RecoveryCoordinator | inlined in `DockMonitor.restoreSoon` + poll | ❌ | Extract: single owner of reconciliation with retry ladder, cooldown, oscillation guard (§8) |
 | PermissionManager | — | n/a | Not needed for v1 (§10); introduce only if follow-window ships later |
 | LoginItemManager | `LoginItemManager` | ✅ | — |
@@ -282,7 +282,7 @@ States (all PROPOSED except where noted):
 | Localized name | `NSScreen.localizedName` (matched via `NSScreenNumber`) | Human-stable ("DELL U2720Q") | CONFIRMED API (macOS 10.15+) |
 | Built-in flag | `CGDisplayIsBuiltin` | Stable | CONFIRMED |
 
-v0.1 stores the UUID string only and falls back to `"cg-<id>"` when a display has no UUID — that fallback is **not stable** and must never be persisted as a preference (v0.1 currently would; fix). Display names in v0.1 are generic ("Display 5"); use `NSScreen.localizedName`.
+~~v0.1 stores the UUID string only and falls back to `"cg-<id>"`~~ **Fixed 2026-07-23**: preferences store the full `DisplayFingerprint`; `"cg-<id>"` placeholders are UI-only and discarded on migration; display names come from `NSScreen.localizedName`.
 
 ### 7.2 Fingerprint + scored matching (PROPOSED)
 
@@ -450,7 +450,8 @@ Consequences:
 |---|---|---|---|
 | `enabled` | `true` | ✅ | |
 | `lockEdge` | `.bottom` | ✅ | Int raw value matching CoreDock integers |
-| `preferredDisplayUUID` | nil | ✅ | **Superseded in v1 by `preferredDisplayFingerprint` (Codable, §7.2); migrate: existing UUID → fingerprint with only `uuid` populated** |
+| `preferredDisplayUUID` | nil | ✅ legacy | Superseded 2026-07-23 by `preferredDisplayFingerprint` (Codable, §7.2); migrated write-once (`"cg-"` values discarded) and mirrored for rollback until v1.1 |
+| `preferredDisplayFingerprint` | nil | ✅ | JSON-encoded `DisplayFingerprint` (ADR-004) |
 | `autoRecover` | `true` | ✅ | Gates the poll only in v0.1 — **retire per ADR-007** (2026-07-22): `enabled` is the single switch; key removed with M4 |
 | `launchAtLogin` | `false` | ✅ | Mirror only — `SMAppService` is the source of truth; keep for UI restore, never trust over the system |
 | `showMenuBarIcon` | `true` | ✅ | **Unused in v0.1** — wire up or delete before v1 |
@@ -514,8 +515,8 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 | Symbols absent in non-AppKit process | CLI without HIServices loaded | Explicit `dlopen` of the ApplicationServices umbrella | ✅ (2026-07-22) |
 | Dock process restarted | n/a — benign | Spike CONFIRMED CoreDock writes through to defaults; restart re-reads our edge (§8.5) | ✅ resolved |
 | Preferred display missing | Snapshot match fails | `PreferredDisplayMissing`; no fallback pin; re-pin on return | ✅ outcome, ❌ state/re-pin-on-return is event-driven only via generic reconcile (works, INFERRED) |
-| Display identity changed (dock/adapter path) | Fingerprint matches on fallback evidence | Repair stored fingerprint (§7.3) | ❌ |
-| Ambiguous identity (identical twins) | Non-unique max score | Ask user to re-pick; never guess | ❌ |
+| Display identity changed (dock/adapter path) | Fingerprint matches on fallback evidence | Repair stored fingerprint (§7.3) | ✅ (2026-07-23, unit-tested) |
+| Ambiguous identity (identical twins) | Non-unique max score | Ask user to re-pick; never guess | ✅ (2026-07-23, unit-tested) |
 | Pin reconfigure fails | `CGError` ≠ success | Typed `.failed`, transaction cancelled cleanly, user message | ✅ |
 | Separate Spaces ON | Defaults read | Decline pin + explain; edge lock continues | ✅ |
 | Restoration loop (external agent fighting us) | Cooldown budget exceeded | Stop, state `Error`, tell user | ✅ (2026-07-22, unit-tested) |
@@ -605,7 +606,7 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 |---|---|
 | M0 Research & feasibility | 🟡 central spike done + decisions; remaining spikes in §17 |
 | M1 App shell (menu bar, prefs, login item, diagnostics) | 🟡 built except file diagnostics; ad-hoc-signed app bundle landed on main (`72fbcc2`) |
-| M2 Display registry | 🟡 enumeration + UUID done; fingerprint/scored matching/repair missing |
+| M2 Display registry | ✅ (2026-07-23) fingerprint + scored matching + repair + migration; thresholds tune at M6 |
 | M3 Dock observation | ✅ (2026-07-22) events-only `DockMonitor` + typed `DockEvent`s; external-defaults KVO; Dock-restart detection dropped (spike: restarts benign) |
 | M4 Dock restoration | ✅ code complete (2026-07-22): `RecoveryCoordinator`/`RecoveryMachine` with ladder, cooldown, echo suppression, coalescing — unit-tested; 100-restore reliability run at M6 |
 | M5 Permission & onboarding | ✅-by-elimination: no permission needed; Login Items UX built |

@@ -40,17 +40,15 @@ Built: menu bar, Preferences, login item, os_log, ad-hoc-signed `.app` packaging
 
 **Acceptance.** Diagnostics file caps verified by test; icon states visible in manual pass. **Tests.** Log-growth bound (reliability suite). **Risks.** R-009 (measure at M6).
 
-## M2 — Display registry 🟡
+## M2 — Display registry ✅ (2026-07-23)
 
-Built: enumeration + UUID mapping. Remaining (ADR-004):
+- ✅ `DisplayFingerprint` (Codable) + `FingerprintMatcher` scored matching with the unique-max ≥ 70 acceptance rule.
+- ✅ Stale-preference repair (`DisplayIdentityResolver` returns a refreshed fingerprint on fallback-evidence matches; `Settings.repairPreferredDisplay` persists it).
+- ✅ Migration: legacy `preferredDisplayUUID` → fingerprint (write-once); legacy key mirrored until v1.1 for rollback; `"cg-<id>"` pseudo-UUIDs discarded, never persisted.
+- ✅ Real display names via `NSScreen.localizedName` (menu + fingerprint evidence).
+- ✅ Ambiguity surfaced: `PinOutcome.ambiguousIdentity` — "pick your preferred display again", never guess.
 
-- `DisplayFingerprint` (Codable) + scored matching + unique-max acceptance rule.
-- Stale-preference repair (rewrite on fallback-evidence match).
-- Migration: `preferredDisplayUUID` → fingerprint with only `uuid` set. **Rollback note:** migration must be one-way-safe — keep the old key until v1.1 so a reverted build still works.
-- Stop persisting `"cg-<id>"` pseudo-UUIDs (A.4); real names via `NSScreen.localizedName`.
-- Ambiguity surface: "pick your preferred display again" flow.
-
-**Acceptance.** Score table, tie→ambiguous, repair, and migration all unit-tested (traceability rows in the test strategy). **Dependencies.** None (thresholds tuned later on the M6 rig).
+**Acceptance met:** score table, tie→ambiguous, repair, migration, and mirror-key behavior all unit-tested ([DisplayIdentityTests.swift](../Tests/DockKeeperTests/DisplayIdentityTests.swift); 61 tests total passing). Score thresholds remain PROPOSED pending M6 hardware tuning.
 
 ## M3 — Dock observation ✅ (2026-07-22)
 

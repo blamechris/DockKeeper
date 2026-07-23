@@ -77,7 +77,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 **Evidence.** All constituent APIs CONFIRMED available (TDD §7.1); serial-number reliability INFERRED (frequently 0 on consumer panels); UUID stability UNKNOWN — the design assumes the worst case by construction.
 
-**Date / Status.** 2026-07-22 · **Accepted** (design; thresholds subject to hardware tuning at M6).
+**Date / Status.** 2026-07-22 · **Accepted — implemented 2026-07-23** (`DisplayFingerprint`/`FingerprintMatcher`/`DisplayIdentityResolver`, migration + legacy mirror, unit-tested); score thresholds remain PROPOSED until M6 hardware tuning.
 
 ---
 

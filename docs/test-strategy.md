@@ -76,8 +76,8 @@ Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5),
 | DK-FR-007 (CLI) | — | Argument-parsing table test; `status` snapshot; external-change observation (S3) |
 | DK-NFR-001 (budget) | — | Reliability suite measurements (M6 gate) |
 | DK-NFR-002 / DK-PRIV-001 | CONFIRMED by construction (no networking code) | CI symbol check; release network-monitor pass; log-content review |
-| Display identity (ADR-004) | — | Score table, tie→ambiguous, repair rewrite, UUID→fingerprint migration |
+| Display identity (ADR-004) | ✅ `DisplayIdentityTests` (score table, tie→ambiguous, repair rewrite, migration incl. `cg-` discard, legacy mirror) | Threshold tuning against real hardware (M6) |
 
 ## Gaps and sequencing
 
-~~The recovery coordinator and `DockAdapter` seam~~ — landed with tests 2026-07-22 (M3/M4). The remaining uncovered area is fingerprint identity (ADR-004, M2); per the TDD rule its tests come **with or before** implementation. The manual matrix (M6) stays the only level gated on hardware.
+~~The recovery coordinator and `DockAdapter` seam~~ — landed with tests 2026-07-22 (M3/M4). ~~Fingerprint identity~~ — landed with tests 2026-07-23 (M2). Every P0/P1 decision path now has unit coverage (61 tests); what remains is integration-level polish (CLI argument table, `status` snapshot, poll tick with a real timer) and the manual matrix (M6), the only level gated on hardware.

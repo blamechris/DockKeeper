@@ -90,7 +90,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 **Rationale.** There is no API — public or private within accepted risk — to place the Dock on a display directly; relocating the main display is the only public route. CONFIRMED (spike).
 
-**Preconditions.** Enabled; a preferred display is stored (v0.1: UUID; v1: fingerprint per ADR-004); at least two displays connected; "Displays have separate Spaces" is OFF.
+**Preconditions.** Enabled; a preferred display is stored (fingerprint per ADR-004 — implemented 2026-07-23, with write-once migration from the v0.1 bare UUID); at least two displays connected; "Displays have separate Spaces" is OFF.
 
 **Trigger.** Reconcile pass (event, poll, enable, or the user picking a display).
 
@@ -128,7 +128,7 @@ Given the preferred display is already main, or only one display is connected
 Then the pass is a no-op with a typed outcome (alreadyOnTarget / singleDisplay)
 ```
 
-**Failure behavior.** A failed `CGDisplayConfiguration` transaction is cancelled cleanly, reported as a typed `.failed` outcome with user-facing copy (CONFIRMED — implemented); the cooldown budget (`DK-FR-003`-S4) prevents retry storms. Ambiguous identity (two indistinguishable candidates) must never guess — the user is asked to re-pick (PROPOSED, TDD §7.2).
+**Failure behavior.** A failed `CGDisplayConfiguration` transaction is cancelled cleanly, reported as a typed `.failed` outcome with user-facing copy (CONFIRMED — implemented); the cooldown budget (`DK-FR-003`-S4) prevents retry storms. Ambiguous identity (two indistinguishable candidates) never guesses — the user is asked to re-pick (implemented 2026-07-23, `ambiguousIdentity` outcome).
 
 **User-visible behavior.** A pin visibly re-arranges displays (menu bar moves) — inherent, not a defect; honest copy explains "on macOS, the Dock lives on your main display."
 
