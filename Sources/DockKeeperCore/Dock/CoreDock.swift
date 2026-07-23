@@ -20,10 +20,21 @@ public enum CoreDock {
     ) -> Void
     private typealias SetFn = @convention(c) (Int32, Int32) -> Void
 
+    /// The CoreDock symbols live in HIServices, which is only guaranteed to be
+    /// loaded in AppKit processes. Explicitly load the ApplicationServices
+    /// umbrella (which carries HIServices) so a non-AppKit process — or a
+    /// future CLI without transitive AppKit linkage — still resolves them
+    /// (spike-recommended hardening; link order is no longer load-bearing).
+    private nonisolated(unsafe) static let frameworkHandle: UnsafeMutableRawPointer? = dlopen(
+        "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices",
+        RTLD_LAZY
+    )
+
     private static let getFn: GetFn? = symbol("CoreDockGetOrientationAndPinning")
     private static let setFn: SetFn? = symbol("CoreDockSetOrientationAndPinning")
 
     private static func symbol<T>(_ name: String) -> T? {
+        _ = frameworkHandle  // force the dlopen before any dlsym
         guard let handle = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else {
             return nil
         }

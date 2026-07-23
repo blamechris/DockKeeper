@@ -3,24 +3,39 @@ import Foundation
 /// Drives the macOS Dock's orientation, restoring it whenever it drifts from
 /// the user's locked edge.
 ///
-/// Two mechanisms, in preference order:
-/// 1. The private `CoreDock` API — live, flicker-free, no Dock restart.
-/// 2. `defaults write com.apple.dock orientation` + `killall Dock` — a robust
-///    fallback if the private API is ever unavailable.
+/// Mechanisms live behind `DockAdapter` (kickoff rule 8): the primary adapter
+/// (`CoreDock` — live, flicker-free) with a fallback (`defaults` + restart)
+/// when the primary can't act. Fallback use is what the `degraded` state
+/// surfaces to the user.
 public final class DockController: @unchecked Sendable {
 
     private let settings: Settings
+    private let primary: DockAdapter
+    private let fallback: DockAdapter
 
-    public init(settings: Settings = .shared) {
+    public init(
+        settings: Settings = .shared,
+        primary: DockAdapter = CoreDockAdapter(),
+        fallback: DockAdapter = DefaultsDockAdapter()
+    ) {
         self.settings = settings
+        self.primary = primary
+        self.fallback = fallback
     }
 
-    /// The Dock's current orientation as macOS reports it.
+    /// True when the primary (flicker-free) mechanism is unavailable and edge
+    /// corrections will go through the visible fallback.
+    public var isDegraded: Bool { !primary.isAvailable }
+
+    /// Mechanism name for `dockkeeper status` / diagnostics.
+    public var activeMechanismName: String {
+        primary.isAvailable ? primary.name : fallback.name
+    }
+
+    /// The Dock's current orientation as macOS reports it. Prefers the live
+    /// read; falls back to the defaults read, which can lag (TDD §5.3).
     public func currentOrientation() -> DockOrientation? {
-        if let current = CoreDock.current() {
-            return current.orientation
-        }
-        return readOrientationFromDefaults()
+        primary.currentOrientation() ?? fallback.currentOrientation()
     }
 
     /// True when the Dock already sits on `edge`; used to avoid redundant work.
@@ -57,38 +72,13 @@ public final class DockController: @unchecked Sendable {
     // MARK: - Application
 
     private func apply(_ edge: DockOrientation) {
-        if CoreDock.set(orientation: edge) {
-            Log.dock.info("Set Dock orientation to \(edge.displayName, privacy: .public) via CoreDock")
-        } else {
-            Log.dock.info("CoreDock unavailable; falling back to defaults+restart for \(edge.displayName, privacy: .public)")
-            writeOrientationToDefaults(edge)
-            restartDock()
+        if primary.isAvailable, primary.setOrientation(edge) {
+            Log.dock.info("Set Dock orientation to \(edge.displayName, privacy: .public) via \(self.primary.name, privacy: .public)")
+            return
         }
-    }
-
-    // MARK: - `defaults` fallback
-
-    private func readOrientationFromDefaults() -> DockOrientation? {
-        guard
-            let dockDefaults = UserDefaults(suiteName: "com.apple.dock"),
-            let raw = dockDefaults.string(forKey: "orientation")
-        else { return nil }
-        return DockOrientation(defaultsValue: raw)
-    }
-
-    private func writeOrientationToDefaults(_ edge: DockOrientation) {
-        let dockDefaults = UserDefaults(suiteName: "com.apple.dock")
-        dockDefaults?.set(edge.defaultsValue, forKey: "orientation")
-    }
-
-    private func restartDock() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-        task.arguments = ["Dock"]
-        do {
-            try task.run()
-        } catch {
-            Log.dock.error("Failed to restart Dock: \(error.localizedDescription, privacy: .public)")
+        Log.dock.info("\(self.primary.name, privacy: .public) unavailable; using \(self.fallback.name, privacy: .public) for \(edge.displayName, privacy: .public)")
+        if !fallback.setOrientation(edge) {
+            Log.dock.error("All Dock mechanisms failed to set \(edge.displayName, privacy: .public)")
         }
     }
 }

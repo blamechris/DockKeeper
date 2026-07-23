@@ -56,7 +56,9 @@ struct SettingsTests {
         let settings = makeSettings()
         #expect(settings.isEnabled == true)
         #expect(settings.lockEdge == .bottom)
-        #expect(settings.autoRecover == true)
+        // ADR-005: the poll is a 30 s safety net, not a 2 s hammer.
+        #expect(settings.recoveryInterval == 30.0)
+        #expect(settings.restoreDelay == 0.4)
     }
 
     @Test("Persists a changed lock edge")

@@ -1,34 +1,36 @@
 import Foundation
 import AppKit
 
-/// Watches for the events that make macOS move or reset the Dock, and asks the
-/// `DockController` to restore the locked edge afterward.
+/// Event sources only (TDD §4.3 post-refactor): watches everything that can
+/// move the Dock and emits typed `DockEvent`s. All decisions — debounce,
+/// retries, cooldown — belong to `RecoveryCoordinator`, the single consumer.
 ///
-/// Sources of drift we react to:
-/// - Wake from sleep
+/// Sources:
+/// - Wake from sleep / screens wake
 /// - Display reconfiguration (plug/unplug, resolution, arrangement)
 /// - Active-space changes / Mission Control
 /// - Fast user switching (session activation)
-/// - A periodic safety-net poll (covers anything the notifications miss)
+/// - External settings edits (CLI while the app runs) via KVO
+/// - A periodic safety-net poll (ADR-005: 30 s default)
 ///
 /// Runs on the main actor because it touches AppKit notification centers.
+/// Callers must pair `start()`/`stop()`; the CG callback and KVO registrations
+/// hold unretained references to this object.
 @MainActor
 public final class DockMonitor {
 
-    private let controller: DockController
     private let settings: Settings
 
+    /// The single event sink. Set before `start()`.
+    public var onEvent: (@MainActor (DockEvent) -> Void)?
+
     private var pollTimer: Timer?
-    private var observers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var defaultCenterObservers: [NSObjectProtocol] = []
     private var displayCallbackRegistered = false
+    private var settingsObserver: SettingsKVObserver?
 
-    /// Invoked after each edge restore (wake, display change, poll, start), so
-    /// callers can re-apply the preferred-display pin on the same events. Set
-    /// by `AppState`.
-    public var additionalRestore: (@MainActor () -> Void)?
-
-    public init(controller: DockController, settings: Settings = .shared) {
-        self.controller = controller
+    public init(settings: Settings = .shared) {
         self.settings = settings
     }
 
@@ -36,46 +38,39 @@ public final class DockMonitor {
         stop()
         registerNotifications()
         registerDisplayReconfigurationCallback()
+        registerSettingsObservation()
         startPolling()
         Log.dock.info("DockMonitor started")
-        restoreSoon()
     }
 
     public func stop() {
         pollTimer?.invalidate()
         pollTimer = nil
         let workspaceCenter = NSWorkspace.shared.notificationCenter
-        let distributed = DistributedNotificationCenter.default()
-        for observer in observers {
+        for observer in workspaceObservers {
             workspaceCenter.removeObserver(observer)
-            NotificationCenter.default.removeObserver(observer)
-            distributed.removeObserver(observer)
         }
-        observers.removeAll()
+        workspaceObservers.removeAll()
+        for observer in defaultCenterObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        defaultCenterObservers.removeAll()
         if displayCallbackRegistered {
             CGDisplayRemoveReconfigurationCallback(Self.displayReconfigured, Unmanaged.passUnretained(self).toOpaque())
             displayCallbackRegistered = false
         }
+        settingsObserver?.invalidate()
+        settingsObserver = nil
     }
 
     deinit {
-        // Timers and observers are cleaned up in `stop()`; callers should call
+        // Timers and observers are cleaned up in `stop()`; callers must call
         // it before releasing. Kept minimal to stay MainActor-safe.
     }
 
-    // MARK: - Restoration
-
-    /// Restore after a short settle delay so the system finishes its own
-    /// layout work first.
-    public func restoreSoon() {
-        let delay = settings.restoreDelay
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            if self.controller.restoreToLockedEdge() {
-                Log.dock.info("Restored Dock to locked edge after event")
-            }
-            self.additionalRestore?()
-        }
+    private func emit(_ event: DockEvent) {
+        Log.dock.debug("Event: \(event.rawValue, privacy: .public)")
+        onEvent?(event)
     }
 
     // MARK: - Notifications
@@ -83,20 +78,19 @@ public final class DockMonitor {
     private func registerNotifications() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
 
-        let workspaceEvents: [NSNotification.Name] = [
-            NSWorkspace.didWakeNotification,
-            NSWorkspace.activeSpaceDidChangeNotification,
-            NSWorkspace.sessionDidBecomeActiveNotification,
-            NSWorkspace.screensDidWakeNotification,
+        let workspaceEvents: [(NSNotification.Name, DockEvent)] = [
+            (NSWorkspace.didWakeNotification, .wake),
+            (NSWorkspace.screensDidWakeNotification, .screensWake),
+            (NSWorkspace.activeSpaceDidChangeNotification, .spaceChanged),
+            (NSWorkspace.sessionDidBecomeActiveNotification, .sessionBecameActive),
         ]
-        for name in workspaceEvents {
+        for (name, event) in workspaceEvents {
             let observer = workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    Log.dock.debug("Workspace event: \(name.rawValue, privacy: .public)")
-                    self?.restoreSoon()
+                    self?.emit(event)
                 }
             }
-            observers.append(observer)
+            workspaceObservers.append(observer)
         }
 
         // Screen parameter changes (resolution / arrangement) come through the
@@ -107,11 +101,10 @@ public final class DockMonitor {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                Log.dock.debug("Screen parameters changed")
-                self?.restoreSoon()
+                self?.emit(.screenParametersChanged)
             }
         }
-        observers.append(screenObserver)
+        defaultCenterObservers.append(screenObserver)
     }
 
     // MARK: - Display reconfiguration
@@ -122,6 +115,9 @@ public final class DockMonitor {
             Unmanaged.passUnretained(self).toOpaque()
         )
         displayCallbackRegistered = (result == .success)
+        if !displayCallbackRegistered {
+            Log.dock.error("Display reconfiguration callback failed to register; poll covers the gap")
+        }
     }
 
     private static let displayReconfigured: CGDisplayReconfigurationCallBack = {
@@ -132,18 +128,72 @@ public final class DockMonitor {
         guard !flags.intersection(done).isEmpty else { return }
         let monitor = Unmanaged<DockMonitor>.fromOpaque(userInfo).takeUnretainedValue()
         Task { @MainActor in
-            monitor.restoreSoon()
+            monitor.emit(.displayReconfigured)
         }
     }
 
-    // MARK: - Polling safety net
+    // MARK: - External settings changes (DK-FR-007-S3)
+
+    /// KVO on the shared defaults sees cross-process edits (the CLI changing
+    /// the lock edge while the app runs), unlike `UserDefaults.didChange`,
+    /// which is in-process only. In-process writes also land here; they are
+    /// harmless — reconciliation is idempotent and the coordinator debounces.
+    private func registerSettingsObservation() {
+        settingsObserver = SettingsKVObserver(
+            defaults: settings.observableDefaults,
+            keys: Settings.externallyObservedKeys
+        ) { [weak self] in
+            Task { @MainActor in
+                self?.emit(.settingsChanged)
+            }
+        }
+    }
+
+    private final class SettingsKVObserver: NSObject {
+        private let defaults: UserDefaults
+        private let keys: [String]
+        private let onChange: @Sendable () -> Void
+        private var invalidated = false
+
+        init(defaults: UserDefaults, keys: [String], onChange: @escaping @Sendable () -> Void) {
+            self.defaults = defaults
+            self.keys = keys
+            self.onChange = onChange
+            super.init()
+            for key in keys {
+                defaults.addObserver(self, forKeyPath: key, options: [.new], context: nil)
+            }
+        }
+
+        func invalidate() {
+            guard !invalidated else { return }
+            invalidated = true
+            for key in keys {
+                defaults.removeObserver(self, forKeyPath: key)
+            }
+        }
+
+        override func observeValue(
+            forKeyPath keyPath: String?,
+            of object: Any?,
+            change: [NSKeyValueChangeKey: Any]?,
+            context: UnsafeMutableRawPointer?
+        ) {
+            onChange()
+        }
+
+        deinit {
+            invalidate()
+        }
+    }
+
+    // MARK: - Polling safety net (ADR-005)
 
     private func startPolling() {
-        let interval = max(0.5, settings.recoveryInterval)
+        let interval = max(5, settings.recoveryInterval)
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.settings.isEnabled, self.settings.autoRecover else { return }
-                self.controller.restoreToLockedEdge()
+                self?.emit(.pollTick)
             }
         }
         RunLoop.main.add(timer, forMode: .common)

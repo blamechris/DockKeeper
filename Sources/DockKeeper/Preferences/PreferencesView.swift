@@ -54,8 +54,7 @@ private struct DockTab: View {
             }
             .pickerStyle(.segmented)
 
-            Toggle("Auto Recover", isOn: $state.autoRecover)
-            Text("Automatically restore the Dock after sleep, wake, and display changes.")
+            Text("DockKeeper automatically restores the Dock after sleep, wake, and display changes while enabled.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

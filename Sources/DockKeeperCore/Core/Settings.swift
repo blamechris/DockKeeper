@@ -19,25 +19,32 @@ public final class Settings: @unchecked Sendable {
     private static func registrationDomain() -> [String: Any] { [
         Keys.enabled: true,
         Keys.lockEdge: DockOrientation.bottom.rawValue,
-        Keys.autoRecover: true,
         Keys.launchAtLogin: false,
         Keys.showMenuBarIcon: true,
         Keys.verboseLogging: false,
         Keys.restoreDelay: 0.4,
-        Keys.recoveryInterval: 2.0,
+        Keys.recoveryInterval: 30.0,
     ] }
 
+    // Note: v0.1 had an `autoRecover` key gating the poll; ADR-007 retired it —
+    // `enabled` is the single switch. Any leftover on-disk value is ignored.
     enum Keys {
         static let enabled = "enabled"
         static let lockEdge = "lockEdge"
         static let preferredDisplayUUID = "preferredDisplayUUID"
-        static let autoRecover = "autoRecover"
         static let launchAtLogin = "launchAtLogin"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let verboseLogging = "verboseLogging"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
     }
+
+    /// The keys whose external (e.g. CLI) edits should refresh a running app —
+    /// observed via KVO by `DockMonitor` (DK-FR-007-S3).
+    static let externallyObservedKeys = [Keys.enabled, Keys.lockEdge, Keys.preferredDisplayUUID]
+
+    /// Backing store handle for KVO observation by `DockMonitor`.
+    var observableDefaults: UserDefaults { defaults }
 
     // MARK: General
 
@@ -68,11 +75,6 @@ public final class Settings: @unchecked Sendable {
     public var preferredDisplayUUID: String? {
         get { defaults.string(forKey: Keys.preferredDisplayUUID) }
         set { defaults.set(newValue, forKey: Keys.preferredDisplayUUID) }
-    }
-
-    public var autoRecover: Bool {
-        get { defaults.bool(forKey: Keys.autoRecover) }
-        set { defaults.set(newValue, forKey: Keys.autoRecover) }
     }
 
     // MARK: Advanced

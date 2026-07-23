@@ -4,18 +4,20 @@ import DockKeeperCore
 
 /// Observable bridge between SwiftUI and the `DockKeeperCore` engine.
 ///
-/// Holds the long-lived controller and monitor and exposes the settings the
-/// menu and preferences bind to. Lives on the main actor.
+/// Owns the long-lived monitor (event sources) and coordinator (the single
+/// owner of reconciliation) and exposes the settings the menu and preferences
+/// bind to. Lives on the main actor.
 @MainActor
 final class AppState: ObservableObject {
 
     private let settings = Settings.shared
     private let controller: DockController
     private let monitor: DockMonitor
-    private let pinner: DisplayPinner = MainDisplayPinner()
+    private let coordinator: RecoveryCoordinator
 
     @Published var isEnabled: Bool {
         didSet {
+            guard !isSyncingFromExternal else { return }
             settings.isEnabled = isEnabled
             applyEnabledState()
         }
@@ -23,13 +25,14 @@ final class AppState: ObservableObject {
 
     @Published var lockEdge: DockOrientation {
         didSet {
+            guard !isSyncingFromExternal else { return }
             settings.lockEdge = lockEdge
-            if isEnabled { controller.forceOrientation(lockEdge) }
+            guard isEnabled else { return }
+            // Apply immediately for snappy UX, then let the coordinator verify
+            // (and re-pin) through the normal reconcile path.
+            controller.forceOrientation(lockEdge)
+            coordinator.requestReconcile()
         }
-    }
-
-    @Published var autoRecover: Bool {
-        didSet { settings.autoRecover = autoRecover }
     }
 
     /// Launch DockKeeper at login. Source of truth is `SMAppService`; this
@@ -43,14 +46,19 @@ final class AppState: ObservableObject {
     }
     private var isSyncingLoginItem = false
 
+    /// Guards the published-property didSets while syncing FROM settings
+    /// (external CLI edits observed via KVO), so we don't write back or loop.
+    private var isSyncingFromExternal = false
+
     /// User-facing note about the login-item state (approval needed, etc.).
     @Published private(set) var loginItemMessage: String?
 
     /// UUID of the display the Dock should stay on; `nil` = no preference.
     @Published var preferredDisplayUUID: String? {
         didSet {
+            guard !isSyncingFromExternal else { return }
             settings.preferredDisplayUUID = preferredDisplayUUID
-            applyPreferredDisplay()
+            if isEnabled { coordinator.requestReconcile() }
         }
     }
 
@@ -59,23 +67,44 @@ final class AppState: ObservableObject {
     /// Last pin result, surfaced to the UI (e.g. "separate Spaces is on").
     @Published private(set) var lastPinMessage: String?
 
+    /// Recovery-state note (degraded / preferred display missing / error);
+    /// `nil` when everything is healthy.
+    @Published private(set) var statusMessage: String?
+
     init() {
         let controller = DockController(settings: settings)
         self.controller = controller
-        self.monitor = DockMonitor(controller: controller, settings: settings)
+        self.monitor = DockMonitor(settings: settings)
+        self.coordinator = RecoveryCoordinator(
+            controller: controller,
+            settings: settings,
+            machine: RecoveryMachine(config: RecoveryMachine.Config(debounce: settings.restoreDelay))
+        )
         self.isEnabled = settings.isEnabled
         self.lockEdge = settings.lockEdge
-        self.autoRecover = settings.autoRecover
         self.preferredDisplayUUID = settings.preferredDisplayUUID
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
         self.loginItemMessage = LoginItemManager.statusMessage
         self.displays = DisplayManager.activeDisplays()
 
-        // Re-apply the preferred-display pin whenever the monitor restores the
-        // edge (wake, display change, poll, launch).
-        monitor.additionalRestore = { [weak self] in
-            self?.applyPreferredDisplay()
+        monitor.onEvent = { [weak self] event in
+            guard let self else { return }
+            self.coordinator.handle(event)
+            switch event {
+            case .settingsChanged:
+                self.syncFromSettings()
+            case .displayReconfigured, .screenParametersChanged:
+                self.refreshDisplays()
+            default:
+                break
+            }
+        }
+        coordinator.onStateChange = { [weak self] state in
+            self?.statusMessage = state.userMessage
+        }
+        coordinator.onPinOutcome = { [weak self] outcome in
+            self?.lastPinMessage = outcome.userMessage
         }
 
         // Property observers don't fire from within init, so start explicitly.
@@ -118,19 +147,32 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Ask the pinner to keep the Dock on the preferred display, recording any
-    /// user-facing message from the outcome.
-    private func applyPreferredDisplay() {
-        guard isEnabled else { return }
-        let outcome = pinner.pin(toUUID: preferredDisplayUUID)
-        lastPinMessage = outcome.userMessage
-    }
-
     private func applyEnabledState() {
         if isEnabled {
-            monitor.start()          // start() also performs an initial restore
+            monitor.start()
+            coordinator.enable()  // performs the initial full reconcile
         } else {
+            coordinator.disable()
             monitor.stop()
+        }
+    }
+
+    /// Refresh published values after an external (CLI) settings edit
+    /// (DK-FR-007-S3). Assignments are skipped when unchanged so the guarded
+    /// didSets stay quiet.
+    private func syncFromSettings() {
+        isSyncingFromExternal = true
+        defer { isSyncingFromExternal = false }
+        if lockEdge != settings.lockEdge {
+            lockEdge = settings.lockEdge
+        }
+        if preferredDisplayUUID != settings.preferredDisplayUUID {
+            preferredDisplayUUID = settings.preferredDisplayUUID
+        }
+        if isEnabled != settings.isEnabled {
+            isEnabled = settings.isEnabled
+            // The didSet was suppressed; enact the enable/disable transition.
+            applyEnabledState()
         }
     }
 }
