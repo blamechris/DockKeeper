@@ -551,7 +551,7 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 
 Ordered by risk to v1:
 
-1. **Does main-display relocation actually move the Dock on real multi-monitor hardware, and how does it behave on unplug/replug?** The entire pinning feature is INFERRED. Blocks calling pinning "done." → 2-monitor rig session (spike next-steps already call for this).
+1. **Does main-display relocation actually move the Dock on real multi-monitor hardware, and how does it behave on unplug/replug?** → **Half-resolved 2026-07-23** ([hardware session 1](hardware-matrix-results.md)): the relocation transaction is CONFIRMED on a 2-display rig with portrait geometry — arrangement-preserving and reversible. Still open: the Dock-follow observation itself (needs separate Spaces OFF + logout) and unplug/replug drift.
 2. **How stable are display UUIDs across reconnects, docking stations, adapters, and reboots?** Determines how much of §7's scored matching is actually needed. UNKNOWN.
 3. ~~**Does a `CoreDock` live set persist across a Dock restart?**~~ → **Resolved 2026-07-22: yes — CONFIRMED write-through on-device** ([spike](../Documentation/spikes/coredock-defaults-persistence.md)); §8.5 mirroring is unnecessary.
 4. **What is the real event-burst profile around display changes?** Sets debounce width and validates the echo window. UNKNOWN — instrumented logging session.
