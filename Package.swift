@@ -8,7 +8,10 @@ let package = Package(
     ],
     products: [
         .executable(name: "DockKeeper", targets: ["DockKeeper"]),
-        .executable(name: "dockkeeper", targets: ["dockkeeper-cli"]),
+        // Build product is `dockkeeper-cli` to avoid a case-insensitive
+        // filesystem collision with the `DockKeeper` app binary. It ships /
+        // symlinks as `dockkeeper` at install time (Homebrew, installer).
+        .executable(name: "dockkeeper-cli", targets: ["dockkeeper-cli"]),
         .library(name: "DockKeeperCore", targets: ["DockKeeperCore"]),
     ],
     targets: [

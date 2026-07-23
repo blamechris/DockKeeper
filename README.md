@@ -40,9 +40,9 @@ swift build
 # Run the menu-bar app
 swift run DockKeeper
 
-# Use the CLI
-swift run dockkeeper status
-swift run dockkeeper lock left
+# Use the CLI (build product is `dockkeeper-cli`; ships as `dockkeeper`)
+swift run dockkeeper-cli status
+swift run dockkeeper-cli lock left
 
 # Run tests
 swift test
