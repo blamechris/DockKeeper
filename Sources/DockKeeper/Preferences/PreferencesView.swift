@@ -24,6 +24,19 @@ private struct GeneralTab: View {
             Text("When enabled, DockKeeper keeps the Dock locked to your chosen edge.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle("Launch at Login", isOn: $state.launchAtLogin)
+            if let message = state.loginItemMessage {
+                HStack(spacing: 8) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Open Login Items…") { state.openLoginItemsSettings() }
+                        .font(.caption)
+                }
+            }
         }
         .padding()
     }

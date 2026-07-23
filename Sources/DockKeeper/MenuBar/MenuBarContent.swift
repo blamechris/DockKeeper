@@ -50,9 +50,16 @@ struct MenuBarContent: View {
 
         Toggle("Auto Recover", isOn: $state.autoRecover)
 
-        if let message = state.lastPinMessage {
+        Divider()
+
+        Toggle("Launch at Login", isOn: $state.launchAtLogin)
+
+        if let message = state.lastPinMessage ?? state.loginItemMessage {
             Divider()
             Text(message)
+            if state.loginItemMessage != nil {
+                Button("Open Login Items…") { state.openLoginItemsSettings() }
+            }
         }
 
         Divider()

@@ -32,6 +32,20 @@ final class AppState: ObservableObject {
         didSet { settings.autoRecover = autoRecover }
     }
 
+    /// Launch DockKeeper at login. Source of truth is `SMAppService`; this
+    /// mirrors it for the UI. Guarded against re-entrancy when we revert on
+    /// failure.
+    @Published var launchAtLogin: Bool {
+        didSet {
+            guard !isSyncingLoginItem else { return }
+            applyLaunchAtLogin()
+        }
+    }
+    private var isSyncingLoginItem = false
+
+    /// User-facing note about the login-item state (approval needed, etc.).
+    @Published private(set) var loginItemMessage: String?
+
     /// UUID of the display the Dock should stay on; `nil` = no preference.
     @Published var preferredDisplayUUID: String? {
         didSet {
@@ -53,6 +67,9 @@ final class AppState: ObservableObject {
         self.lockEdge = settings.lockEdge
         self.autoRecover = settings.autoRecover
         self.preferredDisplayUUID = settings.preferredDisplayUUID
+        // System is the source of truth for login-item state.
+        self.launchAtLogin = LoginItemManager.isEnabled
+        self.loginItemMessage = LoginItemManager.statusMessage
         self.displays = DisplayManager.activeDisplays()
 
         // Re-apply the preferred-display pin whenever the monitor restores the
@@ -78,6 +95,27 @@ final class AppState: ObservableObject {
 
     func refreshDisplays() {
         displays = DisplayManager.activeDisplays()
+    }
+
+    /// Open System Settings so the user can approve the login item.
+    func openLoginItemsSettings() {
+        LoginItemManager.openLoginItemsSettings()
+    }
+
+    private func applyLaunchAtLogin() {
+        do {
+            try LoginItemManager.setEnabled(launchAtLogin)
+            settings.launchAtLogin = launchAtLogin
+            loginItemMessage = LoginItemManager.statusMessage
+            Log.app.info("Launch at Login set to \(self.launchAtLogin, privacy: .public)")
+        } catch {
+            Log.app.error("Launch at Login change failed: \(error.localizedDescription, privacy: .public)")
+            loginItemMessage = "Couldn't update Launch at Login: \(error.localizedDescription)"
+            // Revert the toggle to the real system state without re-triggering.
+            isSyncingLoginItem = true
+            launchAtLogin = LoginItemManager.isEnabled
+            isSyncingLoginItem = false
+        }
     }
 
     /// Ask the pinner to keep the Dock on the preferred display, recording any

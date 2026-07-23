@@ -15,6 +15,7 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 - Lock the Dock to **Bottom**, **Left**, or **Right**
 - Automatic recovery after sleep, wake, display plug/unplug, resolution and arrangement changes
 - **Preferred display (best-effort):** keep the Dock on a chosen monitor by making it the main display
+- **Launch at Login** via Apple's supported `SMAppService` API (requires the packaged `.app`)
 - Menu-bar app that stays out of your way (`.accessory` — no Dock icon of its own)
 - Command-line interface: `dockkeeper lock left`
 - Uses the private `CoreDock` API for flicker-free repositioning, with a `defaults`+restart fallback
@@ -28,7 +29,6 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 
 ### Planned (see roadmap)
 
-- Launch at login
 - Global hotkeys, Apple Shortcuts, AppleScript
 - Follow mouse / active window / active app
 
