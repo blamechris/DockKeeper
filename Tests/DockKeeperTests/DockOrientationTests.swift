@@ -59,6 +59,9 @@ struct SettingsTests {
         // ADR-005: the poll is a 30 s safety net, not a 2 s hammer.
         #expect(settings.recoveryInterval == 30.0)
         #expect(settings.restoreDelay == 0.4)
+        // Diagnostics file is strictly opt-in (DK-PRIV-001 S2).
+        #expect(settings.diagnosticsFileEnabled == false)
+        #expect(settings.settingsVersion == 1)
     }
 
     @Test("Persists a changed lock edge")

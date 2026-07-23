@@ -21,24 +21,27 @@ public final class Settings: @unchecked Sendable {
         Keys.enabled: true,
         Keys.lockEdge: DockOrientation.bottom.rawValue,
         Keys.launchAtLogin: false,
-        Keys.showMenuBarIcon: true,
         Keys.verboseLogging: false,
+        Keys.diagnosticsFileEnabled: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
+        Keys.settingsVersion: 1,
     ] }
 
-    // Note: v0.1 had an `autoRecover` key gating the poll; ADR-007 retired it —
-    // `enabled` is the single switch. Any leftover on-disk value is ignored.
+    // Retired keys, ignored if present on disk: `autoRecover` (ADR-007 —
+    // `enabled` is the single switch) and `showMenuBarIcon` (dead in v0.1; a
+    // menu-bar-only app without its icon would be unreachable).
     enum Keys {
         static let enabled = "enabled"
         static let lockEdge = "lockEdge"
         static let preferredDisplayUUID = "preferredDisplayUUID"          // legacy (pre-ADR-004); kept in sync for rollback until v1.1
         static let preferredDisplayFingerprint = "preferredDisplayFingerprint"
         static let launchAtLogin = "launchAtLogin"
-        static let showMenuBarIcon = "showMenuBarIcon"
         static let verboseLogging = "verboseLogging"
+        static let diagnosticsFileEnabled = "diagnosticsFileEnabled"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
+        static let settingsVersion = "settingsVersion"
     }
 
     /// The keys whose external (e.g. CLI) edits should refresh a running app —
@@ -53,11 +56,6 @@ public final class Settings: @unchecked Sendable {
     public var isEnabled: Bool {
         get { defaults.bool(forKey: Keys.enabled) }
         set { defaults.set(newValue, forKey: Keys.enabled) }
-    }
-
-    public var showMenuBarIcon: Bool {
-        get { defaults.bool(forKey: Keys.showMenuBarIcon) }
-        set { defaults.set(newValue, forKey: Keys.showMenuBarIcon) }
     }
 
     public var launchAtLogin: Bool {
@@ -139,5 +137,16 @@ public final class Settings: @unchecked Sendable {
     public var recoveryInterval: TimeInterval {
         get { defaults.double(forKey: Keys.recoveryInterval) }
         set { defaults.set(newValue, forKey: Keys.recoveryInterval) }
+    }
+
+    /// Opt-in bounded diagnostics file (TDD §12; DK-PRIV-001 S2).
+    public var diagnosticsFileEnabled: Bool {
+        get { defaults.bool(forKey: Keys.diagnosticsFileEnabled) }
+        set { defaults.set(newValue, forKey: Keys.diagnosticsFileEnabled) }
+    }
+
+    /// Schema version hook for future migrations (current: 1).
+    public var settingsVersion: Int {
+        defaults.integer(forKey: Keys.settingsVersion)
     }
 }

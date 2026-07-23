@@ -47,7 +47,8 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 | Portrait/rotated external geometry in snapshots | ✅ CONFIRMED (bounds account for rotation) | 1 |
 | Pin transaction + arrangement preservation + restore | ✅ CONFIRMED | 1 |
 | **Dock follows main display (Spaces OFF)** | ⏳ pending Spaces-OFF logout | — |
-| Edge lock survives display events (2-display) | ⏳ | — |
+| Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
+| Edge lock survives display events (2-display, app running) | ⏳ | — |
 | Unplug / replug drift presentation | ⏳ | — |
 | UUID stability across ports/adapters/reboot | ⏳ baseline recorded | — |
 | Sleep/wake with external connected | ⏳ | — |

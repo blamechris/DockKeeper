@@ -454,12 +454,12 @@ Consequences:
 | `preferredDisplayFingerprint` | nil | ✅ | JSON-encoded `DisplayFingerprint` (ADR-004) |
 | `autoRecover` | `true` | ✅ | Gates the poll only in v0.1 — **retire per ADR-007** (2026-07-22): `enabled` is the single switch; key removed with M4 |
 | `launchAtLogin` | `false` | ✅ | Mirror only — `SMAppService` is the source of truth; keep for UI restore, never trust over the system |
-| `showMenuBarIcon` | `true` | ✅ | **Unused in v0.1** — wire up or delete before v1 |
-| `verboseLogging` | `false` | ✅ | |
+| ~~`showMenuBarIcon`~~ | — | deleted | Removed 2026-07-23 (was dead in v0.1; a menu-bar-only app without its icon is unreachable) |
+| `verboseLogging` | `false` | ✅ | Surfaced in Preferences ▸ Advanced (2026-07-23) |
 | `restoreDelay` | 0.4 | ✅ | Becomes debounce/ladder base (§8.4) |
-| `recoveryInterval` | 2.0 → **30.0** | ✅ | Poll interval; default change per §8.6 |
-| `diagnosticsFileEnabled` (new) | `false` | ❌ | Opt-in bounded file log |
-| `settingsVersion` (new) | 1 | ❌ | Migration hook |
+| `recoveryInterval` | 30.0 | ✅ | Poll interval per §8.6 (shipped 2026-07-22) |
+| `diagnosticsFileEnabled` | `false` | ✅ | Opt-in bounded file log (2026-07-23) |
+| `settingsVersion` | 1 | ✅ | Migration hook (2026-07-23) |
 | Donation prompt state | — | — | **Deliberately absent.** No automatic donation prompt exists, so no state is needed (kickoff §6.11: default no prompt — we exceed this by having no prompt at all; the "Support Development" menu item is passive) |
 
 Onboarding-completion flag: not needed (no onboarding flow; the app is functional on first launch with zero prompts).
@@ -558,7 +558,7 @@ Ordered by risk to v1:
 5. ~~**Should DockKeeper restore the original display arrangement when pinning is disabled or the app quits?**~~ → **Resolved 2026-07-22 (ADR-006): leave-as-is for v1.0** — no snapshot-and-restore; disabling stops future corrections and the Preferences copy says so.
 6. **Mirroring and clamshell behavior** for both edge lock and pinning. UNKNOWN — hardware matrix.
 7. **Do notifications ever miss (justifying the poll), and can the poll interval go to 60 s+ or event-only?** Needs the §8.6 drift-source counter running for a while.
-8. **Menu-bar icon design**: enabled/disabled/degraded/paused states (v0.1 uses one symbol for all). Minor, but user-facing.
+8. ~~**Menu-bar icon design**~~ → **Resolved 2026-07-23**: `RecoveryState.menuSymbolName` — `rectangle.dashed` disabled, `exclamationmark.triangle` degraded/error, `pause.rectangle` reserved, `dock.rectangle` otherwise.
 9. ~~**`autoRecover` vs `enabled`**: two overlapping switches?~~ → **Resolved 2026-07-22 (ADR-007): `enabled` is the single user-facing switch; `autoRecover` is retired** (removed with M4).
 10. **Name/trademark check** for "DockKeeper" before public release. Competitor family now identified as **DockLock (Lite/Plus/Pro)** — proximity makes the review substantive, not pro forma (R-010).
 
@@ -605,7 +605,7 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | Milestone | Status |
 |---|---|
 | M0 Research & feasibility | 🟡 central spike done + decisions; remaining spikes in §17 |
-| M1 App shell (menu bar, prefs, login item, diagnostics) | 🟡 built except file diagnostics; ad-hoc-signed app bundle landed on main (`72fbcc2`) |
+| M1 App shell (menu bar, prefs, login item, diagnostics) | ✅ (2026-07-23) incl. opt-in file diagnostics, state-distinct icons, Advanced tab; ad-hoc-signed bundle since `72fbcc2` |
 | M2 Display registry | ✅ (2026-07-23) fingerprint + scored matching + repair + migration; thresholds tune at M6 |
 | M3 Dock observation | ✅ (2026-07-22) events-only `DockMonitor` + typed `DockEvent`s; external-defaults KVO; Dock-restart detection dropped (spike: restarts benign) |
 | M4 Dock restoration | ✅ code complete (2026-07-22): `RecoveryCoordinator`/`RecoveryMachine` with ladder, cooldown, echo suppression, coalescing — unit-tested; 100-restore reliability run at M6 |
@@ -617,8 +617,8 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 ### A.4 Known implementation debt (observed during this review)
 
 - ~~`DockMonitor.stop()` removes every observer from all three notification centers indiscriminately, and registers a `DistributedNotificationCenter` it never uses~~ — ✅ fixed 2026-07-22.
-- Menu-bar icon ternary resolves to the same symbol for enabled and disabled ([DockKeeperApp.swift:13](../Sources/DockKeeper/App/DockKeeperApp.swift)).
-- `showMenuBarIcon` setting is dead.
+- ~~Menu-bar icon ternary resolves to the same symbol for enabled and disabled~~ — ✅ fixed 2026-07-23 (state-driven symbols).
+- ~~`showMenuBarIcon` setting is dead~~ — ✅ deleted 2026-07-23.
 - Persisting `"cg-<id>"` pseudo-UUIDs as a display preference is unstable (§7.1).
 - ~~App does not observe external `UserDefaults` changes~~ — ✅ fixed 2026-07-22 (KVO on the shared defaults; DK-FR-007-S3).
 - `Log.verbose` is `nonisolated(unsafe)` mutable static — benign, but fold into the diagnostics rework.

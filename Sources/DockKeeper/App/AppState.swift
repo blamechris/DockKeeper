@@ -70,6 +70,21 @@ final class AppState: ObservableObject {
     /// `nil` when everything is healthy.
     @Published private(set) var statusMessage: String?
 
+    /// Current recovery state — drives the state-distinct menu-bar icon.
+    @Published private(set) var recoveryState: RecoveryState = .disabled
+
+    /// Opt-in bounded diagnostics file (DK-PRIV-001 S2).
+    @Published var diagnosticsFileEnabled: Bool {
+        didSet {
+            settings.diagnosticsFileEnabled = diagnosticsFileEnabled
+            FileDiagnostics.shared.isEnabled = diagnosticsFileEnabled
+        }
+    }
+
+    @Published var verboseLogging: Bool {
+        didSet { settings.verboseLogging = verboseLogging }
+    }
+
     init() {
         let controller = DockController(settings: settings)
         self.controller = controller
@@ -81,6 +96,9 @@ final class AppState: ObservableObject {
         )
         self.isEnabled = settings.isEnabled
         self.lockEdge = settings.lockEdge
+        self.diagnosticsFileEnabled = settings.diagnosticsFileEnabled
+        self.verboseLogging = settings.verboseLogging
+        FileDiagnostics.shared.isEnabled = settings.diagnosticsFileEnabled
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
         self.loginItemMessage = LoginItemManager.statusMessage
@@ -99,9 +117,17 @@ final class AppState: ObservableObject {
             }
         }
         coordinator.onStateChange = { [weak self] state in
-            self?.statusMessage = state.userMessage
+            guard let self else { return }
+            if state != self.recoveryState {
+                FileDiagnostics.shared.note("state", String(describing: state))
+            }
+            self.recoveryState = state
+            self.statusMessage = state.userMessage
         }
         coordinator.onPinOutcome = { [weak self] outcome in
+            if outcome != .noPreference, outcome != .alreadyOnTarget {
+                FileDiagnostics.shared.note("pin", String(describing: outcome))
+            }
             self?.lastPinMessage = outcome.userMessage
         }
 
@@ -153,6 +179,11 @@ final class AppState: ObservableObject {
     /// Open System Settings so the user can approve the login item.
     func openLoginItemsSettings() {
         LoginItemManager.openLoginItemsSettings()
+    }
+
+    /// Reveal the diagnostics file in Finder (support-bundle flow).
+    func revealDiagnosticsFile() {
+        NSWorkspace.shared.activateFileViewerSelecting([FileDiagnostics.shared.fileURL])
     }
 
     private func applyLaunchAtLogin() {

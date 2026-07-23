@@ -10,8 +10,33 @@ struct PreferencesView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             DockTab()
                 .tabItem { Label("Dock", systemImage: "dock.rectangle") }
+            AdvancedTab()
+                .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
         .frame(width: 420, height: 260)
+    }
+}
+
+private struct AdvancedTab: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        Form {
+            Toggle("Verbose logging", isOn: $state.verboseLogging)
+            Text("Extra detail in the system log (Console.app, subsystem com.dockkeeper.app).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle("Write a diagnostics file", isOn: $state.diagnosticsFileEnabled)
+            Text("Off by default. Keeps a small local log of state changes and corrections (~1 MB, 7 days) you can attach to a bug report. Nothing ever leaves this Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Reveal Diagnostics File") { state.revealDiagnosticsFile() }
+                .disabled(!state.diagnosticsFileEnabled)
+        }
+        .padding()
     }
 }
 

@@ -295,7 +295,7 @@ Then the dropdown states it in plain language
 S3 — State-distinct icon
 Given the app is enabled / disabled / degraded / paused
 Then the menu-bar icon is visually distinct per state
-[PROPOSED — v0.1 renders one symbol for all; open question #8]
+[Implemented 2026-07-23 — RecoveryState.menuSymbolName, unit-pinned]
 ```
 
 **Failure behavior.** n/a (UI surface).
@@ -425,9 +425,10 @@ Then no usage data, identifiers, or logs are transmitted anywhere   [CONFIRMED
 S2 — Local logs are opt-in and bounded
 Given verbose logging is off (default)
 Then only default os_log lines exist (system-managed retention)
-Given the (proposed) diagnostics file is enabled
-Then it is a ring buffer capped ~1 MB / 7 days and contains no sensitive
-    names (edge names, event names, numeric display IDs only)      [PROPOSED]
+Given the diagnostics file is enabled (off by default)
+Then it is bounded (~1 MB size-rotate with one predecessor, 7-day prune)
+    and contains no sensitive names (state names, edge names, pin
+    outcomes only)                        [Implemented 2026-07-23, unit-tested]
 
 S3 — No prompts
 Then no donation prompt, upgrade prompt, or nag ever interrupts use

@@ -21,6 +21,21 @@ public enum RecoveryState: Sendable, Equatable {
         case notConverging
     }
 
+    /// SF Symbol for the menu-bar icon, so each state is visually distinct
+    /// (M1; TDD open question #8).
+    public var menuSymbolName: String {
+        switch self {
+        case .disabled:
+            return "rectangle.dashed"
+        case .paused:
+            return "pause.rectangle"
+        case .degraded, .error:
+            return "exclamationmark.triangle"
+        case .starting, .monitoring, .restoring, .preferredDisplayMissing:
+            return "dock.rectangle"
+        }
+    }
+
     /// Short user-facing note for the menu; `nil` when nothing needs saying.
     public var userMessage: String? {
         switch self {

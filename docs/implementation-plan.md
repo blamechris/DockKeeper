@@ -29,16 +29,16 @@ Central spike done (mechanism + pinning + Spaces gating, owner decisions recorde
 
 **Acceptance.** Each spike has a Findings write-up in `Documentation/spikes/` with evidence labels and a recommendation. **Dependencies.** #2/#6 need the M6 rig; #3/#4 run on the single-display dev machine now.
 
-## M1 — Application shell 🟡
+## M1 — Application shell ✅ (2026-07-23)
 
-Built: menu bar, Preferences, login item, os_log, ad-hoc-signed `.app` packaging (`Scripts/build-app.sh`, `LSUIElement` plist — CONFIRMED at 72fbcc2, superseding the TDD's "packaging absent"). Remaining:
+Menu bar, Preferences, login item, os_log, ad-hoc-signed `.app` packaging (72fbcc2), plus the final items:
 
-- Opt-in bounded file diagnostics + export action (ring buffer ~1 MB/7 days — PROPOSED, TDD §12) with `diagnosticsFileEnabled` key.
-- State-distinct menu-bar icons (enabled/disabled/degraded/paused — open question #8).
-- Wire up or delete the dead `showMenuBarIcon` setting.
-- `settingsVersion` key (migration hook for M2).
+- ✅ Opt-in bounded file diagnostics (`FileDiagnostics`: ~1 MB size-rotate with one predecessor, 7-day prune, high-signal state/pin trail) + "Reveal Diagnostics File" in a new Advanced preferences tab; `diagnosticsFileEnabled` key, off by default.
+- ✅ State-distinct menu-bar icons (`RecoveryState.menuSymbolName`: dashed=disabled, warning=degraded/error, pause reserved — open question #8 resolved).
+- ✅ Dead `showMenuBarIcon` setting deleted (a menu-bar-only app without its icon would be unreachable).
+- ✅ `settingsVersion` key registered (currently 1).
 
-**Acceptance.** Diagnostics file caps verified by test; icon states visible in manual pass. **Tests.** Log-growth bound (reliability suite). **Risks.** R-009 (measure at M6).
+**Acceptance met:** rotation cap and opt-in-off verified by unit test (`FileDiagnosticsTests`); icon mapping pinned by test; 65 tests passing. Long-run log-growth measurement remains in the M6 reliability suite (R-009).
 
 ## M2 — Display registry ✅ (2026-07-23)
 

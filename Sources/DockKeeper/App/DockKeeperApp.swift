@@ -15,7 +15,7 @@ struct DockKeeperApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("DockKeeper", systemImage: state.isEnabled ? "dock.rectangle" : "dock.rectangle") {
+        MenuBarExtra("DockKeeper", systemImage: state.recoveryState.menuSymbolName) {
             MenuBarContent()
                 .environmentObject(state)
         }
