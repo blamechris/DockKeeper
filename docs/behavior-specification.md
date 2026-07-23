@@ -65,7 +65,8 @@ S3 — Fallback when CoreDock is unavailable
 Given the CoreDock symbols fail to resolve
 When a restore is needed
 Then DockKeeper writes com.apple.dock orientation and restarts the Dock
-And the app enters the Degraded state, surfaced in the menu and in CLI status
+And the app enters the Degraded state (surfaced in CLI status today; the
+    menu note is planned — TDD §15 marks state surfacing 🟡)
 And the Dock restart is visible (accepted cost of the fallback)
 
 S4 — Top edge is never offered
@@ -75,7 +76,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 **Failure behavior.** If both the live read and the defaults read fail, the orientation is treated as unknown drift and the desired edge is applied (applying is idempotent and safe — TDD §5.3, PROPOSED). Retry ladder applies (`DK-FR-003`); if exhausted, state → `Error` with the last error surfaced.
 
-**User-visible behavior.** Primary path: instant, flicker-free edge change. Fallback: visible Dock restart plus a "running degraded" menu note.
+**User-visible behavior.** Primary path: instant, flicker-free edge change. Fallback: visible Dock restart plus a "running degraded" note (CLI `status` reports it today; the menu note is planned).
 
 **Testability.** Decision logic unit-testable once the `DockAdapter` seam exists (v0.1 gap — TDD §4.3); model mapping already covered by `DockOrientationTests` (CONFIRMED). See [test-strategy.md](test-strategy.md).
 
@@ -85,7 +86,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 ## DK-FR-002: Preferred-display pinning (best-effort)
 
-**Description.** The user may choose a preferred display; DockKeeper makes that display the macOS *main* display via public `CGDisplayConfiguration` APIs, which is where the Dock lives. Explicitly **best-effort** (owner Decisions 1–3): the menu bar moves with the Dock (accepted, documented), and pinning is declined with an explanation when it cannot work honestly.
+**Description.** The user may choose a preferred display; DockKeeper makes that display the macOS *main* display via public `CGDisplayConfiguration` APIs, which is where the Dock lives (with separate Spaces off). Explicitly **best-effort** (owner Decisions 1–3): the menu bar moves with the Dock (accepted, documented), and pinning is declined with an explanation when it cannot work honestly.
 
 **Rationale.** There is no API — public or private within accepted risk — to place the Dock on a display directly; relocating the main display is the only public route. CONFIRMED (spike).
 
@@ -286,7 +287,9 @@ And a menu-bar item is present
 
 S2 — Honest status
 Given the app is Degraded, or the preferred display is missing
-Then the dropdown states it in plain language                [copy exists in v0.1]
+Then the dropdown states it in plain language
+[preferred-display copy exists in v0.1; the Degraded menu note is planned —
+ today only CLI status reports it]
 
 S3 — State-distinct icon
 Given the app is enabled / disabled / degraded / paused
@@ -363,6 +366,8 @@ Then the app's published state refreshes and reconciles if needed
 
 **Failure behavior.** Budget misses at M6 are release blockers or require an owner-ratified budget change.
 
+**User-visible behavior.** None when healthy — invisibility *is* the requirement; a budget miss surfaces as fan noise, Activity Monitor presence, or visible Dock churn, all of which are failures.
+
 **Testability.** 24 h idle measurement, launch timing, memory growth over repeated event storms ([test-strategy.md](test-strategy.md) reliability suite).
 
 **Priority / target.** P0 / v1.0. **Related risks:** R-005, R-006, R-009.
@@ -392,6 +397,8 @@ Then the system browser opens the GitHub page; nothing else fires
 ```
 
 **Failure behavior.** Any regression is a release blocker.
+
+**User-visible behavior.** None — the observable behavior is the absence of network activity (verifiable with a network monitor).
 
 **Testability.** CI check that no networking symbols are referenced (PROPOSED, TDD §14); manual verification with a network monitor at release.
 
@@ -428,6 +435,8 @@ Then no donation prompt, upgrade prompt, or nag ever interrupts use
 ```
 
 **Failure behavior.** Any violation is a release blocker; no exceptions.
+
+**User-visible behavior.** None — the absence of prompts, accounts, and collection is the behavior.
 
 **Testability.** Code inspection + the DK-NFR-002 CI check; log-content review at release.
 
