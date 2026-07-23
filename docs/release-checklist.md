@@ -20,7 +20,7 @@ Current tooling state (at 72fbcc2): `Scripts/build-app.sh` assembles and **ad-ho
 - [ ] CoreDock smoke test on the newest macOS point release (R-004: symbols resolve, live set works, fallback still engages when forced).
 - [ ] Docs current: behavior spec, TDD, risk register, decision log reflect shipped behavior (AGENTS rule 13).
 - [ ] Open `Error`/`Degraded`-class bugs triaged; none release-blocking.
-- [ ] **First release only:** name/trademark review done (R-010 — competitor family is DockLock Lite/Plus/Pro; see the risk register) · privacy statement + issue templates published (M7). ADR-003 owner ratification: ✅ recorded 2026-07-22.
+- [ ] **First release only:** name/trademark review done (R-010 — competitor family is DockLock Lite/Plus/Pro; see the risk register). Done already: ADR-003 ratification ✅ (2026-07-22) · privacy statement (`PRIVACY.md`) + issue templates ✅ (2026-07-23).
 
 ## 2. Version & changelog
 

@@ -83,9 +83,9 @@ No privacy-gated permission exists in v1 (TDD §10 — CONFIRMED); Login Items a
 
 **Acceptance.** Matrix results recorded per cell; budgets met or owner-ratified adjustments logged as ADR amendments; risk register updated with evidence. **Dependencies.** M2–M4 complete; rig available (schedule risk).
 
-## M7 — Release ❌
+## M7 — Release 🟡
 
-Developer ID signing + notarization pipeline, `.dmg`/`.zip` artifacts, Homebrew cask, app icon, README/privacy statement, issue templates — executed via the [release checklist](release-checklist.md). **Dependencies.** M6 green; ADR-003 ratified; R-010 trademark check done.
+Done 2026-07-23: privacy statement (`PRIVACY.md`), issue templates (`.github/ISSUE_TEMPLATE/`). Remaining: Developer ID signing + notarization pipeline, `.dmg`/`.zip` artifacts, Homebrew cask, app icon — executed via the [release checklist](release-checklist.md). **Dependencies.** M6 green; R-010 trademark check done. (ADR-003 ratified ✅.)
 
 ---
 
