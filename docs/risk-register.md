@@ -5,7 +5,7 @@
 | **Status** | Living document |
 | **Date** | 2026-07-22 |
 | **Owner** | blamechris |
-| **Inputs** | Kickoff package §10 (seed rows, recovered verbatim), [Technical design](technical-design.md) §1/§15/§17, [Preferred-display spike](../Documentation/spikes/preferred-display-spike.md) |
+| **Inputs** | Kickoff package §10 (seed rows, recovered verbatim), [Technical design](technical-design.md) §1/§15/§17, [Preferred-display spike](spikes/preferred-display-spike.md) |
 
 Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**.
 
@@ -32,7 +32,7 @@ Ordered by current severity.
 | R-001 | K | **No supported API can reliably move the Dock** (was: High/Critical — the project's founding uncertainty). | **Retired 2026-07-22 for edge lock**: the feasibility spike CONFIRMED on-device that `CoreDock` sets the edge live and flicker-free, with `defaults`+`killall` as a public-path fallback. The *display* dimension of the risk lives on as R-002 (no direct API exists; main-display relocation is the accepted best-effort route, owner Decision 1). |
 | R-007 | K | **App Sandbox blocks required behavior.** | **Materialized and accepted 2026-07-22**: the sandbox blocks both `killall` and private-API use (CONFIRMED policy), so Mac App Store distribution is off the table for v1. Mitigation applied as designed — Developer ID direct download + Homebrew cask (ADR-002). Revisit only if a supported mechanism appears. |
 | R-008 | K | **Accessibility behavior changes between macOS releases.** | **Closed for v1 (not applicable)**: the chosen mechanisms require no Accessibility permission at all (TDD §10, CONFIRMED on-device). Reopens automatically if a follow-focused-window feature ships post-v1. |
-| R-011 | N | **A live CoreDock set may not survive a Dock restart.** | **Closed 2026-07-22**: on-device spike CONFIRMED `CoreDockSet` writes through to `com.apple.dock` defaults ([findings](../Documentation/spikes/coredock-defaults-persistence.md)) — restarts re-read the edge we set. No mirroring, no Dock-restart detection needed; the release-checklist CoreDock smoke test re-verifies per macOS release. |
+| R-011 | N | **A live CoreDock set may not survive a Dock restart.** | **Closed 2026-07-22**: on-device spike CONFIRMED `CoreDockSet` writes through to `com.apple.dock` defaults ([findings](spikes/coredock-defaults-persistence.md)) — restarts re-read the edge we set. No mirroring, no Dock-restart detection needed; the release-checklist CoreDock smoke test re-verifies per macOS release. |
 
 ## Review cadence
 

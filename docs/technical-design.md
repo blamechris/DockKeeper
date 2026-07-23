@@ -6,7 +6,7 @@
 | **Date** | 2026-07-22 |
 | **Owner** | blamechris |
 | **Scope** | v1.0 (edge lock + best-effort preferred display) and the hardening work between the current v0.1 scaffold and v1.0 |
-| **Inputs** | [Preferred-display spike](../Documentation/spikes/preferred-display-spike.md) (owner decisions recorded 2026-07-22), the DockKeeper Agent Kickoff Package, the v0.1 codebase |
+| **Inputs** | [Preferred-display spike](spikes/preferred-display-spike.md) (owner decisions recorded 2026-07-22), the DockKeeper Agent Kickoff Package, the v0.1 codebase |
 
 Every product or technical claim in this document carries one of the kickoff package's evidence labels:
 
@@ -400,7 +400,7 @@ All PROPOSED and stored in `Settings` (the keys exist: `restoreDelay`, `recovery
 
 ### 8.5 Dock restart
 
-**Resolved 2026-07-22 — CONFIRMED benign.** The on-device spike ([findings](../Documentation/spikes/coredock-defaults-persistence.md)) showed a live `CoreDock` set writes through to the `com.apple.dock` defaults within ~1.5 s (it even creates the key when unset). A restarted Dock therefore re-reads exactly the edge we last set: no mirroring, no Dock-restart detection needed.
+**Resolved 2026-07-22 — CONFIRMED benign.** The on-device spike ([findings](spikes/coredock-defaults-persistence.md)) showed a live `CoreDock` set writes through to the `com.apple.dock` defaults within ~1.5 s (it even creates the key when unset). A restarted Dock therefore re-reads exactly the edge we last set: no mirroring, no Dock-restart detection needed.
 
 ### 8.6 Polling policy
 
@@ -553,7 +553,7 @@ Ordered by risk to v1:
 
 1. **Does main-display relocation actually move the Dock on real multi-monitor hardware, and how does it behave on unplug/replug?** → **Half-resolved 2026-07-23** ([hardware session 1](hardware-matrix-results.md)): the relocation transaction is CONFIRMED on a 2-display rig with portrait geometry — arrangement-preserving and reversible. Still open: the Dock-follow observation itself (needs separate Spaces OFF + logout) and unplug/replug drift.
 2. **How stable are display UUIDs across reconnects, docking stations, adapters, and reboots?** Determines how much of §7's scored matching is actually needed. UNKNOWN.
-3. ~~**Does a `CoreDock` live set persist across a Dock restart?**~~ → **Resolved 2026-07-22: yes — CONFIRMED write-through on-device** ([spike](../Documentation/spikes/coredock-defaults-persistence.md)); §8.5 mirroring is unnecessary.
+3. ~~**Does a `CoreDock` live set persist across a Dock restart?**~~ → **Resolved 2026-07-22: yes — CONFIRMED write-through on-device** ([spike](spikes/coredock-defaults-persistence.md)); §8.5 mirroring is unnecessary.
 4. **What is the real event-burst profile around display changes?** Sets debounce width and validates the echo window. UNKNOWN — instrumented logging session.
 5. ~~**Should DockKeeper restore the original display arrangement when pinning is disabled or the app quits?**~~ → **Resolved 2026-07-22 (ADR-006): leave-as-is for v1.0** — no snapshot-and-restore; disabling stops future corrections and the Preferences copy says so.
 6. **Mirroring and clamshell behavior** for both edge lock and pinning. UNKNOWN — hardware matrix.
@@ -572,8 +572,8 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 
 | Kickoff artifact | Status | Notes |
 |---|---|---|
-| `docs/product-scope.md` | ❌ | Kickoff package itself not yet committed as scope doc |
-| `docs/product-investigation.md` (Phase 1) | ❌ | No competitor matrix / evidence ledger exists; the project pivoted to build-first. Behaviors were chosen from the kickoff's v1 boundary, not from confirmed competitor observation |
+| `docs/product-scope.md` | 🟡 | Landed 2026-07-23 as a PROPOSED distillation of the kickoff package; owner may substitute the original scope text |
+| `docs/product-investigation.md` (Phase 1) | 🟡 | Landed 2026-07-23 — DockLock family matrix + evidence table from public documentation (key finding: Lite/Plus require separate-Spaces ON, bottom-only, ≥2 displays, Accessibility). Black-box testing on an installed copy still pending |
 | Feasibility spikes (Phase 2) | 🟡 | One high-quality spike answers the *central* question (Dock control mechanism + pinning feasibility + Spaces gating) with on-device evidence and recorded owner decisions. Remaining spike questions (UUID stability, Dock-restart persistence, event bursts, mirroring) open — §17 |
 | `docs/behavior-specification.md` (Phase 3) | ✅ | Landed 2026-07-22 — Appendix B IDs formalized with G/W/T scenarios |
 | `docs/technical-design.md` | ✅ | This document |
@@ -583,8 +583,8 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | `docs/decision-log.md` (ADRs) | ✅ | Landed 2026-07-22 — ADR-001…007; ADR-003 ratified 2026-07-22 |
 | `docs/release-checklist.md` | ✅ | Landed 2026-07-22 |
 | `AGENTS.md` | ✅ | Landed 2026-07-22 — kickoff §14 rules verbatim |
-| `research/` evidence tree | ❌ | |
-| Repo layout | ⚠️ | Spike lives in `Documentation/spikes/`, not `docs/`+`spikes/`; consolidate into `docs/` when the doc suite lands |
+| `research/` evidence tree | ✅ | Seeded 2026-07-23 (`research/evidence/docklock-2026-07-23.md`) |
+| Repo layout | ✅ | Spikes consolidated to `docs/spikes/` 2026-07-23; all references updated |
 | Coding gate (§11) | ⚠️ | Production code exists before the gate's doc set. The gate's *substantive* criterion — "a viable restoration approach demonstrated" — was met by the spike before the engine was built; the documentation criteria are being backfilled (this TDD is part of that) |
 
 ### A.2 Non-negotiable principles (kickoff §3)

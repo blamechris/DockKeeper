@@ -23,11 +23,11 @@ Central spike done (mechanism + pinning + Spaces gating, owner decisions recorde
 | Deliverable | Answers open question | Risk |
 |---|---|---|
 | UUID-stability spike (reconnect/dock/adapter/reboot table) | #2 | R-003 |
-| ~~CoreDock-persistence spike~~ ✅ Done 2026-07-22 — write-through to defaults CONFIRMED ([findings](../Documentation/spikes/coredock-defaults-persistence.md)); restarts are benign, no mirroring needed, R-011 closed | #3 | R-011 |
+| ~~CoreDock-persistence spike~~ ✅ Done 2026-07-22 — write-through to defaults CONFIRMED ([findings](spikes/coredock-defaults-persistence.md)); restarts are benign, no mirroring needed, R-011 closed | #3 | R-011 |
 | Event-burst instrumentation session (real burst profile → debounce width) | #4 | R-005 |
 | Mirroring/clamshell behavior notes | #6 | R-002 |
 
-**Acceptance.** Each spike has a Findings write-up in `Documentation/spikes/` with evidence labels and a recommendation. **Dependencies.** #2/#6 need the M6 rig; #3/#4 run on the single-display dev machine now.
+**Acceptance.** Each spike has a Findings write-up in `docs/spikes/` with evidence labels and a recommendation. **Dependencies.** #2/#6 need the M6 rig; #3/#4 run on the single-display dev machine now.
 
 ## M1 — Application shell ✅ (2026-07-23)
 
@@ -93,4 +93,4 @@ Done 2026-07-23: privacy statement (`PRIVACY.md`), issue templates (`.github/ISS
 
 From TDD A.4, tracked here so it isn't lost: ~~observer-removal fix + dead `DistributedNotificationCenter`~~ ✅ · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · ~~external-defaults observation~~ ✅ · `Log.verbose` static folded into diagnostics rework (M1) · ~~`autoRecover` removal per ADR-007~~ ✅ (all ✅ 2026-07-22 with M3/M4).
 
-**Out of scope for v1.0** (kickoff/TDD non-goals): follow-mouse/window/app modes, Shortcuts/Raycast/AppleScript, per-app rules and profiles, per-display Dock allow/disallow, App Store, auto-update (Sparkle needs a post-v1 ADR), restoring display arrangement on disable (resolved leave-as-is — ADR-006). These deferred modes are exactly the **DockLock Plus/Pro** premium differentiators (follow mouse/active app/active window, per-display allow, automation, Shortcuts/Raycast — CONFIRMED from public product pages); staged parity is intentional per kickoff §17, and parity claims stay evidence-gated (AGENTS rule 17) until `docs/product-investigation.md` exists.
+**Out of scope for v1.0** (kickoff/TDD non-goals): follow-mouse/window/app modes, Shortcuts/Raycast/AppleScript, per-app rules and profiles, per-display Dock allow/disallow, App Store, auto-update (Sparkle needs a post-v1 ADR), restoring display arrangement on disable (resolved leave-as-is — ADR-006). These deferred modes are exactly the **DockLock Plus/Pro** premium differentiators (follow mouse/active app/active window, automation, Shortcuts/Raycast — CONFIRMED, [product investigation](product-investigation.md)); staged parity is intentional per kickoff §17. **Top post-v1 parity candidate** (from investigation §3): pinning while "separate Spaces" is ON — the macOS default mode and the competitor's only supported mode — which would need a new mechanism spike (AX- or SkyLight-based, both currently rejected) and its own ADR.

@@ -25,7 +25,7 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 > expected. Pinning requires *Displays have separate Spaces* to be **off**
 > (System Settings → Desktop & Dock); when it's on, edge-locking still works and
 > DockKeeper tells you why pinning is unavailable. See
-> [the spike](Documentation/spikes/preferred-display-spike.md).
+> [the spike](docs/spikes/preferred-display-spike.md).
 
 ### Planned (see roadmap)
 

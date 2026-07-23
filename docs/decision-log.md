@@ -5,7 +5,7 @@
 | **Status** | Living document |
 | **Date** | 2026-07-22 |
 | **Owner** | blamechris |
-| **Inputs** | [Technical design](technical-design.md) §13/§16, [Preferred-display spike](../Documentation/spikes/preferred-display-spike.md) (owner Decisions 1–3, signed 2026-07-22), kickoff package §9 (ADR-001…005 slots) |
+| **Inputs** | [Technical design](technical-design.md) §13/§16, [Preferred-display spike](spikes/preferred-display-spike.md) (owner Decisions 1–3, signed 2026-07-22), kickoff package §9 (ADR-001…005 slots) |
 
 Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. Record format per the kickoff package: Context / Options / Decision / Consequences / Evidence / Date / Status.
 

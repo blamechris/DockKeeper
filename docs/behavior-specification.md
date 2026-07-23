@@ -6,7 +6,7 @@
 | **Date** | 2026-07-22 |
 | **Owner** | blamechris |
 | **Scope** | v1.0 externally observable behavior |
-| **Inputs** | [Technical design](technical-design.md) (Appendix B seed IDs), [Preferred-display spike](../Documentation/spikes/preferred-display-spike.md) (owner Decisions 1–3, 2026-07-22), kickoff package Phase-3 template |
+| **Inputs** | [Technical design](technical-design.md) (Appendix B seed IDs), [Preferred-display spike](spikes/preferred-display-spike.md) (owner Decisions 1–3, 2026-07-22), kickoff package Phase-3 template |
 
 Evidence labels: **CONFIRMED** (verified on-device / Apple docs / reproducible experiment) · **INFERRED** (reasoned from confirmed facts) · **PROPOSED** (a choice this document makes) · **UNKNOWN** (needs investigation).
 
