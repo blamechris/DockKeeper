@@ -126,3 +126,19 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 **Evidence.** Two-switch confusion observed in design review (TDD §11 — CONFIRMED by inspection); everything else INFERRED/PROPOSED as a UX judgment.
 
 **Date / Status.** 2026-07-22 · **Accepted** (owner-delegated call, 2026-07-22).
+
+---
+
+## ADR-008: Pursue separate-Spaces-mode pinning for full DockLock replacement
+
+**Context.** Owner directive 2026-07-23: DockKeeper aims to **completely replace** DockLock. Phase-1 investigation established that DockLock Lite/Plus operate *only* with "Displays have separate Spaces" ON (the macOS default), while DockKeeper v1 declines pinning there (Decision 2A) — the two products cover opposite modes ([investigation §3](product-investigation.md)). Full replacement therefore requires covering the default mode.
+
+**Options.** Stay v1-scoped (decline forever) · pursue separate-Spaces pinning spike-first · rush a mechanism without a spike.
+
+**Decision.** Open the parity workstream (implementation-plan **M8**) now, spike-first per the kickoff discipline: [docs/spikes/separate-spaces-pinning.md](spikes/separate-spaces-pinning.md). **Decision 2A stands unchanged for v1.0** — it ships with honest declining; the parity feature targets the next minor release once (and only if) a mechanism meets the reliability bar.
+
+**Consequences.** Early spike results: Dock-host *detection* is CONFIRMED possible with public API and zero permissions (visibleFrame insets); no direct private "set Dock display" call exists under known names, so recovery will be a re-summon mechanism — possibly requiring an **opt-in Accessibility permission for this mode only** (v1's zero-permission story is unaffected). Mechanism choice and permission posture will be **ADR-009** after the spike. The bar remains owner Decision 3: reliable and honest — no oscillation, no pointer fights; if no candidate meets it, the honest decline stays and the gap is documented.
+
+**Evidence.** Investigation P-002 (CONFIRMED: competitor requires the mode); detection probe CONFIRMED; symbol sweep CONFIRMED-absent (spike doc).
+
+**Date / Status.** 2026-07-23 · **Accepted** (owner-directed; mechanism selection pending → ADR-009).

@@ -87,6 +87,17 @@ No privacy-gated permission exists in v1 (TDD §10 — CONFIRMED); Login Items a
 
 Done 2026-07-23: privacy statement (`PRIVACY.md`), issue templates (`.github/ISSUE_TEMPLATE/`). Remaining: Developer ID signing + notarization pipeline, `.dmg`/`.zip` artifacts, Homebrew cask, app icon — executed via the [release checklist](release-checklist.md). **Dependencies.** M6 green; R-010 trademark check done. (ADR-003 ratified ✅.)
 
+## M8 — Separate-Spaces pinning (parity workstream, targets v1.1) 🟡 spike phase
+
+Owner-directed 2026-07-23 (ADR-008): full DockLock replacement requires pinning in the macOS-default separate-Spaces mode. Spike-first; v1.0 ships unchanged.
+
+- 🟡 **Spike** ([separate-spaces-pinning](spikes/separate-spaces-pinning.md)): detection CONFIRMED (public visibleFrame insets, zero permissions); no direct private setter exists → re-summon candidates queued (warp-only, event-synthesis, killall-relocation, deeper SkyLight enumeration). Interactive migration observation next.
+- ❌ **ADR-009**: mechanism + permission posture (possibly opt-in Accessibility for this mode only — would resurrect the kickoff's full permission model, `PermissionManager`, and the `Awaiting Permission` state).
+- ❌ **Design + build**: `SeparateSpacesPinner` behind the existing `DisplayPinner` protocol; new `DockEvent`/detection wiring; DK-FR-008 requirement authored *after* the mechanism is proven (spike → specify → design → build).
+- ❌ **Hardware validation**: oscillation-free operation on the matrix; the reliability bar (Decision 3) is the ship/no-ship gate.
+
+**Acceptance.** Pin survives the matrix in separate-Spaces mode without visible pointer fights or oscillation; permission ask (if any) is opt-in, explained, and mode-scoped. **Rollback.** Strategy stays behind the protocol; the honest decline remains the fallback outcome.
+
 ---
 
 ## Cross-cutting debt (fold into the touching milestone)

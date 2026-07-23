@@ -42,11 +42,12 @@ arrangement changes; Launch at Login; menu-bar controls + Preferences; local
 opt-in diagnostics; CLI (`dockkeeper lock/unlock/status`); optional donation
 link; zero network.
 
-**Out (deferred until core reliability is proven):** follow-mouse /
-follow-focused-window / follow-active-app modes; pinning while "separate
-Spaces" is on (the competitor's home turf — top post-v1 parity candidate, see
-investigation §3); Apple Shortcuts / Raycast / AppleScript; display profiles
-and per-app rules; App Store distribution; auto-update.
+**Out of v1.0 (deferred until core reliability is proven):** follow-mouse /
+follow-focused-window / follow-active-app modes; Apple Shortcuts / Raycast /
+AppleScript; display profiles and per-app rules; App Store distribution;
+auto-update. **Pinning while "separate Spaces" is on** — the competitor's only
+supported mode — is out of v1.0 but **in active development for v1.1**
+(owner-directed full replacement, ADR-008; spike underway).
 
 Detailed behavior lives in [behavior-specification.md](behavior-specification.md);
 the delivery sequence in [implementation-plan.md](implementation-plan.md).
