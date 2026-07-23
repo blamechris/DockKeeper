@@ -299,7 +299,7 @@ struct RecoveryCoordinatorTests {
         harness.coordinator.enable()
         harness.runAllScheduled()
         #expect(harness.appliedPins == [9])
-        #expect(harness.pinOutcomes == [.pinned])
+        #expect(harness.pinOutcomes.first == .pinned)
 
         // The pin emits a display-reconfiguration event right back at us.
         let before = harness.scheduled.count
@@ -345,6 +345,17 @@ struct RecoveryCoordinatorTests {
         #expect(harness.scheduled.first?.delay == 0, "poll passes skip the debounce")
         harness.runAllScheduled()
         #expect(harness.coordinator.pollCaughtDriftCount == 1)
+    }
+
+    @Test("Terminal pin decisions still surface their explanation to the UI")
+    func terminalPinOutcomeSurfaces() {
+        var declined = aligned
+        declined.pinDecision = .terminal(.unsupportedSeparateSpaces)
+        let harness = Harness(inputs: [declined])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        #expect(harness.pinOutcomes.contains(.unsupportedSeparateSpaces))
+        #expect(harness.appliedPins.isEmpty)
     }
 
     @Test("Disable strands in-flight passes; no residual corrections (DK-FR-004 S1)")

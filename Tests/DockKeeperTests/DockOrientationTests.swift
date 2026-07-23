@@ -86,34 +86,42 @@ struct DisplayPinnerTests {
         DisplaySnapshot(displays: displays, mainDisplayID: main, separateSpacesEnabled: separateSpaces)
     }
 
-    @Test("No preferred UUID is a no-op")
+    @Test("No preference is a no-op")
     func noPreference() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: nil) == .terminal(.noPreference))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .none) == .terminal(.noPreference))
     }
 
-    @Test("Single display cannot be pinned")
+    @Test("Single display cannot be pinned, whatever the resolution says")
     func singleDisplay() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "A") == .terminal(.singleDisplay))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(1, repaired: nil)) == .terminal(.singleDisplay))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected) == .terminal(.singleDisplay))
     }
 
-    @Test("Unknown preferred display reports not-connected")
+    @Test("Unresolved preferred display reports not-connected")
     func displayNotConnected() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "GONE") == .terminal(.displayNotConnected))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected) == .terminal(.displayNotConnected))
+    }
+
+    @Test("Ambiguous identity is surfaced, never guessed (TDD §7.2)")
+    func ambiguousIdentity() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .ambiguous) == .terminal(.ambiguousIdentity))
+        #expect(PinOutcome.ambiguousIdentity.userMessage != nil)
     }
 
     @Test("Separate Spaces on declines rather than fighting the OS (Decision 2A)")
     func unsupportedSeparateSpaces() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .terminal(.unsupportedSeparateSpaces))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .terminal(.unsupportedSeparateSpaces))
     }
 
     @Test("Target already main is a no-op")
     func alreadyOnTarget() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 2, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .terminal(.alreadyOnTarget))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .terminal(.alreadyOnTarget))
     }
 
     @Test("Valid off-main target on a multi-display, non-separate-Spaces setup reconfigures")
@@ -124,6 +132,6 @@ struct DisplayPinnerTests {
             main: 1,
             separateSpaces: false
         )
-        #expect(MainDisplayPinner.decide(snapshot: snap, targetUUID: "B") == .reconfigure(2))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .reconfigure(2))
     }
 }

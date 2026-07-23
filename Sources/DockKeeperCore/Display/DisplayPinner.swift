@@ -14,6 +14,15 @@ public struct DisplaySnapshot: Sendable, Equatable {
         self.mainDisplayID = mainDisplayID
         self.separateSpacesEnabled = separateSpacesEnabled
     }
+
+    /// The displays offered to fingerprint matching (ADR-004).
+    public var identityCandidates: [FingerprintMatcher.Candidate] {
+        displays.compactMap { display in
+            display.fingerprint.map {
+                FingerprintMatcher.Candidate(displayID: display.displayID, fingerprint: $0)
+            }
+        }
+    }
 }
 
 /// The result of a pin attempt. All non-`pinned` cases are safe no-ops.
@@ -22,6 +31,7 @@ public enum PinOutcome: Sendable, Equatable {
     case alreadyOnTarget            // Target was already the main display.
     case singleDisplay              // Only one display; nothing to pin.
     case displayNotConnected        // Preferred display isn't currently attached.
+    case ambiguousIdentity          // Two candidates are indistinguishable — never guess (TDD §7.2).
     case unsupportedSeparateSpaces  // "Displays have separate Spaces" is on (Decision 2A).
     case noPreference               // No preferred display configured.
     case failed(Int32)              // CoreGraphics reconfigure error (CGError raw value).
@@ -35,6 +45,9 @@ public enum PinOutcome: Sendable, Equatable {
             return "Only one display is connected."
         case .displayNotConnected:
             return "Your preferred display isn't connected."
+        case .ambiguousIdentity:
+            return "Two connected displays look identical, so DockKeeper won't "
+                + "guess. Please pick your preferred display again."
         case .unsupportedSeparateSpaces:
             return "Pinning needs \u{201C}Displays have separate Spaces\u{201D} turned off "
                 + "(System Settings \u{203A} Desktop & Dock). Edge locking still works."
@@ -47,10 +60,11 @@ public enum PinOutcome: Sendable, Equatable {
 /// Abstraction over "keep the Dock on the user's preferred monitor". v1.0 has a
 /// single public-API implementation; the protocol leaves room for an
 /// experimental private-API strategy later without touching call sites.
-public protocol DisplayPinner: Sendable {
-    /// Attempt to pin to the display with the given UUID. `nil` means "no
-    /// preference" and is a no-op.
-    func pin(toUUID uuid: String?) -> PinOutcome
+/// Main-actor because live snapshots read `NSScreen`.
+@MainActor
+public protocol DisplayPinner {
+    /// Attempt to pin to a concrete, already-resolved display.
+    func pin(toDisplayID targetID: CGDirectDisplayID) -> PinOutcome
 }
 
 /// Pins the Dock by making the preferred display the **main** display (moving
@@ -58,7 +72,9 @@ public protocol DisplayPinner: Sendable {
 ///
 /// Per Decision 1 this also relocates the menu bar — an accepted, documented
 /// consequence. Per Decision 2A, when "Displays have separate Spaces" is on we
-/// decline rather than fight the OS.
+/// decline rather than fight the OS. Identity resolution (fingerprint →
+/// display) happens *before* the pinner via `DisplayIdentityResolver`.
+@MainActor
 public struct MainDisplayPinner: DisplayPinner {
 
     /// What `decide` concludes: either a terminal outcome, or "go make this
@@ -68,21 +84,25 @@ public struct MainDisplayPinner: DisplayPinner {
         case reconfigure(CGDirectDisplayID)
     }
 
-    private let snapshotProvider: @Sendable () -> DisplaySnapshot
-    private let applyMain: @Sendable (_ targetID: CGDirectDisplayID, _ displays: [DisplayInfo]) -> Int32
+    private let snapshotProvider: @MainActor () -> DisplaySnapshot
+    private let applyMain: @MainActor (_ targetID: CGDirectDisplayID, _ displays: [DisplayInfo]) -> Int32
 
     /// Default initializer wires up real CoreGraphics. Tests inject fakes.
     public init(
-        snapshotProvider: @escaping @Sendable () -> DisplaySnapshot = MainDisplayPinner.liveSnapshot,
-        applyMain: @escaping @Sendable (_ targetID: CGDirectDisplayID, _ displays: [DisplayInfo]) -> Int32 = MainDisplayPinner.liveApplyMain
+        snapshotProvider: @escaping @MainActor () -> DisplaySnapshot = MainDisplayPinner.liveSnapshot,
+        applyMain: @escaping @MainActor (_ targetID: CGDirectDisplayID, _ displays: [DisplayInfo]) -> Int32 = MainDisplayPinner.liveApplyMain
     ) {
         self.snapshotProvider = snapshotProvider
         self.applyMain = applyMain
     }
 
-    public func pin(toUUID uuid: String?) -> PinOutcome {
+    public func pin(toDisplayID targetID: CGDirectDisplayID) -> PinOutcome {
         let snapshot = snapshotProvider()
-        switch Self.decide(snapshot: snapshot, targetUUID: uuid) {
+        guard snapshot.displays.contains(where: { $0.displayID == targetID }) else {
+            // The display vanished between resolution and application.
+            return .displayNotConnected
+        }
+        switch Self.decide(snapshot: snapshot, resolution: .resolved(targetID, repaired: nil)) {
         case .terminal(let outcome):
             Log.display.debug("Pin decision: \(String(describing: outcome), privacy: .public)")
             return outcome
@@ -99,24 +119,36 @@ public struct MainDisplayPinner: DisplayPinner {
 
     // MARK: - Pure decision logic (unit-tested)
 
-    static func decide(snapshot: DisplaySnapshot, targetUUID: String?) -> Decision {
-        guard let targetUUID else { return .terminal(.noPreference) }
+    /// Placement decision for an already-resolved preference. Outcome
+    /// precedence: no preference → single display → identity outcomes →
+    /// separate Spaces → already-on-target.
+    nonisolated static func decide(
+        snapshot: DisplaySnapshot,
+        resolution: PreferredDisplayResolution
+    ) -> Decision {
+        if case .none = resolution { return .terminal(.noPreference) }
         guard snapshot.displays.count > 1 else { return .terminal(.singleDisplay) }
-        guard let target = snapshot.displays.first(where: { $0.id == targetUUID }) else {
+        switch resolution {
+        case .none:
+            return .terminal(.noPreference)  // unreachable; kept exhaustive
+        case .notConnected:
             return .terminal(.displayNotConnected)
+        case .ambiguous:
+            return .terminal(.ambiguousIdentity)
+        case .resolved(let targetID, _):
+            if snapshot.separateSpacesEnabled {
+                return .terminal(.unsupportedSeparateSpaces)
+            }
+            if targetID == snapshot.mainDisplayID {
+                return .terminal(.alreadyOnTarget)
+            }
+            return .reconfigure(targetID)
         }
-        if snapshot.separateSpacesEnabled {
-            return .terminal(.unsupportedSeparateSpaces)
-        }
-        if target.displayID == snapshot.mainDisplayID {
-            return .terminal(.alreadyOnTarget)
-        }
-        return .reconfigure(target.displayID)
     }
 
     // MARK: - Live implementations
 
-    public static let liveSnapshot: @Sendable () -> DisplaySnapshot = {
+    public static let liveSnapshot: @MainActor () -> DisplaySnapshot = {
         DisplaySnapshot(
             displays: DisplayManager.activeDisplays(),
             mainDisplayID: CGMainDisplayID(),
@@ -153,7 +185,7 @@ public struct MainDisplayPinner: DisplayPinner {
     /// `com.apple.spaces spans-displays` == 1 means displays span one Space
     /// (separate Spaces OFF); absent or 0 means separate Spaces ON (the macOS
     /// default).
-    public static func readSeparateSpacesEnabled() -> Bool {
+    public nonisolated static func readSeparateSpacesEnabled() -> Bool {
         guard
             let spaces = UserDefaults(suiteName: "com.apple.spaces"),
             spaces.object(forKey: "spans-displays") != nil

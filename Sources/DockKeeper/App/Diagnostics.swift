@@ -9,12 +9,14 @@ import DockKeeperCore
 /// signed `.app`.
 enum Diagnostics {
 
+    @MainActor
     static func runIfRequested() {
         guard CommandLine.arguments.contains("--diagnostics") else { return }
         print(report())
         exit(EXIT_SUCCESS)
     }
 
+    @MainActor
     static func report() -> String {
         let bundle = Bundle.main
         let loginStatus: String

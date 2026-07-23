@@ -1,22 +1,36 @@
 import Foundation
 import CoreGraphics
 import ColorSync  // CGDisplayCreateUUIDFromDisplayID / CGDisplayGetDisplayIDFromUUID
+import AppKit     // NSScreen.localizedName (main-actor)
 
-/// Identifies and enumerates connected displays, keyed by stable UUID so a
-/// user's "preferred display" survives reboots and reconnection.
+/// Identifies and enumerates connected displays. The `id` is the display's
+/// UUID string when it has one, or a `"cg-<id>"` placeholder for UI identity
+/// only — placeholders are **never persisted**; preferences store a
+/// `DisplayFingerprint` (ADR-004).
 public struct DisplayInfo: Identifiable, Sendable, Hashable {
-    public let id: String          // Display UUID string.
+    public let id: String          // Display UUID string, or "cg-<id>" (UI-only).
     public let displayID: CGDirectDisplayID
     public let name: String
     public let isMain: Bool
     public let frame: CGRect
+    /// Full identity evidence for fingerprint matching; `nil` only in tests
+    /// that don't exercise identity.
+    public let fingerprint: DisplayFingerprint?
 
-    public init(id: String, displayID: CGDirectDisplayID, name: String, isMain: Bool, frame: CGRect) {
+    public init(
+        id: String,
+        displayID: CGDirectDisplayID,
+        name: String,
+        isMain: Bool,
+        frame: CGRect,
+        fingerprint: DisplayFingerprint? = nil
+    ) {
         self.id = id
         self.displayID = displayID
         self.name = name
         self.isMain = isMain
         self.frame = frame
+        self.fingerprint = fingerprint
     }
 }
 
@@ -39,7 +53,9 @@ public enum DisplayManager {
         return displayID != 0 ? displayID : nil
     }
 
-    /// All currently active displays.
+    /// All currently active displays. Main-actor because human-readable names
+    /// come from `NSScreen.localizedName` (TDD §7.1).
+    @MainActor
     public static func activeDisplays() -> [DisplayInfo] {
         var count: UInt32 = 0
         CGGetActiveDisplayList(0, nil, &count)
@@ -55,20 +71,44 @@ public enum DisplayManager {
                 displayID: id,
                 name: name(for: id),
                 isMain: id == mainID,
-                frame: CGDisplayBounds(id)
+                frame: CGDisplayBounds(id),
+                fingerprint: fingerprint(for: id)
             )
         }
     }
 
-    /// A human-readable name for a display, falling back to a generic label.
+    /// Capture every identity signal we have for a display (TDD §7.1).
+    @MainActor
+    public static func fingerprint(for displayID: CGDirectDisplayID) -> DisplayFingerprint {
+        DisplayFingerprint(
+            uuid: uuid(for: displayID),
+            vendorNumber: CGDisplayVendorNumber(displayID),
+            modelNumber: CGDisplayModelNumber(displayID),
+            serialNumber: CGDisplaySerialNumber(displayID),
+            localizedName: localizedName(for: displayID),
+            isBuiltin: CGDisplayIsBuiltin(displayID) != 0
+        )
+    }
+
+    /// The user-facing display name ("DELL U2720Q"), falling back to a generic
+    /// label when NSScreen has no entry for the display.
+    @MainActor
     public static func name(for displayID: CGDirectDisplayID) -> String {
+        if let localized = localizedName(for: displayID) {
+            return localized
+        }
         if CGDisplayIsBuiltin(displayID) != 0 {
             return "Built-in Display"
         }
-        if CGDisplayIsMain(displayID) != 0 {
-            return "Main Display"
-        }
         return "Display \(displayID)"
+    }
+
+    @MainActor
+    private static func localizedName(for displayID: CGDirectDisplayID) -> String? {
+        NSScreen.screens.first { screen in
+            (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+                .uint32Value == displayID
+        }?.localizedName
     }
 
     /// Whether the user's preferred display (if any) is currently connected.

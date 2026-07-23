@@ -14,6 +14,7 @@ public final class Settings: @unchecked Sendable {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.defaults.register(defaults: Self.registrationDomain())
+        migratePreferredDisplayIfNeeded()
     }
 
     private static func registrationDomain() -> [String: Any] { [
@@ -31,7 +32,8 @@ public final class Settings: @unchecked Sendable {
     enum Keys {
         static let enabled = "enabled"
         static let lockEdge = "lockEdge"
-        static let preferredDisplayUUID = "preferredDisplayUUID"
+        static let preferredDisplayUUID = "preferredDisplayUUID"          // legacy (pre-ADR-004); kept in sync for rollback until v1.1
+        static let preferredDisplayFingerprint = "preferredDisplayFingerprint"
         static let launchAtLogin = "launchAtLogin"
         static let showMenuBarIcon = "showMenuBarIcon"
         static let verboseLogging = "verboseLogging"
@@ -41,7 +43,7 @@ public final class Settings: @unchecked Sendable {
 
     /// The keys whose external (e.g. CLI) edits should refresh a running app —
     /// observed via KVO by `DockMonitor` (DK-FR-007-S3).
-    static let externallyObservedKeys = [Keys.enabled, Keys.lockEdge, Keys.preferredDisplayUUID]
+    static let externallyObservedKeys = [Keys.enabled, Keys.lockEdge, Keys.preferredDisplayFingerprint]
 
     /// Backing store handle for KVO observation by `DockMonitor`.
     var observableDefaults: UserDefaults { defaults }
@@ -70,11 +72,50 @@ public final class Settings: @unchecked Sendable {
         set { defaults.set(newValue.rawValue, forKey: Keys.lockEdge) }
     }
 
-    /// UUID string of the display the Dock should stay on. `nil` means "any /
-    /// don't pin to a specific display".
-    public var preferredDisplayUUID: String? {
-        get { defaults.string(forKey: Keys.preferredDisplayUUID) }
-        set { defaults.set(newValue, forKey: Keys.preferredDisplayUUID) }
+    /// The fingerprint of the display the Dock should stay on (ADR-004).
+    /// `nil` means "any / don't pin to a specific display". Set via
+    /// `setPreferredDisplay(fingerprint:)`.
+    public var preferredDisplayFingerprint: DisplayFingerprint? {
+        guard let data = defaults.data(forKey: Keys.preferredDisplayFingerprint) else { return nil }
+        return try? JSONDecoder().decode(DisplayFingerprint.self, from: data)
+    }
+
+    /// Store (or clear, with `nil`) the preferred display. The legacy UUID key
+    /// is mirrored so a rolled-back pre-fingerprint build still works
+    /// (implementation-plan M2 rollback note; drop with v1.1).
+    public func setPreferredDisplay(fingerprint: DisplayFingerprint?) {
+        guard let fingerprint else {
+            defaults.removeObject(forKey: Keys.preferredDisplayFingerprint)
+            defaults.removeObject(forKey: Keys.preferredDisplayUUID)
+            return
+        }
+        defaults.set(try? JSONEncoder().encode(fingerprint), forKey: Keys.preferredDisplayFingerprint)
+        defaults.set(fingerprint.uuid, forKey: Keys.preferredDisplayUUID)
+    }
+
+    /// Stale-preference repair (TDD §7.3): a fallback-evidence match rewrites
+    /// the stored fingerprint with fresh identifiers so it heals instead of
+    /// rotting.
+    public func repairPreferredDisplay(_ fresh: DisplayFingerprint) {
+        Log.display.info("Repairing stale preferred-display fingerprint")
+        setPreferredDisplay(fingerprint: fresh)
+    }
+
+    /// v0.1 stored a bare UUID string. Build a fingerprint from it once;
+    /// unstable `"cg-<id>"` placeholders are discarded outright (they must
+    /// never be persisted — TDD §7.1). The legacy key itself is kept in sync
+    /// for rollback.
+    private func migratePreferredDisplayIfNeeded() {
+        guard
+            defaults.data(forKey: Keys.preferredDisplayFingerprint) == nil,
+            let legacy = defaults.string(forKey: Keys.preferredDisplayUUID)
+        else { return }
+        if legacy.hasPrefix("cg-") {
+            Log.display.info("Discarding unstable legacy display preference")
+            defaults.removeObject(forKey: Keys.preferredDisplayUUID)
+            return
+        }
+        setPreferredDisplay(fingerprint: DisplayFingerprint(uuid: legacy))
     }
 
     // MARK: Advanced

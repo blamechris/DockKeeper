@@ -67,30 +67,37 @@ public final class RecoveryCoordinator {
         self.init(
             machine: machine,
             inputProvider: { includesPinning in
-                let snapshot = MainDisplayPinner.liveSnapshot()
-                let decision = MainDisplayPinner.decide(
-                    snapshot: snapshot,
-                    targetUUID: settings.preferredDisplayUUID
-                )
+                var pinDecision = ReconcileInput.PinDecision.terminal(.noPreference)
+                var displaysReady = true
+                if includesPinning {
+                    let snapshot = MainDisplayPinner.liveSnapshot()
+                    displaysReady = !snapshot.displays.isEmpty
+                    let resolution = DisplayIdentityResolver.resolve(
+                        stored: settings.preferredDisplayFingerprint,
+                        candidates: snapshot.identityCandidates
+                    )
+                    if case .resolved(_, let repaired?) = resolution {
+                        settings.repairPreferredDisplay(repaired)  // TDD §7.3
+                    }
+                    switch MainDisplayPinner.decide(snapshot: snapshot, resolution: resolution) {
+                    case .terminal(let outcome): pinDecision = .terminal(outcome)
+                    case .reconfigure(let id): pinDecision = .reconfigure(id)
+                    }
+                }
                 return ReconcileInput(
                     currentEdge: controller.currentOrientation(),
                     desiredEdge: settings.lockEdge,
                     primaryMechanismAvailable: !controller.isDegraded,
-                    displaysReady: !snapshot.displays.isEmpty,
+                    displaysReady: displaysReady,
                     includesPinning: includesPinning,
-                    pinDecision: {
-                        switch decision {
-                        case .terminal(let outcome): return .terminal(outcome)
-                        case .reconfigure(let id): return .reconfigure(id)
-                        }
-                    }()
+                    pinDecision: pinDecision
                 )
             },
             applyEdge: { controller.forceOrientation($0) },
-            applyPin: { _ in
-                // Re-decides on a fresh snapshot inside the pinner; returns the
-                // typed outcome for the UI.
-                MainDisplayPinner().pin(toUUID: settings.preferredDisplayUUID)
+            applyPin: { id in
+                // Placement guards re-checked on a fresh snapshot inside the
+                // pinner; returns the typed outcome for the UI.
+                MainDisplayPinner().pin(toDisplayID: id)
             }
         )
     }
@@ -155,6 +162,13 @@ public final class RecoveryCoordinator {
                 machine.notePinApplied(now: now())
                 onPinOutcome?(outcome)
             }
+        }
+
+        // Terminal pin decisions (separate Spaces, ambiguous identity, …)
+        // never produce an effect, but their explanation must still reach the
+        // UI; a clean `.noPreference`/`.alreadyOnTarget` clears stale notes.
+        if includesPinning, case .terminal(let outcome) = input.pinDecision {
+            onPinOutcome?(outcome)
         }
 
         notifyState()

@@ -53,14 +53,13 @@ final class AppState: ObservableObject {
     /// User-facing note about the login-item state (approval needed, etc.).
     @Published private(set) var loginItemMessage: String?
 
-    /// UUID of the display the Dock should stay on; `nil` = no preference.
-    @Published var preferredDisplayUUID: String? {
-        didSet {
-            guard !isSyncingFromExternal else { return }
-            settings.preferredDisplayUUID = preferredDisplayUUID
-            if isEnabled { coordinator.requestReconcile() }
-        }
-    }
+    /// Whether a preferred display is stored at all (drives the "Any" row).
+    @Published private(set) var hasPreferredDisplay = false
+
+    /// `DisplayInfo.id` of the connected display the stored fingerprint
+    /// resolves to (drives the menu checkmark); `nil` when no preference is
+    /// stored or the display isn't connected / is ambiguous.
+    @Published private(set) var preferredDisplaySelectionID: String?
 
     @Published private(set) var displays: [DisplayInfo] = []
 
@@ -82,7 +81,6 @@ final class AppState: ObservableObject {
         )
         self.isEnabled = settings.isEnabled
         self.lockEdge = settings.lockEdge
-        self.preferredDisplayUUID = settings.preferredDisplayUUID
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
         self.loginItemMessage = LoginItemManager.statusMessage
@@ -109,6 +107,7 @@ final class AppState: ObservableObject {
 
         // Property observers don't fire from within init, so start explicitly.
         Log.verbose = settings.verboseLogging
+        refreshPreferredSelection()
         applyEnabledState()
     }
 
@@ -118,12 +117,37 @@ final class AppState: ObservableObject {
     }
 
     /// Choose (or clear, with `nil`) the preferred display from the menu.
-    func setPreferredDisplay(_ uuid: String?) {
-        preferredDisplayUUID = uuid
+    /// Persists the full fingerprint (ADR-004), never a bare pseudo-UUID.
+    func setPreferredDisplay(_ display: DisplayInfo?) {
+        if let display {
+            settings.setPreferredDisplay(fingerprint: DisplayManager.fingerprint(for: display.displayID))
+        } else {
+            settings.setPreferredDisplay(fingerprint: nil)
+        }
+        refreshPreferredSelection()
+        if isEnabled { coordinator.requestReconcile() }
     }
 
     func refreshDisplays() {
         displays = DisplayManager.activeDisplays()
+        refreshPreferredSelection()
+    }
+
+    /// Re-resolve the stored fingerprint against the connected displays so the
+    /// menu checkmark tracks identity, not a raw string comparison.
+    private func refreshPreferredSelection() {
+        let stored = settings.preferredDisplayFingerprint
+        hasPreferredDisplay = stored != nil
+        let candidates = displays.compactMap { display in
+            display.fingerprint.map {
+                FingerprintMatcher.Candidate(displayID: display.displayID, fingerprint: $0)
+            }
+        }
+        if case .resolved(let displayID, _) = DisplayIdentityResolver.resolve(stored: stored, candidates: candidates) {
+            preferredDisplaySelectionID = displays.first { $0.displayID == displayID }?.id
+        } else {
+            preferredDisplaySelectionID = nil
+        }
     }
 
     /// Open System Settings so the user can approve the login item.
@@ -166,9 +190,7 @@ final class AppState: ObservableObject {
         if lockEdge != settings.lockEdge {
             lockEdge = settings.lockEdge
         }
-        if preferredDisplayUUID != settings.preferredDisplayUUID {
-            preferredDisplayUUID = settings.preferredDisplayUUID
-        }
+        refreshPreferredSelection()
         if isEnabled != settings.isEnabled {
             isEnabled = settings.isEnabled
             // The didSet was suppressed; enact the enable/disable transition.
