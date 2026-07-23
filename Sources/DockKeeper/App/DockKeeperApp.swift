@@ -9,6 +9,11 @@ struct DockKeeperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = AppState()
 
+    init() {
+        // Handle one-shot CLI flags before any UI or engine starts.
+        Diagnostics.runIfRequested()
+    }
+
     var body: some Scene {
         MenuBarExtra("DockKeeper", systemImage: state.isEnabled ? "dock.rectangle" : "dock.rectangle") {
             MenuBarContent()

@@ -55,6 +55,28 @@ swift run dockkeeper-cli lock left
 swift test
 ```
 
+### Build the app bundle
+
+SwiftPM produces a bare executable; the bundle script wraps it into a proper
+`DockKeeper.app` (with `Info.plist` + entitlements) and ad-hoc code-signs it:
+
+```sh
+# Build dist/DockKeeper.app
+Scripts/build-app.sh            # release; use "debug" for a faster loop
+
+# Build and launch it
+Scripts/run-app.sh
+
+# One-shot status report (handy for bug reports)
+dist/DockKeeper.app/Contents/MacOS/DockKeeper --diagnostics
+```
+
+> **Launch at Login note:** macOS registers login items through Background Task
+> Management, which requires the app to live in **`/Applications`** with a full
+> signature. From a dev build directory (or with an ad-hoc signature) the status
+> reads `notFound` and the app tells you to move it to Applications. Everything
+> else — menu bar, edge lock, preferred display — works from anywhere.
+
 ## Architecture
 
 ```

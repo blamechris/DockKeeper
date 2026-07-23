@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      DockKeeper is intentionally NOT sandboxed. It controls the Dock via the
+      private CoreDock API and reconfigures display arrangement via
+      CoreGraphics — both of which the App Sandbox forbids. A menu-bar system
+      utility of this kind is distributed unsandboxed (Developer ID +
+      notarization), not via the Mac App Store.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+</dict>
+</plist>

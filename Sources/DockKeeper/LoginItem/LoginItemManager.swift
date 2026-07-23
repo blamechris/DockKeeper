@@ -52,7 +52,7 @@ enum LoginItemManager {
         case .requiresApproval:
             return "Approve DockKeeper in System Settings \u{203A} General \u{203A} Login Items."
         case .notFound:
-            return "Launch at Login needs the packaged app (build the .app, not \u{201C}swift run\u{201D})."
+            return "Move DockKeeper to your Applications folder to enable Launch at Login."
         case .enabled, .notRegistered:
             return nil
         @unknown default:
