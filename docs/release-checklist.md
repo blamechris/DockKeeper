@@ -33,7 +33,7 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 
 - [ ] Clean release build: `swift build -c release` for **both** products (`DockKeeper`, `dockkeeper-cli`).
 - [ ] Assemble bundle: `VERSION=x.y.z SIGNING_IDENTITY="Developer ID Application: …" Scripts/build-app.sh release` (hardened runtime applied automatically with a real identity).
-- [ ] ⚙️ Developer ID Application certificate present in the keychain (owner one-time setup; Apple Developer account).
+- [x] Developer ID Application certificate present ✅ (2026-07-23 — "Christopher Pishaki", team `PG8VP4PTGV`, already in the keychain from the owner's other apps; signed build verified: hardened-runtime flag set, Designated Requirement satisfied, signed DMG cut).
 - [ ] App Intents metadata (`Metadata.appintents`) packaged so Shortcuts/Siri list the intents — `appintentsmetadataprocessor` is present in the toolchain (CONFIRMED) but plain `swift build` emits no const-values inputs; identified path: drive the release build through `xcodebuild` against Package.swift, which runs the extractor. Until then the `dockkeeper://` URL scheme is the working automation path (DK-FR-010 note).
 - [ ] Entitlements reviewed — no sandbox entitlement (would break `killall`/`dlsym` — ADR-002); nothing unexpected added.
 - [ ] `codesign --verify --strict --verbose=2` passes on app and CLI.
@@ -41,7 +41,7 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 
 ## 4. Notarize & staple
 
-- [ ] ⚙️ `notarytool` credentials configured once: `xcrun notarytool store-credentials dockkeeper-notary --apple-id <id> --team-id <team>` (owner).
+- [ ] ⚙️ `notarytool` credentials configured once (the **last** owner-gated setup step): `xcrun notarytool store-credentials dockkeeper-notary --apple-id <developer-account-apple-id> --team-id PG8VP4PTGV` — prompts for an app-specific password (generate at account.apple.com ▸ Sign-In and Security).
 - [ ] `Scripts/notarize.sh dist/DockKeeper-<version>.dmg` — submits, waits, staples, validates. First run validates the TDD's INFERRED "no entitlement conflicts" claim — record the result in the decision log.
 - [ ] Gatekeeper check on a clean machine/VM: `spctl --assess --type execute` passes; app launches from `~/Downloads` without warnings beyond the standard first-open dialog.
 
