@@ -425,20 +425,23 @@ Kickoff principle 19: no continuous polling unless events are shown insufficient
 
 ## 10. Permissions
 
-**v1 requires no privacy-gated permission at all.** This is a meaningful improvement over the kickoff package's assumption that Accessibility permission was likely.
+**The default configuration requires no privacy-gated permission at all.** This is a meaningful improvement over the kickoff package's assumption that Accessibility permission was likely. Exactly one **optional, opt-in** feature touches a TCC permission — window restore (ADR-010) — and only when the user turns it on.
 
 | Mechanism | Permission | Status |
 |---|---|---|
 | `CoreDock` get/set via `dlsym` | None | CONFIRMED on-device (works with no Accessibility grant) |
 | `defaults` read/write `com.apple.dock` + `killall Dock` | None (outside sandbox) | CONFIRMED (standard Unix; same-user signal) |
 | `CGGetActiveDisplayList` / UUIDs / `CGDisplayConfiguration` | None | CONFIRMED (public CG API; no TCC prompt) |
+| `CGWindowListCopyWindowInfo` (read window geometry for restore) | None | CONFIRMED (public CG API; reading is permission-free) |
 | Workspace/display notifications | None | CONFIRMED |
 | `SMAppService` login item | User approval in System Settings (not a TCC permission) | CONFIRMED; `.requiresApproval` is detected and the app deep-links the user to the Login Items pane with an explanation (✅ v0.1) |
+| Accessibility (AX) — **opt-in window restore only** (ADR-010) | Accessibility, requested only if the user enables "Keep windows in place when pinning" | CONFIRMED required to *move* another app's window (`AXUIElementSetAttributeValue`/`kAXPositionAttribute`); off by default. Contextual explanation shown before the one prompt; revocation/denial = silent no-op + a "waiting for permission" caption with a deep link to the Accessibility pane. The preserver never prompts — the UI owns that (INFERRED coordinate-system assumption pending hardware validation) |
 
 Consequences:
 
-- No onboarding permission flow, no denied/revoked states, no `PermissionManager` — Milestone 5 of the kickoff plan collapses into "Login Items approval UX," which is already built.
-- The unused `Log.accessibility` category is kept for the future follow-window feature, which *would* require Accessibility (`AXUIElement` for focused-window geometry). If that ships, the kickoff's full permission model (contextual explanation before prompting, denial UX, revocation detection) applies, and `Awaiting Permission` returns to the state machine. Deferred by design.
+- The default remains no-onboarding, no-`PermissionManager` — the zero-permission story is intact for every user who doesn't opt in.
+- Window restore realizes the kickoff's full permission model *feature-scoped*: contextual explanation before prompting, one prompt on enable, denial/revocation handled as a graceful no-op with a caption note and a deep link — no `Awaiting Permission` app state, because the feature degrades in place rather than blocking the app.
+- The `Log.accessibility` category (previously reserved) is now used by `WindowLayoutPreserver` — count-only, no window titles or app names (§12). The still-future follow-window feature would extend, not introduce, this permission posture.
 
 ---
 
@@ -561,7 +564,7 @@ Ordered by risk to v1:
 8. ~~**Menu-bar icon design**~~ → **Resolved 2026-07-23**: `RecoveryState.menuSymbolName` — `rectangle.dashed` disabled, `exclamationmark.triangle` degraded/error, `pause.rectangle` reserved, `dock.rectangle` otherwise.
 9. ~~**`autoRecover` vs `enabled`**: two overlapping switches?~~ → **Resolved 2026-07-22 (ADR-007): `enabled` is the single user-facing switch; `autoRecover` is retired** (removed with M4).
 10. **Name/trademark check** for "DockKeeper" before public release. Competitor family now identified as **DockLock (Lite/Plus/Pro)** — proximity makes the review substantive, not pro forma (R-010).
-11. **Can window positions be preserved across a pin?** The main-display re-base moves the coordinate space under windows, so some shift displays (owner-observed 2026-07-23; identical to a System Settings primary change). Reading geometry is public (`CGWindowList`); *restoring* other apps' windows needs Accessibility → candidate **opt-in** comfort feature, own ADR, post-v1. UNKNOWN: edge cases (fullscreen, minimized, multiple Spaces per display).
+11. ~~**Can window positions be preserved across a pin?**~~ → **Resolved 2026-07-23 (ADR-010): yes, as an opt-in feature.** `preserveWindowLayout` (default off) + `WindowLayoutPreserver` snapshot geometry via `CGWindowList` (permission-free) and restore each window on its original display via Accessibility — the product's first, feature-scoped TCC permission, requested only if the user opts in and no-op without it (§10). Pure decision math (assignment/delta/plan) unit-tested; the AX write path's coordinate-system assumption stays **INFERRED** pending hardware validation. Still UNKNOWN: edge cases (fullscreen, minimized, multiple Spaces per display).
 
 ---
 
