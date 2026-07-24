@@ -34,4 +34,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }
+
+    /// Handle `dockkeeper://` automation URLs (DK-FR-010). Registered via
+    /// `CFBundleURLTypes`; macOS routes matching URLs here once the app runs.
+    /// Parsing is pure (`ControlCommand.parse`) and execution funnels through
+    /// the shared `AppState`. Privacy: query values could be anything, so the
+    /// debug log records only the host and a validity flag — never the query.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let command = ControlCommand.parse(url: url) else {
+                Log.app.debug("dockkeeper URL rejected (host: \(url.host ?? "none", privacy: .public), valid: false)")
+                continue
+            }
+            Log.app.debug("dockkeeper URL accepted (host: \(url.host ?? "none", privacy: .public), valid: true)")
+            AppState.shared?.perform(command)
+        }
+    }
 }

@@ -124,6 +124,20 @@ The cheapest parity win ([parity assessment](parity-assessment.md) recommended o
 
 ---
 
+## M11 — Apple Shortcuts + URL-scheme automation (parity gap G6, DK-FR-010, targets v1.1) ✅ code complete (2026-07-23)
+
+Recommended order #2 ([parity assessment](parity-assessment.md)): expose the existing controls to automation over **public APIs only, no new permission, no new engine mechanism**. **No ADR** — public surfaces (App Intents, `CFBundleURLTypes`, a stock `NSApplicationDelegate` URL method), no architectural deviation; the design note is this section. Everything routes through one pure command layer and the existing enable/lock/pause/resume funnel.
+
+- ✅ `ControlCommand` (pure enum, **`DockKeeperCore`**) — `.lock(edge)` / `.unlock` / `.pause(TimeInterval?)` / `.resume`, plus a total `parse(url:)` for the `dockkeeper://` scheme (edge case-insensitive, user-selectable only, `minutes` positive & capped at 24h; unknown scheme/host/params → `nil`). Placed in Core (not the app target) so the test target, which links only the core library, can import it — the side-effecting funnel stays app-side.
+- ✅ `AppState.perform(_:)` (app target) — the single funnel both the URL handler and the intents use; `AppState.shared` (a `@MainActor` weak reference, set on init) reaches the one live instance. `lock` enables + sets the edge (CLI parity); `unlock` disables.
+- ✅ `dockkeeper://` URL scheme — `CFBundleURLTypes` in [Info.plist](../Resources/Info.plist) (scheme `dockkeeper`, role Editor, name `com.dockkeeper.app.url`; ships via the existing `build-app.sh` copy), handled in `AppDelegate.application(_:open:)`. Privacy: invalid URLs log host + a validity flag only — never query values.
+- ✅ App Intents ([DockKeeperIntents.swift](../Sources/DockKeeper/App/DockKeeperIntents.swift)) — `Lock`/`Unlock`/`Pause`/`Resume` + `DockKeeperStatusIntent` (returns a `StatusSummary` shared with the `dockkeeper status` CLI so the two cannot drift) + an `AppShortcutsProvider` with Siri phrases. Mutating intents set `openAppWhenRun`; status reads the shared engine directly (`StatusSummary.live()`), so it works without the app running.
+- ✅ `swift build` clean under Swift 6 strict concurrency; 106 tests green (added `ControlCommandParseTests` + `StatusSummaryTests`).
+
+**Acceptance met (unit level):** the parse table is exhaustively green and `StatusSummary` parity is asserted. **Honest compromises (INFERRED, not executed on-device — fold verification into M6):** (1) App Intents metadata (`Metadata.appintents`) is normally an Xcode build phase; the `swift build` + `build-app.sh` path does not emit it, so Shortcuts/Siri **discovery** is UNKNOWN until packaging adds the extraction step — the URL scheme is the fully-working path meanwhile. (2) For mutating intents, accessory-app launch/`perform` ordering under `openAppWhenRun` is unverified; a not-yet-live `AppState` is a safe no-op. Neither fights the accessory model — both are documented rather than worked around ([DK-FR-010](behavior-specification.md#dk-fr-010-apple-shortcuts--url-scheme-automation) Testability). Makes **G7** (Raycast) a thin downstream deliverable over this surface.
+
+---
+
 ## Cross-cutting debt (fold into the touching milestone)
 
 From TDD A.4, tracked here so it isn't lost: ~~observer-removal fix + dead `DistributedNotificationCenter`~~ ✅ · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · ~~external-defaults observation~~ ✅ · `Log.verbose` static folded into diagnostics rework (M1) · ~~`autoRecover` removal per ADR-007~~ ✅ (all ✅ 2026-07-22 with M3/M4).

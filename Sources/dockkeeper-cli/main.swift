@@ -25,11 +25,15 @@ func printUsage() {
 }
 
 func runStatus() {
-    let current = controller.currentOrientation()?.displayName ?? "unknown"
-    print("Enabled:    \(settings.isEnabled ? "yes" : "no")")
-    print("Lock edge:  \(settings.lockEdge.displayName)")
-    print("Dock is on: \(current)")
-    print("CoreDock:   \(CoreDock.isAvailable ? "available" : "unavailable (using defaults fallback)")")
+    // Shared with the `DockKeeperStatusIntent` so the two cannot drift.
+    let summary = StatusSummary(
+        isEnabled: settings.isEnabled,
+        lockEdge: settings.lockEdge,
+        currentEdge: controller.currentOrientation(),
+        mechanism: controller.activeMechanismName,
+        coreDockAvailable: CoreDock.isAvailable
+    )
+    print(summary.cliText)
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
