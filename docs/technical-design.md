@@ -561,6 +561,7 @@ Ordered by risk to v1:
 8. ~~**Menu-bar icon design**~~ → **Resolved 2026-07-23**: `RecoveryState.menuSymbolName` — `rectangle.dashed` disabled, `exclamationmark.triangle` degraded/error, `pause.rectangle` reserved, `dock.rectangle` otherwise.
 9. ~~**`autoRecover` vs `enabled`**: two overlapping switches?~~ → **Resolved 2026-07-22 (ADR-007): `enabled` is the single user-facing switch; `autoRecover` is retired** (removed with M4).
 10. **Name/trademark check** for "DockKeeper" before public release. Competitor family now identified as **DockLock (Lite/Plus/Pro)** — proximity makes the review substantive, not pro forma (R-010).
+11. **Can window positions be preserved across a pin?** The main-display re-base moves the coordinate space under windows, so some shift displays (owner-observed 2026-07-23; identical to a System Settings primary change). Reading geometry is public (`CGWindowList`); *restoring* other apps' windows needs Accessibility → candidate **opt-in** comfort feature, own ADR, post-v1. UNKNOWN: edge cases (fullscreen, minimized, multiple Spaces per display).
 
 ---
 

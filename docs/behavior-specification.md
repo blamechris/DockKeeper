@@ -138,7 +138,7 @@ Then the pass is a no-op with a typed outcome (alreadyOnTarget / singleDisplay)
 
 **Failure behavior.** A failed `CGDisplayConfiguration` transaction is cancelled cleanly, reported as a typed `.failed` outcome with user-facing copy (CONFIRMED — implemented); the cooldown budget (`DK-FR-003`-S4) prevents retry storms. Ambiguous identity (two indistinguishable candidates) never guesses — the user is asked to re-pick (implemented 2026-07-23, `ambiguousIdentity` outcome).
 
-**User-visible behavior.** A pin visibly re-arranges displays (menu bar moves) — inherent, not a defect; honest copy explains "on macOS, the Dock lives on your main display."
+**User-visible behavior.** A pin visibly re-arranges displays — inherent, not a defect; honest copy explains "on macOS, the Dock lives on your main display." Two documented consequences of the coordinate re-base (owner-observed 2026-07-23): in Spaces-off mode the menu bar moves with it; in any mode, **windows whose coordinates land on the re-based displays can shift to the other screen** (identical to changing the primary display in System Settings). Pins are rare events, so the shuffle is per-topology-change, not ongoing. An opt-in "keep windows in place" restore (needs Accessibility) is a post-v1 candidate.
 
 **Testability.** `MainDisplayPinner.decide` is pure; all six decision branches covered today (CONFIRMED — `DisplayPinnerTests`). Needed: echo suppression, re-pin-on-return, fingerprint matching (see test strategy).
 
