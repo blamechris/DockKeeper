@@ -90,7 +90,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 **Rationale.** There is no API — public or private within accepted risk — to place the Dock on a display directly; relocating the main display is the only public route. CONFIRMED (spike).
 
-**Preconditions.** Enabled; a preferred display is stored (fingerprint per ADR-004 — implemented 2026-07-23, with write-once migration from the v0.1 bare UUID); at least two displays connected; "Displays have separate Spaces" is OFF.
+**Preconditions.** Enabled; a preferred display is stored (fingerprint per ADR-004 — implemented 2026-07-23, with write-once migration from the v0.1 bare UUID); at least two displays connected; "Displays have separate Spaces" is OFF **or** the lock edge is left/right (ADR-009 — left/right Docks home to the main display even in separate-Spaces mode, hardware-confirmed).
 
 **Trigger.** Reconcile pass (event, poll, enable, or the user picking a display).
 
@@ -106,11 +106,19 @@ And the outcome is surfaced in the menu
 [Mechanism CONFIRMED available; end-to-end behavior on real multi-monitor
  hardware INFERRED — R-002, the top open risk]
 
-S2 — Separate Spaces ON (macOS default)
-Given "Displays have separate Spaces" is ON
+S2 — Separate Spaces ON with a BOTTOM Dock (macOS default setting)
+Given "Displays have separate Spaces" is ON and the lock edge is bottom
 When a pin would otherwise apply
-Then DockKeeper declines (unsupportedSeparateSpaces), explains why in the UI,
-And edge locking continues to work                          [Decision 2A]
+Then DockKeeper declines (unsupportedSeparateSpaces) and explains the two
+    remedies (left/right edge, or turn the setting off)
+And edge locking continues to work         [Decision 2A, narrowed by ADR-009]
+
+S2b — Separate Spaces ON with a LEFT/RIGHT Dock
+Given "Displays have separate Spaces" is ON and the lock edge is left or right
+When a reconcile pass runs
+Then the pin applies exactly as in S1 (left/right Docks home to the main
+    display in this mode) — and no menu bar moves, since every display
+    keeps its own                [ADR-009 — CONFIRMED on hardware 2026-07-23]
 
 S3 — Preferred display absent
 Given the preferred display is not connected

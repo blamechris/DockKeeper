@@ -141,4 +141,20 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 **Evidence.** Investigation P-002 (CONFIRMED: competitor requires the mode); detection probe CONFIRMED; symbol sweep CONFIRMED-absent (spike doc).
 
-**Date / Status.** 2026-07-23 · **Accepted** (owner-directed; mechanism selection pending → ADR-009).
+**Date / Status.** 2026-07-23 · **Accepted** (owner-directed; mechanism for left/right resolved same day → ADR-009; bottom-mode mechanism still open).
+
+---
+
+## ADR-009: Separate-Spaces pinning ships for left/right Docks via main-display relocation; bottom stays declined
+
+**Context.** ADR-008's spike produced a decisive on-rig result the same day ([spike](spikes/separate-spaces-pinning.md)): with "Displays have separate Spaces" ON, macOS treats Dock edges **asymmetrically** — a **bottom** Dock is per-display and pointer-summoned (and the summon demonstrably fails on shared edges, e.g. stacked portrait-above arrangements), while a **left/right** Dock homes to the **main display** and moved with it in both directions when we relocated main (CONFIRMED, 2-display rig). The pointer cannot summon a left/right Dock to another display (owner-observed), so there is no drift source to fight.
+
+**Options.** Keep declining all pinning in this mode (Decision 2A as written) · ship left/right pinning now via the existing mechanism and keep declining bottom with guidance · build a pointer/AX summon mechanism for bottom first.
+
+**Decision.** With separate Spaces ON: pin via `MainDisplayPinner` **when the lock edge is left or right**; decline **only bottom**, with copy that offers both remedies ("move the Dock to the left/right edge, or turn the setting off"). Shipped 2026-07-23 (`decide(snapshot:resolution:dockEdge:)` gate + tests).
+
+**Consequences.** The macOS *default* mode is now covered for left/right users with zero new mechanisms, zero permissions — and in this mode the pin doesn't even move menu bars (each display keeps its own), making it *less* intrusive than Spaces-off pinning. Decision 2A is narrowed, not violated: we still never fight the OS — the OS itself homes left/right Docks to main. The uncovered cell shrinks to bottom-Dock-with-separate-Spaces (DockLock's niche); its candidates (pointer summon, AX) stay queued in the spike at reduced priority, and the honest decline remains its behavior until a mechanism meets the reliability bar.
+
+**Evidence.** CONFIRMED on-rig 2026-07-23: left Dock followed main both directions; bottom Dock did not follow main; left-edge and shared-bottom-edge pointer summons failed; leftmost-arrangement hypothesis falsified (spike results table).
+
+**Date / Status.** 2026-07-23 · **Accepted and shipped.**

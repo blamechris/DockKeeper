@@ -79,7 +79,7 @@ public final class RecoveryCoordinator {
                     if case .resolved(_, let repaired?) = resolution {
                         settings.repairPreferredDisplay(repaired)  // TDD §7.3
                     }
-                    switch MainDisplayPinner.decide(snapshot: snapshot, resolution: resolution) {
+                    switch MainDisplayPinner.decide(snapshot: snapshot, resolution: resolution, dockEdge: settings.lockEdge) {
                     case .terminal(let outcome): pinDecision = .terminal(outcome)
                     case .reconfigure(let id): pinDecision = .reconfigure(id)
                     }
@@ -97,7 +97,7 @@ public final class RecoveryCoordinator {
             applyPin: { id in
                 // Placement guards re-checked on a fresh snapshot inside the
                 // pinner; returns the typed outcome for the UI.
-                MainDisplayPinner().pin(toDisplayID: id)
+                MainDisplayPinner().pin(toDisplayID: id, dockEdge: settings.lockEdge)
             }
         )
     }

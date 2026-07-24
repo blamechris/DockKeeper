@@ -1,6 +1,17 @@
 # Spike: Pinning the Dock in separate-Spaces mode (parity workstream)
 
-**Date started:** 2026-07-23 · **Status:** In progress · **Drives:** ADR-008, implementation-plan M8
+**Date started:** 2026-07-23 · **Status:** Core question RESOLVED same day (→ ADR-009 shipped); bottom-mode track remains open · **Drives:** ADR-008/009, implementation-plan M8
+
+## Resolution (2026-07-23, hardware-confirmed)
+
+| Hypothesis | Result |
+|---|---|
+| H1: pointer summon at the Dell's free **left** edge migrates a left Dock | ✗ no migration (owner-observed) |
+| H2: a left Dock lives on the **leftmost** display of the arrangement | ✗ falsified (Dell moved leftmost; Dock stayed) |
+| H3: a left Dock follows the **main** display | **✓ CONFIRMED both directions** (main → Dell: Dock followed; restore: followed back) |
+| H4: a bottom Dock also follows main | ✗ CONFIRMED it does **not** (stayed on laptop when Dell became main) |
+
+**Conclusion:** separate-Spaces mode is edge-asymmetric. Left/right Docks home to the main display → the shipped `MainDisplayPinner` pins them in this mode with no new API and no permissions (and no menu-bar cost — per-display menu bars). Bottom Docks are per-display pointer toys → still declined honestly (ADR-009). The only remaining research track is a bottom-mode summon mechanism (candidates below, deprioritized).
 
 ## Question
 

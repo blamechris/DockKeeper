@@ -63,7 +63,7 @@ Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5),
 | DK-FR-001 S1–S3 (restore, idempotence, fallback) | ✅ `DockControllerTests` (fake adapters) + `RecoveryMachineTests` (Degraded transition) | — |
 | DK-FR-001 S4 (no top edge) | ✅ `userSelectableExcludesTop`, raw-value mapping | — |
 | DK-FR-002 S1, S5 (pin decisions) | ✅ `DisplayPinnerTests` all six branches | Arrangement-preserving origin math; hardware verification (matrix) |
-| DK-FR-002 S2 (separate Spaces declined) | ✅ `unsupportedSeparateSpaces` | Manual: UI copy shown |
+| DK-FR-002 S2/S2b (separate-Spaces gate: bottom declines, left/right pins — ADR-009) | ✅ `unsupportedSeparateSpacesBottom` + `separateSpacesLeftRightPins` | Manual: UI copy shown; matrix cells for left/right-in-mode under wake/replug |
 | DK-FR-002 S3–S4 (absent / re-pin on return) | ✅ `displayNotConnected` (decision only) | Event-sequence test: reconnect → re-pin; `PreferredDisplayMissing` state transitions |
 | DK-FR-003 S1 (wake ladder) | ✅ `RecoveryTests` (machine + coordinator, simulated clock) | — |
 | DK-FR-003 S2 (burst → single attempt) | ✅ `duplicateEventsProduceSingleAttempt` | — |

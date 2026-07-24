@@ -46,7 +46,11 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 | 2 displays: enumeration, UUIDs, fingerprints | ✅ CONFIRMED | 1 |
 | Portrait/rotated external geometry in snapshots | ✅ CONFIRMED (bounds account for rotation) | 1 |
 | Pin transaction + arrangement preservation + restore | ✅ CONFIRMED | 1 |
-| **Dock follows main display (Spaces OFF)** | ⏳ pending Spaces-OFF logout | — |
+| **Left/right Dock follows main display (Spaces ON)** | ✅ CONFIRMED both directions — basis of ADR-009 | 1 |
+| **Bottom Dock does NOT follow main (Spaces ON)** | ✅ CONFIRMED (stayed put through a main swap) | 1 |
+| Pointer summon: shared bottom edge (stacked) / free left edge | ✅ CONFIRMED fails for both (owner-observed) | 1 |
+| Leftmost-arrangement hypothesis for left Dock | ✅ falsified | 1 |
+| **Dock follows main display (Spaces OFF)** | ⏳ pending Spaces-OFF logout (strongly corroborated by the Spaces-ON left-Dock result) | — |
 | Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
 | Edge lock survives display events (2-display, app running) | ⏳ | — |
 | Unplug / replug drift presentation | ⏳ | — |

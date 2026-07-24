@@ -49,8 +49,10 @@ public enum PinOutcome: Sendable, Equatable {
             return "Two connected displays look identical, so DockKeeper won't "
                 + "guess. Please pick your preferred display again."
         case .unsupportedSeparateSpaces:
-            return "Pinning needs \u{201C}Displays have separate Spaces\u{201D} turned off "
-                + "(System Settings \u{203A} Desktop & Dock). Edge locking still works."
+            return "A bottom Dock can't be pinned while \u{201C}Displays have separate "
+                + "Spaces\u{201D} is on. Move the Dock to the left or right edge to pin "
+                + "in this mode, or turn the setting off (System Settings \u{203A} "
+                + "Desktop & Dock). Edge locking still works."
         case .failed:
             return "Couldn't move the Dock to your preferred display."
         }
@@ -63,8 +65,9 @@ public enum PinOutcome: Sendable, Equatable {
 /// Main-actor because live snapshots read `NSScreen`.
 @MainActor
 public protocol DisplayPinner {
-    /// Attempt to pin to a concrete, already-resolved display.
-    func pin(toDisplayID targetID: CGDirectDisplayID) -> PinOutcome
+    /// Attempt to pin to a concrete, already-resolved display. `dockEdge` is
+    /// the user's locked edge — it gates separate-Spaces support (ADR-009).
+    func pin(toDisplayID targetID: CGDirectDisplayID, dockEdge: DockOrientation) -> PinOutcome
 }
 
 /// Pins the Dock by making the preferred display the **main** display (moving
@@ -96,13 +99,13 @@ public struct MainDisplayPinner: DisplayPinner {
         self.applyMain = applyMain
     }
 
-    public func pin(toDisplayID targetID: CGDirectDisplayID) -> PinOutcome {
+    public func pin(toDisplayID targetID: CGDirectDisplayID, dockEdge: DockOrientation) -> PinOutcome {
         let snapshot = snapshotProvider()
         guard snapshot.displays.contains(where: { $0.displayID == targetID }) else {
             // The display vanished between resolution and application.
             return .displayNotConnected
         }
-        switch Self.decide(snapshot: snapshot, resolution: .resolved(targetID, repaired: nil)) {
+        switch Self.decide(snapshot: snapshot, resolution: .resolved(targetID, repaired: nil), dockEdge: dockEdge) {
         case .terminal(let outcome):
             Log.display.debug("Pin decision: \(String(describing: outcome), privacy: .public)")
             return outcome
@@ -121,10 +124,18 @@ public struct MainDisplayPinner: DisplayPinner {
 
     /// Placement decision for an already-resolved preference. Outcome
     /// precedence: no preference → single display → identity outcomes →
-    /// separate Spaces → already-on-target.
+    /// separate-Spaces gate → already-on-target.
+    ///
+    /// Separate-Spaces gate (ADR-009, hardware-confirmed 2026-07-23): with the
+    /// setting ON, a **bottom** Dock is per-display/pointer-summoned and does
+    /// not follow the main display — declined honestly. A **left/right** Dock
+    /// homes to the main display even in that mode, so main-display
+    /// relocation pins it exactly as in Spaces-off mode (and without the
+    /// menu-bar caveat: every display keeps its own menu bar).
     nonisolated static func decide(
         snapshot: DisplaySnapshot,
-        resolution: PreferredDisplayResolution
+        resolution: PreferredDisplayResolution,
+        dockEdge: DockOrientation
     ) -> Decision {
         if case .none = resolution { return .terminal(.noPreference) }
         guard snapshot.displays.count > 1 else { return .terminal(.singleDisplay) }
@@ -136,7 +147,7 @@ public struct MainDisplayPinner: DisplayPinner {
         case .ambiguous:
             return .terminal(.ambiguousIdentity)
         case .resolved(let targetID, _):
-            if snapshot.separateSpacesEnabled {
+            if snapshot.separateSpacesEnabled && dockEdge == .bottom {
                 return .terminal(.unsupportedSeparateSpaces)
             }
             if targetID == snapshot.mainDisplayID {

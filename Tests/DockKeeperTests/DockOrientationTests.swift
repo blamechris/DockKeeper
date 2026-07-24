@@ -92,39 +92,46 @@ struct DisplayPinnerTests {
     @Test("No preference is a no-op")
     func noPreference() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .none) == .terminal(.noPreference))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .none, dockEdge: .bottom) == .terminal(.noPreference))
     }
 
     @Test("Single display cannot be pinned, whatever the resolution says")
     func singleDisplay() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(1, repaired: nil)) == .terminal(.singleDisplay))
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected) == .terminal(.singleDisplay))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(1, repaired: nil), dockEdge: .bottom) == .terminal(.singleDisplay))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected, dockEdge: .bottom) == .terminal(.singleDisplay))
     }
 
     @Test("Unresolved preferred display reports not-connected")
     func displayNotConnected() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected) == .terminal(.displayNotConnected))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .notConnected, dockEdge: .bottom) == .terminal(.displayNotConnected))
     }
 
     @Test("Ambiguous identity is surfaced, never guessed (TDD §7.2)")
     func ambiguousIdentity() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .ambiguous) == .terminal(.ambiguousIdentity))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .ambiguous, dockEdge: .bottom) == .terminal(.ambiguousIdentity))
         #expect(PinOutcome.ambiguousIdentity.userMessage != nil)
     }
 
-    @Test("Separate Spaces on declines rather than fighting the OS (Decision 2A)")
-    func unsupportedSeparateSpaces() {
+    @Test("Separate Spaces on declines a BOTTOM Dock (Decision 2A, narrowed by ADR-009)")
+    func unsupportedSeparateSpacesBottom() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .terminal(.unsupportedSeparateSpaces))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .bottom) == .terminal(.unsupportedSeparateSpaces))
+    }
+
+    @Test("Separate Spaces on PINS a left/right Dock via main relocation (ADR-009, hardware-confirmed)")
+    func separateSpacesLeftRightPins() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .left) == .reconfigure(2))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .right) == .reconfigure(2))
     }
 
     @Test("Target already main is a no-op")
     func alreadyOnTarget() {
         let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 2, separateSpaces: false)
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .terminal(.alreadyOnTarget))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .bottom) == .terminal(.alreadyOnTarget))
     }
 
     @Test("Valid off-main target on a multi-display, non-separate-Spaces setup reconfigures")
@@ -135,6 +142,6 @@ struct DisplayPinnerTests {
             main: 1,
             separateSpaces: false
         )
-        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil)) == .reconfigure(2))
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .bottom) == .reconfigure(2))
     }
 }

@@ -89,14 +89,14 @@ Done 2026-07-23: privacy statement (`PRIVACY.md`), issue templates (`.github/ISS
 
 ## M8 — Separate-Spaces pinning (parity workstream, targets v1.1) 🟡 spike phase
 
-Owner-directed 2026-07-23 (ADR-008): full DockLock replacement requires pinning in the macOS-default separate-Spaces mode. Spike-first; v1.0 ships unchanged.
+Owner-directed 2026-07-23 (ADR-008): full DockLock replacement requires pinning in the macOS-default separate-Spaces mode.
 
-- 🟡 **Spike** ([separate-spaces-pinning](spikes/separate-spaces-pinning.md)): detection CONFIRMED (public visibleFrame insets, zero permissions); no direct private setter exists → re-summon candidates queued (warp-only, event-synthesis, killall-relocation, deeper SkyLight enumeration). Interactive migration observation next.
-- ❌ **ADR-009**: mechanism + permission posture (possibly opt-in Accessibility for this mode only — would resurrect the kickoff's full permission model, `PermissionManager`, and the `Awaiting Permission` state).
-- ❌ **Design + build**: `SeparateSpacesPinner` behind the existing `DisplayPinner` protocol; new `DockEvent`/detection wiring; DK-FR-008 requirement authored *after* the mechanism is proven (spike → specify → design → build).
-- ❌ **Hardware validation**: oscillation-free operation on the matrix; the reliability bar (Decision 3) is the ship/no-ship gate.
+- ✅ **Spike core question resolved same day** ([separate-spaces-pinning](spikes/separate-spaces-pinning.md)): detection via public visibleFrame insets CONFIRMED; the mode is edge-asymmetric — left/right Docks follow the main display (CONFIRMED both directions), bottom Docks don't.
+- ✅ **ADR-009 shipped 2026-07-23**: left/right pinning works in separate-Spaces mode through the existing `MainDisplayPinner` (a `dockEdge` gate in `decide`); bottom declines with two-remedy guidance copy. Zero new mechanisms, zero permissions, no menu-bar cost in this mode.
+- 🟡 **Remaining research track**: bottom-Dock-with-separate-Spaces (DockLock's niche). Candidates queued in the spike (pointer summon, AX, killall-relocation), deprioritized; would need its own ADR and possibly opt-in Accessibility.
+- ⏳ **Hardware validation**: matrix cells for left/right pinning in this mode under wake/replug (with the standard recovery machinery); the reliability bar (Decision 3) governs.
 
-**Acceptance.** Pin survives the matrix in separate-Spaces mode without visible pointer fights or oscillation; permission ask (if any) is opt-in, explained, and mode-scoped. **Rollback.** Strategy stays behind the protocol; the honest decline remains the fallback outcome.
+**Acceptance.** Left/right pinning survives the matrix in separate-Spaces mode without oscillation (no drift source exists — the pointer can't summon left/right Docks, CONFIRMED); bottom remains an honest decline until a mechanism earns its ADR.
 
 ---
 
