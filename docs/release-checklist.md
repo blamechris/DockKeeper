@@ -20,7 +20,7 @@ Current tooling state (at 72fbcc2): `Scripts/build-app.sh` assembles and **ad-ho
 - [ ] CoreDock smoke test on the newest macOS point release (R-004: symbols resolve, live set works, fallback still engages when forced).
 - [ ] Docs current: behavior spec, TDD, risk register, decision log reflect shipped behavior (AGENTS rule 13).
 - [ ] Open `Error`/`Degraded`-class bugs triaged; none release-blocking.
-- [ ] **First release only:** name/trademark review done (R-010 — competitor family is DockLock Lite/Plus/Pro; see the risk register) · public GitHub repo created and pushed (the in-app "Support Development" URL must resolve) · donation path live: enroll in GitHub Sponsors (or pick Ko-fi/BuyMeACoffee and update `.github/FUNDING.yml` + the in-app URL) — account/identity steps only the owner can do. Done already: ADR-003 ratification ✅ (2026-07-22) · privacy statement + issue templates ✅ · FUNDING.yml scaffold ✅ (2026-07-23).
+- [ ] **First release only:** name/trademark review done (R-010 — competitor family is DockLock Lite/Plus/Pro; see the risk register). Done already: ADR-003 ratification ✅ (2026-07-22) · privacy statement + issue templates ✅ · public repo live at github.com/blamechris/DockKeeper with `main` pushed ✅ (2026-07-23 — in-app "Support Development" URL resolves) · donations live: GitHub Sponsors listing public + FUNDING.yml verified via the repo's funding links ✅ (2026-07-23).
 
 ## 2. Version & changelog
 
