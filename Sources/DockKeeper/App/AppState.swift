@@ -11,6 +11,12 @@ import DockKeeperCore
 @MainActor
 final class AppState: ObservableObject {
 
+    /// The live instance, exposed so the `dockkeeper://` URL handler and App
+    /// Intents can funnel through the same control surface. Set on `init`;
+    /// there is exactly one `AppState` for the app's lifetime, held strongly by
+    /// the `@StateObject` in `DockKeeperApp`.
+    static private(set) weak var shared: AppState?
+
     private let settings = Settings.shared
     private let controller: DockController
     private let monitor: DockMonitor
@@ -179,11 +185,46 @@ final class AppState: ObservableObject {
         refreshPreferredSelection()
         applyEnabledState()
         applyHotkeyState()
+
+        Self.shared = self
     }
 
     /// Set the lock edge from the menu and immediately enforce it.
     func lock(to edge: DockOrientation) {
         lockEdge = edge
+    }
+
+    // MARK: - Automation funnel (DK-FR-010)
+
+    /// Single entry point for automation (`dockkeeper://` URLs and App Intents),
+    /// routing a pure `ControlCommand` through the same published control
+    /// surface the menu drives. No new engine mechanism — just the existing
+    /// enable/lock/pause/resume paths.
+    func perform(_ command: ControlCommand) {
+        switch command {
+        case .lock(let edge):
+            // Parity with the CLI `lock`: enable, then pin to the edge.
+            if !isEnabled { isEnabled = true }
+            lock(to: edge)
+        case .unlock:
+            isEnabled = false
+        case .pause(let duration):
+            pause(for: duration)
+        case .resume:
+            resume()
+        }
+    }
+
+    /// Live status for `DockKeeperStatusIntent`, built from the same fields the
+    /// `dockkeeper status` CLI prints.
+    func statusSummary() -> StatusSummary {
+        StatusSummary(
+            isEnabled: isEnabled,
+            lockEdge: lockEdge,
+            currentEdge: controller.currentOrientation(),
+            mechanism: controller.activeMechanismName,
+            coreDockAvailable: CoreDock.isAvailable
+        )
     }
 
     // MARK: - Pause (DK-FR-009)

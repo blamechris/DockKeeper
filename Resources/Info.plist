@@ -31,5 +31,19 @@
     <false/>
     <key>NSSupportsSuddenTermination</key>
     <false/>
+    <!-- dockkeeper:// automation URL scheme (DK-FR-010). -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>com.dockkeeper.app.url</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>dockkeeper</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
