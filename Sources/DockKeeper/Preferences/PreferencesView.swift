@@ -14,7 +14,7 @@ struct PreferencesView: View {
             AdvancedTab()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
-        .frame(width: 420, height: 260)
+        .frame(width: 420, height: 320)
     }
 }
 
@@ -52,6 +52,13 @@ private struct AdvancedTab: View {
                         .font(.caption)
                 }
             }
+
+            Divider()
+
+            Toggle("Global pause hotkey (⌃⌥⌘D)", isOn: $state.pauseHotkeyEnabled)
+            Text("Off by default. When on, press ⌃⌥⌘D anywhere to pause or resume DockKeeper. Uses a system hot-key registration — no extra permission.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .onAppear { state.refreshAccessibilityStatus() }

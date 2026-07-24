@@ -35,6 +35,17 @@ public final class RecoveryCoordinator {
     /// Bumped on every admitted event; stale passes see a mismatch and no-op.
     private var pendingGeneration = 0
 
+    /// Bumped on every pause/resume; a stale auto-resume timer sees a mismatch
+    /// and no-ops (same generation-counter pattern as reconcile passes).
+    private var pauseGeneration = 0
+
+    /// When the current timed pause auto-resumes; `nil` when not paused or
+    /// paused until an explicit resume. Readable for the menu.
+    public private(set) var pausedUntil: Date?
+
+    /// Whether corrections are currently suspended (DK-FR-009).
+    public var isPaused: Bool { machine.state == .paused }
+
     public init(
         machine: RecoveryMachine = RecoveryMachine(),
         inputProvider: @escaping @MainActor (_ includesPinning: Bool) -> ReconcileInput,
@@ -127,6 +138,8 @@ public final class RecoveryCoordinator {
     /// User disabled DockKeeper: cancel in-flight work, go dormant.
     public func disable() {
         pendingGeneration += 1  // strands any scheduled pass
+        pauseGeneration += 1    // strands any pending auto-resume timer
+        pausedUntil = nil
         machine.noteDisabled()
         notifyState()
     }
@@ -134,6 +147,43 @@ public final class RecoveryCoordinator {
     /// Full reconcile on demand (settings edited in-app, display picked, etc.).
     public func requestReconcile() {
         handle(.enabled)
+    }
+
+    // MARK: - Pause (DK-FR-009)
+
+    /// Suspend corrections. `duration == nil` pauses until an explicit
+    /// `resume()`; otherwise the injected scheduler auto-resumes after
+    /// `duration` seconds. Any in-flight reconcile is stranded, and a second
+    /// pause supersedes the first (its timer strands on the generation bump).
+    /// A no-op while disabled — there is nothing to suspend.
+    public func pause(for duration: TimeInterval?) {
+        guard machine.state != .disabled else { return }
+        pendingGeneration += 1  // strand any in-flight reconcile pass
+        pauseGeneration += 1
+        let generation = pauseGeneration
+        machine.notePaused()
+        if let duration {
+            pausedUntil = now().addingTimeInterval(duration)
+            schedule(duration) { [weak self] in
+                guard let self, generation == self.pauseGeneration else { return }
+                self.resume()
+            }
+        } else {
+            pausedUntil = nil
+        }
+        notifyState()
+    }
+
+    /// Resume from a pause and immediately re-enforce the edge/pin via a full
+    /// reconcile. A manual resume strands any pending auto-resume timer through
+    /// the generation bump. A no-op unless currently paused.
+    public func resume() {
+        guard machine.state == .paused else { return }
+        pauseGeneration += 1    // strand a pending auto-resume timer
+        pausedUntil = nil
+        machine.noteResumed()
+        notifyState()
+        requestReconcile()
     }
 
     // MARK: - Event intake

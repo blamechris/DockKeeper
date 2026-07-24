@@ -56,7 +56,7 @@ Each cell records: pass/fail, macOS version, hardware path, and any drift latenc
 
 ## Requirements → tests traceability
 
-Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5), `SettingsTests` (2), `DisplayPinnerTests` (6 — every `decide` branch) in [DockOrientationTests.swift](../Tests/DockKeeperTests/DockOrientationTests.swift); `RecoveryMachine`/`RecoveryCoordinator` suites (20 — decide, ladder, echo, cooldown, coalescing, poll counter, disable teardown) in [RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift); `DockControllerTests` (6 — adapter seam, fallback, degraded) in [DockControllerTests.swift](../Tests/DockKeeperTests/DockControllerTests.swift).
+Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5), `SettingsTests` (2), `DisplayPinnerTests` (6 — every `decide` branch) in [DockOrientationTests.swift](../Tests/DockKeeperTests/DockOrientationTests.swift); `RecoveryMachine`/`RecoveryCoordinator` suites (31 — decide, ladder, echo, cooldown, coalescing, poll counter, disable teardown, plus DK-FR-009 pause/resume transitions and orchestration) in [RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift); `DockControllerTests` (6 — adapter seam, fallback, degraded) in [DockControllerTests.swift](../Tests/DockKeeperTests/DockControllerTests.swift).
 
 | Requirement / scenario | Existing coverage | Needed |
 |---|---|---|
@@ -74,6 +74,7 @@ Existing suites (39 tests — CONFIRMED 2026-07-22): `DockOrientationTests` (5),
 | DK-FR-005 (login item) | — | Unit: `message(for:)` mapping; manual: approval matrix row |
 | DK-FR-006 (menu bar) | — | Manual; state→copy mapping unit tests where pure |
 | DK-FR-007 (CLI) | — | Argument-parsing table test; `status` snapshot; external-change observation (S3) |
+| DK-FR-009 S1–S5 (pause / temporary move) | ✅ `RecoveryCoordinatorPauseTests` (strand-on-pause, ignore-events, auto-resume via fake scheduler, manual-resume strands stale timer, second-pause supersedes) + `RecoveryMachineTests` pause/resume transitions incl. from-disabled rejection | Manual: menu items shown/hidden by enabled state; hotkey registration + system-wide toggle (out of unit scope) |
 | DK-NFR-001 (budget) | — | Reliability suite measurements (M6 gate) |
 | DK-NFR-002 / DK-PRIV-001 | CONFIRMED by construction (no networking code) | CI symbol check; release network-monitor pass; log-content review |
 | Display identity (ADR-004) | ✅ `DisplayIdentityTests` (score table, tie→ambiguous, repair rewrite, migration incl. `cg-` discard, legacy mirror) | Threshold tuning against real hardware (M6) |

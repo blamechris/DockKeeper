@@ -29,6 +29,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-005](#dk-fr-005-launch-at-login) | Launch at Login | P1 | v1.0 |
 | [DK-FR-006](#dk-fr-006-menu-bar-controls-and-preferences) | Menu-bar controls and Preferences | P0 | v1.0 |
 | [DK-FR-007](#dk-fr-007-command-line-interface) | Command-line interface | P1 | v1.0 |
+| [DK-FR-009](#dk-fr-009-pause-and-temporary-dock-move) | Pause and temporary Dock move | P2 | v1.1 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -356,6 +357,61 @@ Then the app's published state refreshes and reconciles if needed
 
 ---
 
+## DK-FR-009: Pause and temporary Dock move
+
+**Description.** The user can temporarily suspend enforcement — "Pause for 15 Minutes", "Pause for 1 Hour", or "Pause Until Resumed" — and resume it ("Resume Now") from the menu or an optional global hotkey. While paused DockKeeper corrects nothing; on resume (manual or timed) a full reconcile re-enforces the locked edge and pin. This is the **temporary-move** story: pause → drag the Dock wherever via normal macOS → resume → DockKeeper re-enforces. (INFERRED framing; PROPOSED affordance. `DK-FR-008` is intentionally unused — the next stable ID after `DK-FR-007`; pause takes `DK-FR-009` to leave room.)
+
+**Rationale.** Kickoff rule 20 (predictability first): enforcement that cannot be stepped out of is hostile when the user deliberately wants the Dock elsewhere for a while. Closes parity gap **G4** ([parity assessment](parity-assessment.md)) — DockLock's temporary-move/hotkey affordance — with a **zero-permission** mechanism (Carbon `RegisterEventHotKey` is public; TDD §10). The state machine already reserved `Paused` (TDD §5.1); this makes it reachable (CONFIRMED — `RecoveryState.paused`, `shouldProcess`/`reconcile` already gate on it).
+
+**Preconditions.** DockKeeper enabled (`DK-FR-004`) — pause is meaningless while disabled and is rejected there (CONFIRMED — coordinator and machine both guard). The hotkey is off by default and, when on, is registered app-wide regardless of enabled state (a press while disabled is a safe no-op).
+
+**Trigger.** Menu pause/resume items; or the optional ⌃⌥⌘D hotkey (Preferences ▸ Advanced), which toggles pause/resume through the same code path.
+
+**Expected result.**
+
+```text
+S1 — Pause suspends and strands in-flight work
+Given DockKeeper is enabled and monitoring
+When the user pauses
+Then any in-flight reconcile pass is stranded (generation bump)
+And the state machine enters Paused (distinct menu-bar icon)
+And no corrections occur until resume                        [PROPOSED §5.1]
+
+S2 — Events during pause do nothing
+Given DockKeeper is paused
+When wake / display / poll events arrive
+Then they are ignored (shouldProcess gates on Paused)        [CONFIRMED gate]
+And the Dock may be moved freely via normal macOS
+
+S3 — Timed pause auto-resumes and re-enforces
+Given the user paused for 15 minutes or 1 hour
+When the duration elapses
+Then the injected scheduler auto-resumes                     [PROPOSED §9]
+And a full reconcile re-enforces the locked edge / pin
+
+S4 — Manual resume strands a pending auto-resume timer
+Given a timed pause is in effect
+When the user resumes manually first
+Then a full reconcile runs immediately
+And the pending auto-resume timer is stranded (pause-generation bump)
+
+S5 — A second pause supersedes the first
+Given a timed pause is in effect
+When the user pauses again (any duration)
+Then the first pause's auto-resume timer is stranded
+And the new duration governs
+```
+
+**Failure behavior.** Hotkey registration failure (e.g. the combo is already claimed by another app) is logged and the feature stays off — no trap, no crash (CONFIRMED — `HotKeyCenter.start` returns on non-`noErr`). Resume always routes through the normal reconcile path, so post-resume drift inherits the `DK-FR-003` retry ladder and oscillation guard.
+
+**User-visible behavior.** Menu shows the three pause items (hidden while disabled); while paused it shows "Paused" / "Paused until <time>" and "Resume Now". The menu-bar icon switches to `pause.rectangle` (CONFIRMED — `RecoveryState.menuSymbolName`). Advanced-tab toggle "Global pause hotkey (⌃⌥⌘D)" with a caption naming the combo; off by default. No hotkey customization in v1.1 (future work).
+
+**Testability.** Pure `RecoveryMachine` pause/resume transitions (incl. from-disabled rejection) and coordinator orchestration (strand-on-pause, ignore-events, auto-resume via fake scheduler, manual-resume strands stale timer, second-pause supersedes) are unit-tested with the existing simulated clock/scheduler harness ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift), S1–S5). The Carbon hot-key wrapper and menu wiring are manual (system-level registration is out of unit scope).
+
+**Priority / target.** P2 / v1.1. Justification: pure parity/convenience — not required to ship a trustworthy v1.0 (rule 20 favours it but does not gate on it), and it depends on no v1.0 work. Landed ahead of target as the cheapest parity win (zero permissions, reserved machinery). **Related risks:** R-005 (resume re-enters the reconcile machinery; the machine clears its oscillation budget on pause so a fresh fight is bounded again after resume).
+
+---
+
 ## DK-NFR-001: Quietness and resource budget
 
 **Description.** DockKeeper must be effectively free at idle and invisible when healthy.
@@ -469,4 +525,6 @@ The authoritative state machine (diagram and semantics) is TDD §5.1. States: `D
 | Restoring → Degraded | CoreDock unavailable | DK-FR-001 S3 |
 | Restoring → Error | Retry ladder exhausted / oscillation budget | DK-FR-003 S4 |
 | Error → Monitoring | Next event or manual retry | DK-FR-003 |
+| non-Disabled → Paused | User pauses (menu or hotkey) | DK-FR-009 S1 |
+| Paused → Starting → Monitoring | Resume (manual or timed) → reconcile | DK-FR-009 S3/S4 |
 | any → Disabled | User disables | DK-FR-004 S1 |

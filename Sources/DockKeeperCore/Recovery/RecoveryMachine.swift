@@ -1,9 +1,9 @@
 import Foundation
 import CoreGraphics
 
-/// The application states from the technical design (§5.1). `paused` is a
-/// planned affordance ("Pause for 1 hour") — declared for completeness, not
-/// yet reachable in v1 code paths.
+/// The application states from the technical design (§5.1). `paused` is the
+/// user-invoked temporary suspension ("Pause for 15 Minutes" / "Pause Until
+/// Resumed", DK-FR-009): corrections stop until a manual or timed resume.
 public enum RecoveryState: Sendable, Equatable {
     case disabled
     case starting
@@ -178,6 +178,27 @@ public struct RecoveryMachine: Sendable {
         state = .disabled
         correctionTimestamps.removeAll()
         lastSelfInflictedPin = nil
+    }
+
+    /// Suspend corrections (DK-FR-009). Reachable only from a non-disabled
+    /// state — pausing while disabled is meaningless and is rejected. In-flight
+    /// bookkeeping is cleared so the oscillation budget starts fresh on resume
+    /// (the user intervened); the coordinator owns the resume timer, not the
+    /// machine, keeping this core pure.
+    public mutating func notePaused() {
+        guard state != .disabled else { return }
+        state = .paused
+        correctionTimestamps.removeAll()
+        lastSelfInflictedPin = nil
+    }
+
+    /// Resume from a pause. Returns to `.starting` so the coordinator's
+    /// follow-up reconcile re-derives the real steady state (monitoring /
+    /// degraded / preferredDisplayMissing) exactly as an enable does. A no-op
+    /// unless currently paused.
+    public mutating func noteResumed() {
+        guard state == .paused else { return }
+        state = .starting
     }
 
     /// Record that DockKeeper itself just reconfigured displays (a pin), so

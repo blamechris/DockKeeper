@@ -24,6 +24,7 @@ public final class Settings: @unchecked Sendable {
         Keys.verboseLogging: false,
         Keys.diagnosticsFileEnabled: false,
         Keys.preserveWindowLayout: false,
+        Keys.pauseHotkeyEnabled: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
         Keys.settingsVersion: 1,
@@ -41,6 +42,7 @@ public final class Settings: @unchecked Sendable {
         static let verboseLogging = "verboseLogging"
         static let diagnosticsFileEnabled = "diagnosticsFileEnabled"
         static let preserveWindowLayout = "preserveWindowLayout"
+        static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -153,6 +155,14 @@ public final class Settings: @unchecked Sendable {
     public var preserveWindowLayout: Bool {
         get { defaults.bool(forKey: Keys.preserveWindowLayout) }
         set { defaults.set(newValue, forKey: Keys.preserveWindowLayout) }
+    }
+
+    /// Opt-in global hotkey (⌃⌥⌘D) to toggle pause (DK-FR-009). Off by default
+    /// — no surprise system-wide hotkey (kickoff rule 20: predictability
+    /// first). When on, the app registers a Carbon hot key (no permission).
+    public var pauseHotkeyEnabled: Bool {
+        get { defaults.bool(forKey: Keys.pauseHotkeyEnabled) }
+        set { defaults.set(newValue, forKey: Keys.pauseHotkeyEnabled) }
     }
 
     /// Schema version hook for future migrations (current: 1).
