@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     private let monitor: DockMonitor
     private let coordinator: RecoveryCoordinator
     private let hotKeyCenter = HotKeyCenter()
+    private let screenShareHider = ScreenShareHider()
 
     @Published var isEnabled: Bool {
         didSet {
@@ -110,6 +111,23 @@ final class AppState: ObservableObject {
         didSet { settings.verboseLogging = verboseLogging }
     }
 
+    /// Opt-in "hide the Dock while screen sharing" (DK-FR-011, ADR-011). Off by
+    /// default. When on, a dedicated poll toggles Dock auto-hide for the
+    /// duration of a screen capture and restores it after — only if the user
+    /// wasn't already running auto-hide (`ScreenShareHider`). Gated on the
+    /// private screen-watcher symbol resolving; `screenCaptureAvailable` drives
+    /// the disabled-with-a-note UI when it doesn't.
+    @Published var hideDockDuringScreenShare: Bool {
+        didSet {
+            settings.hideDockDuringScreenShare = hideDockDuringScreenShare
+            applyScreenShareHiderState()
+        }
+    }
+
+    /// Whether the private screen-watcher symbol resolved on this macOS. Fixed
+    /// for the process lifetime; drives the Advanced-tab "unavailable" note.
+    let screenCaptureAvailable = ScreenCapture.isAvailable
+
     /// Opt-in window restore across a pin (ADR-010). Enabling without the
     /// Accessibility grant prompts once (the caption is the contextual
     /// explanation shown *before* this point — TDD §10); the toggle may stay on
@@ -144,6 +162,7 @@ final class AppState: ObservableObject {
         self.verboseLogging = settings.verboseLogging
         self.preserveWindowLayout = settings.preserveWindowLayout
         self.pauseHotkeyEnabled = settings.pauseHotkeyEnabled
+        self.hideDockDuringScreenShare = settings.hideDockDuringScreenShare
         FileDiagnostics.shared.isEnabled = settings.diagnosticsFileEnabled
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
@@ -173,6 +192,10 @@ final class AppState: ObservableObject {
             self.pausedUntil = self.coordinator.pausedUntil
         }
         hotKeyCenter.onHotKey = { [weak self] in self?.togglePause() }
+        screenShareHider.onTransition = { transition in
+            // State only — no PII (DK-PRIV-001 S2). Mirrors the pin/state notes.
+            FileDiagnostics.shared.note("screenshare", transition.rawValue)
+        }
         coordinator.onPinOutcome = { [weak self] outcome in
             if outcome != .noPreference, outcome != .alreadyOnTarget {
                 FileDiagnostics.shared.note("pin", String(describing: outcome))
@@ -365,6 +388,21 @@ final class AppState: ObservableObject {
         } else {
             coordinator.disable()
             monitor.stop()
+        }
+        // The screen-share hider follows the master enable switch too — disabling
+        // DockKeeper stops it (and restores the Dock if it was hidden).
+        applyScreenShareHiderState()
+    }
+
+    /// Start or stop the screen-share Dock hider. Runs the poll only while the
+    /// feature is on, DockKeeper is enabled, and the private screen-watcher
+    /// symbol resolved (ADR-011). Stopping restores the Dock if we had hidden
+    /// it, so turning the feature off never leaves the Dock auto-hidden.
+    private func applyScreenShareHiderState() {
+        if isEnabled, hideDockDuringScreenShare, screenCaptureAvailable {
+            screenShareHider.start()
+        } else {
+            screenShareHider.stop()
         }
     }
 

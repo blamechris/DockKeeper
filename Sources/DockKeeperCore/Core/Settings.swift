@@ -25,6 +25,7 @@ public final class Settings: @unchecked Sendable {
         Keys.diagnosticsFileEnabled: false,
         Keys.preserveWindowLayout: false,
         Keys.pauseHotkeyEnabled: false,
+        Keys.hideDockDuringScreenShare: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
         Keys.settingsVersion: 1,
@@ -43,6 +44,7 @@ public final class Settings: @unchecked Sendable {
         static let diagnosticsFileEnabled = "diagnosticsFileEnabled"
         static let preserveWindowLayout = "preserveWindowLayout"
         static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
+        static let hideDockDuringScreenShare = "hideDockDuringScreenShare"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -163,6 +165,17 @@ public final class Settings: @unchecked Sendable {
     public var pauseHotkeyEnabled: Bool {
         get { defaults.bool(forKey: Keys.pauseHotkeyEnabled) }
         set { defaults.set(newValue, forKey: Keys.pauseHotkeyEnabled) }
+    }
+
+    /// Opt-in "hide the Dock while screen sharing" (DK-FR-011, ADR-011). Off by
+    /// default. When on *and* the private screen-watcher symbol resolves,
+    /// DockKeeper turns Dock auto-hide on for the duration of a screen capture
+    /// and restores it afterward — only if the user wasn't already running
+    /// auto-hide. Uses the private `CGSIsScreenWatcherPresent` detector; inert
+    /// (and the toggle is disabled with a note) when the symbol is absent.
+    public var hideDockDuringScreenShare: Bool {
+        get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
+        set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
     }
 
     /// Schema version hook for future migrations (current: 1).

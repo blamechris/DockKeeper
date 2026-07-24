@@ -2,17 +2,17 @@
 
 | | |
 |---|---|
-| **Status** | Living assessment — last updated 2026-07-23 (window-restore ADR-010, G4 pause/hotkey, and G6 Shortcuts+URL scheme all shipped) |
+| **Status** | Living assessment — last updated 2026-07-23 (window-restore ADR-010, G4 pause/hotkey, G6 Shortcuts+URL scheme, and G5 screen-share hide all shipped) |
 | **Date** | 2026-07-23 |
 | **Owner** | blamechris |
-| **Inputs** | [Product investigation](product-investigation.md) (E-1…E-5), [hardware-matrix results](hardware-matrix-results.md), shipped code + 66-test suite |
+| **Inputs** | [Product investigation](product-investigation.md) (E-1…E-5), [hardware-matrix results](hardware-matrix-results.md), shipped code + 114-test suite |
 
 Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. DockLock capabilities are CONFIRMED **as vendor claims** (public listings; not yet black-box tested — rule 17 applies); DockKeeper capabilities are CONFIRMED by tests and on-rig verification.
 
 ## Verdict, up front
 
 - **Replacement for this owner's setup (stacked portrait, left/right Dock): achieved.** Pinning, edge lock, recovery, identity, CLI all work today — in the macOS default mode, with zero permissions, on a topology where DockLock's own preferences flag incompatibility (P-015).
-- **Feature-for-feature parity with DockLock Plus: not yet.** Six gaps remain (G1–G3, G5, G7–G8 below); **G4 shipped 2026-07-23** (pause + optional hotkey, DK-FR-009) and **G6 shipped 2026-07-23** (Apple Shortcuts + `dockkeeper://` URL scheme, DK-FR-010). None blocks v1.0; the recommended attack order is at the bottom.
+- **Feature-for-feature parity with DockLock Plus: not yet.** Five gaps remain (G1–G3, G7–G8 below); **G4 shipped 2026-07-23** (pause + optional hotkey, DK-FR-009), **G6 shipped 2026-07-23** (Apple Shortcuts + `dockkeeper://` URL scheme, DK-FR-010), and **G5 shipped 2026-07-23** (hide the Dock during screen capture, DK-FR-011, ADR-011). None blocks v1.0; the recommended attack order is at the bottom.
 - **DockKeeper already exceeds DockLock in six areas** — including two capabilities their unreleased "Pro" edition only *advertises*.
 
 ## Head-to-head
@@ -32,7 +32,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | CLI | ✓ paid (Plus) | ✓ free | Parity (free) |
 | Hide own icons / discrete mode | ✓ paid | menu-bar-only app by design | Parity-ish (n/a) |
 | Temporary Dock move via modifier/hotkey | ✓ (Lite paid) | ✓ pause + optional ⌃⌥⌘D hotkey (DK-FR-009) | **G4 shipped** 2026-07-23 (Parity; free, zero-permission) |
-| Hide Dock during screen sharing / meetings | ✓ (Lite) | ✗ | **Gap G5** |
+| Hide Dock during screen sharing / meetings | ✓ (Lite) | ✓ screen-capture detect + Dock auto-hide (DK-FR-011, ADR-011) | **G5 shipped** 2026-07-23 (Parity; free, zero-permission; true-case UNKNOWN pending on-device) |
 | Follow mouse | ✓ (Plus) | ✗ deferred | **Gap G2** |
 | Follow active window / app | ✓ (Plus) | ✗ deferred | **Gap G3** |
 | Apple Shortcuts + URL scheme | ✓ (Plus) | ✓ App Intents + `dockkeeper://` scheme (DK-FR-010) | **G6 shipped** 2026-07-23 (Parity; free, zero-permission) |
@@ -48,7 +48,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | G2 | Follow mouse | After G1. For left/right Docks it would mean a main-relocation per pointer-display change — a re-base storm (window shuffles each hop) that likely fails the reliability bar; for bottom Docks it needs G1's mechanism. PROPOSED: treat as G1-dependent, possibly left/right-excluded. |
 | G3 | Follow active window/app | Needs Accessibility (focused-window geometry — TDD §10 anticipated this). After G1/G2. |
 | ~~G4~~ | ~~Temporary-move hotkey / pause~~ | **✅ Shipped 2026-07-23** (DK-FR-009, M10). Pause (15 min / 1 hour / until resumed) + "Resume Now", optional ⌃⌥⌘D hotkey (OFF by default). `RegisterEventHotKey` public and permission-free as predicted; made the reserved `Paused` state real; no new mechanism, no ADR. Unit-tested (machine transitions + coordinator orchestration). |
-| G5 | Hide Dock during screen sharing | **Spike done 2026-07-23** ([screen-share-hide](spikes/screen-share-hide.md)): auto-hide toggle CONFIRMED; detection splits — true screen-capture needs the **private** `CGSIsScreenWatcherPresent` (a rule-7/ADR decision, degrades safely), while a **public** camera-in-use signal (`CMIODevicePropertyDeviceIsRunningSomewhere`) covers only *video calls* (a different trigger). Gotcha found: auto-hide blinds the visibleFrame host sensor → must use `CoreDockGetRect` while hidden. Blocked on an owner scope+ADR decision, not on feasibility. |
+| ~~G5~~ | ~~Hide Dock during screen sharing~~ | **✅ Shipped 2026-07-23** (DK-FR-011, M12, **ADR-011**). Screen-capture detection via the **private** `CGSIsScreenWatcherPresent` (degrades safely — feature simply unavailable if the symbol is absent) + Dock auto-hide toggle; **opt-in, off by default**, zero permission. Scope deliberately narrowed to *screen capture* (not the public camera / video-call signal). Pure `decide` core exhaustively unit-tested (never touches a user's own auto-hide; idempotent; teardown-safe). The auto-hide toggle is verified **not** to trigger any drift/reconcile (no `RecoveryMachine` change). `CoreDockGetRect` wrapper added as the auto-hide-proof host sensor for a future G1 detector (unused today). **Honest INFERRED follow-up:** the true capture-flip (does the flag fire, latency, which apps) is **UNKNOWN pending on-device verification** — a documented M6/M12 hardware cell; not exercised here (a real capture would prompt/interfere). |
 | ~~G6~~ | ~~Shortcuts + URL scheme~~ | **✅ Shipped 2026-07-23** (DK-FR-010, M11). App Intents (Lock/Unlock/Pause/Resume/Status) + `AppShortcutsProvider` and a `dockkeeper://` URL scheme, all funneled through one pure `ControlCommand` + `AppState.perform(_:)` — public APIs, zero permission, no new mechanism, no ADR. Parse table unit-tested; on-device Shortcuts/Siri discovery + the App Intents metadata packaging step are the honest INFERRED follow-ups (URL scheme works today). Unblocks G7. |
 | G7 | Raycast extension | Separate TypeScript deliverable against the CLI/URL scheme; post-first-release. |
 | G8 | Sidecar / DisplayLink | Not a feature — a hardware-matrix test cell (fingerprints for virtual displays UNKNOWN, e.g. UUID-less `cg-` cases already handled defensively). |
@@ -58,8 +58,8 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 1. ~~**G4** (hotkey pause/temporary move)~~ — **✅ done 2026-07-23** (zero permissions, used the reserved machinery, as predicted).
 2. ~~**G6** (Shortcuts + URL scheme)~~ — **✅ done 2026-07-23** (public APIs, zero permission; made G7 a thin downstream deliverable).
 3. **G1** (bottom-mode lock) — the flagship gap; spike first, own ADR, likely opt-in AX.
-4. **G5** (screen-share hide) — spike, then small feature.
+4. ~~**G5** (screen-share hide)~~ — **✅ done 2026-07-23** (DK-FR-011, M12, ADR-011; private detector behind graceful degradation, zero permission; true-case is a documented on-device follow-up).
 5. **G2/G3** (follow modes) — after G1; design constrained by the re-base cost.
 6. **G7/G8** — post-release.
 
-With G4+G6+G1 done, DockKeeper would match or beat every *shipping* DockLock capability; G2/G3 close the premium tier.
+With G4+G5+G6 shipped, only **G1** stands between DockKeeper and every *shipping* DockLock capability; G2/G3 close the premium tier.

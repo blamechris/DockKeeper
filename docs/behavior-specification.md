@@ -31,6 +31,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-007](#dk-fr-007-command-line-interface) | Command-line interface | P1 | v1.0 |
 | [DK-FR-009](#dk-fr-009-pause-and-temporary-dock-move) | Pause and temporary Dock move | P2 | v1.1 |
 | [DK-FR-010](#dk-fr-010-apple-shortcuts--url-scheme-automation) | Apple Shortcuts + URL-scheme automation | P2 | v1.1 |
+| [DK-FR-011](#dk-fr-011-hide-the-dock-during-screen-capture) | Hide the Dock during screen capture | P2 | v1.1 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -463,6 +464,66 @@ Then the intents and phrases are offered                    [INFERRED — see no
 **Testability.** The pure parse table (`ControlCommand.parse`) is exhaustively unit-tested — all four commands, edge case-insensitivity, top rejected, minutes present/absent/zero/negative/garbage/non-finite/over-cap, unknown hosts, foreign schemes, extra params ignored — plus `StatusSummary` line/format parity ([ControlCommandTests.swift](../Tests/DockKeeperTests/ControlCommandTests.swift), 19 tests). `ControlCommand` lives in `DockKeeperCore` (not the app target) precisely so the test target, which links only the core library, can import it; the side-effecting funnel stays in the app layer. **Manual / not-yet-executed (INFERRED, not CONFIRMED):** end-to-end Shortcuts/Siri invocation and URL-open dispatch on-device. **Known packaging gap (INFERRED):** App Intents metadata (`Metadata.appintents`) is normally emitted by an Xcode build phase; the current `swift build` + [build-app.sh](../Scripts/build-app.sh) path does not generate it, so Shortcuts/Siri *discovery* is UNKNOWN until packaging adds the extraction step. The intent/enum/provider code compiles under Swift 6 strict concurrency and is structurally correct; the URL scheme is the fully-working automation path in the interim.
 
 **Priority / target.** P2 / v1.1. Justification: pure parity/convenience over public APIs; no permission, no new mechanism, and it unblocks G7. Landed as recommended order #2 after G4. **Related risks:** none new (no network, no permission, no persisted config beyond the existing `isEnabled`/`lockEdge`).
+
+---
+
+## DK-FR-011: Hide the Dock during screen capture
+
+**Description.** When enabled (opt-in, **off by default**), DockKeeper turns on macOS Dock auto-hide while the screen is being captured/recorded/shared, so the Dock stays out of the capture, and restores it when the capture ends. It never disturbs a user who already runs auto-hide — and therefore never restores something it didn't change. Closes parity gap **G5** ([parity assessment](parity-assessment.md)). Governed by **[ADR-011](decision-log.md#adr-011-hide-the-dock-during-screen-capture-via-a-private-screen-watcher-flag--dock-auto-hide-opt-in)** (the interaction rules there are mandatory).
+
+**Rationale.** DockLock Lite hides the Dock during screen sharing / meetings; this matches that behavior with a zero-permission mechanism. Screen-capture detection has **no public API** — the reliable signal is the private SkyLight `CGSIsScreenWatcherPresent` (the public camera-in-use signal detects a *video call*, a different trigger — spike [screen-share-hide](spikes/screen-share-hide.md)). Hiding reuses the already-CONFIRMED `CoreDockSetAutoHideEnabled`, so only the detector is new (ADR-011, the rule-7 sign-off).
+
+**Preconditions.** DockKeeper enabled (`DK-FR-004`); the setting `hideDockDuringScreenShare` is on; and the private `CGSIsScreenWatcherPresent` symbol resolves on this macOS (`ScreenCapture.isAvailable`). When the symbol is absent the feature is inert and the Advanced-tab toggle is disabled with a note. No system permission is required.
+
+**Trigger.** A dedicated 3 s poll (Principle 19: **no capture-state event source exists** — the private flag is poll-only; the poll runs only while the feature is on, DockKeeper is enabled, and the symbol resolved) reads `ScreenCapture.isCapturing()` and feeds `ScreenShareHider`.
+
+**Expected result.**
+
+```text
+S1 — Hide on capture start (we own the change)
+Given the feature is on, the symbol resolves, and the user's Dock auto-hide is OFF
+When a screen capture begins (isCapturing() → true)
+Then DockKeeper turns Dock auto-hide ON and records that it did so
+And a FileDiagnostics "screenshare hidden" note is written (state only, no PII)
+[decide() CONFIRMED by unit test; the true-capture flip is UNKNOWN pending
+ on-device verification — ADR-011 Evidence, folded into M6/M12]
+
+S2 — Restore on capture stop (only what we changed)
+Given DockKeeper hid the Dock for a capture
+When the capture ends (isCapturing() → false)
+Then DockKeeper turns Dock auto-hide back OFF and clears its flag
+And a FileDiagnostics "screenshare restored" note is written
+
+S3 — Never fight a user who already auto-hides
+Given the user's Dock auto-hide is already ON
+When a capture starts and stops
+Then DockKeeper does nothing — it never toggles auto-hide, and because it
+    recorded no hide, it never "restores" (turns off) the user's setting
+                                                        [CONFIRMED — decide table]
+
+S4 — Idempotence
+Given the capture state is unchanged across ticks
+When the poll fires repeatedly
+Then no auto-hide write is issued after the first transition   [CONFIRMED]
+
+S5 — Off by default / unavailable
+Given the setting is off (default), or the symbol is absent
+Then the poll never runs and the Dock is never touched; the toggle is disabled
+    with an explanatory note when the symbol is absent         [CONFIRMED]
+
+S6 — Teardown never leaves the Dock hidden
+Given DockKeeper hid the Dock
+When the user turns the feature off, or disables DockKeeper
+Then auto-hide is restored to OFF                              [CONFIRMED — code]
+```
+
+**Failure behavior.** Symbol absent → feature unavailable, toggle disabled, no-op (never a crash, no fallback needed — hiding the Dock is a comfort feature). A failed `CoreDockSetAutoHideEnabled` (private API gone at write time) leaves the flag unset so no phantom "restore" is attempted. The auto-hide toggle is a direct `CoreDock` call outside the recovery machinery, so it can never trigger a drift correction or oscillation (ADR-011 "Coordinator interaction", verified).
+
+**User-visible behavior.** The Dock auto-hides for the duration of a screen capture and returns afterward. Advanced-tab toggle "Hide the Dock while screen sharing" with a caption (off by default; explains the auto-hide-during-capture-and-restore behavior and that an existing auto-hide setting is left untouched); disabled with a "unavailable on this version of macOS" note when the symbol is absent.
+
+**Testability.** The pure `ScreenShareHider.decide(capturing:weHidIt:currentAutoHide:)` is exhaustively unit-tested over all 8 input combinations — including the "user already auto-hides → never touch → never restore" cases, idempotence, and the setting-off short-circuit (registered default false) ([ScreenShareTests.swift](../Tests/DockKeeperTests/ScreenShareTests.swift)). The private-API reads/writes and the detector are **not** called from tests (would move the real Dock / need a real capture) — that is the on-device hardware cell (M6/M12). **UNKNOWN pending on-device verification:** does the watcher flag actually flip on a real capture, its latency, and which apps trip it (QuickTime, Zoom, Teams, Screen Sharing.app) — do **not** treat as CONFIRMED.
+
+**Priority / target.** P2 / v1.1. Justification: pure parity/convenience (matches DockLock Lite's screen-sharing hide); not required to ship a trustworthy v1.0, zero-permission, and independent of v1.0 work. Uses a private API behind graceful degradation (ADR-011), like the CoreDock edge path. **Related risks:** R-004 (private-API fragility — adds the screen-watcher symbol to the per-macOS smoke test).
 
 ---
 
