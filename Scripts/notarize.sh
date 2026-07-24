@@ -20,7 +20,13 @@ if ! xcrun notarytool history --keychain-profile "$PROFILE" > /dev/null 2>&1; th
 fi
 
 echo "==> Submitting $DMG for notarization (waits for the verdict)"
-xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
+SUBMIT_OUT="$(xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait 2>&1 | tee /dev/stderr)"
+SUBMISSION_ID="$(echo "$SUBMIT_OUT" | awk '/id:/ {print $2; exit}')"
+if ! echo "$SUBMIT_OUT" | grep -q 'status: Accepted'; then
+    echo "==> REJECTED — fetching the notary log for $SUBMISSION_ID"
+    xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" || true
+    exit 1
+fi
 
 echo "==> Stapling"
 xcrun stapler staple "$DMG"

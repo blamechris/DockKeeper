@@ -4,9 +4,13 @@
 # /Applications symlink, plus a checksum for release notes and the cask.
 #
 # Usage: Scripts/package-dmg.sh [version]     (default: read from the bundle)
-# Run Scripts/build-app.sh first (with SIGNING_IDENTITY for a real release).
+#   SIGNING_IDENTITY="Developer ID Application: ..."  also signs the CLI with
+#   hardened runtime + timestamp (notarization rejects any unsigned executable
+#   in the DMG — learned from submission eb36ef6c). Defaults to ad-hoc.
+# Run Scripts/build-app.sh first (with the same SIGNING_IDENTITY).
 
 set -euo pipefail
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
@@ -23,6 +27,19 @@ mkdir -p "$STAGE"
 rm -rf "$STAGE"/* "$DMG"
 cp -R "$APP" "$STAGE/"
 cp "$ROOT/.build/release/dockkeeper-cli" "$STAGE/dockkeeper"
+
+if [[ "$SIGNING_IDENTITY" == "-" ]]; then
+    echo "==> Ad-hoc signing CLI (set SIGNING_IDENTITY for a notarizable build)"
+    codesign --force --sign - --identifier com.dockkeeper.cli "$STAGE/dockkeeper"
+else
+    echo "==> Signing CLI with: $SIGNING_IDENTITY (hardened runtime)"
+    codesign --force --sign "$SIGNING_IDENTITY" \
+        --options runtime --timestamp \
+        --identifier com.dockkeeper.cli \
+        "$STAGE/dockkeeper"
+fi
+codesign --verify --strict "$STAGE/dockkeeper"
+
 ln -s /Applications "$STAGE/Applications"
 
 echo "==> Creating $DMG"
