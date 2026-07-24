@@ -10,7 +10,7 @@
 
 Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**.
 
-Current tooling state (at 72fbcc2): `Scripts/build-app.sh` assembles and **ad-hoc**-signs `DockKeeper.app` with `LSUIElement` and entitlements — CONFIRMED. Developer ID signing, notarization, `.dmg` packaging, cask, and app icon do **not** exist yet (M7). Items marked ⚙️ need one-time setup before the first release.
+Current tooling state (2026-07-23): the pipeline is **built and locally verified end-to-end** — `Scripts/build-app.sh` (icon + version stamping + `SIGNING_IDENTITY` env for Developer ID with hardened runtime, ad-hoc fallback), `Scripts/package-dmg.sh` (app + CLI + /Applications symlink, sha256 output), `Scripts/notarize.sh` (notarytool submit/staple/validate, graceful without credentials), `Scripts/gen-icon.swift` (regenerable `AppIcon.icns`), `.github/workflows/ci.yml` (build + tests + the DK-NFR-002 no-networking-symbols gate), `Casks/dockkeeper.rb` (template). Items marked ⚙️ still need the owner's one-time setup (Apple Developer account artifacts).
 
 ## 1. Gates (before cutting anything)
 
@@ -32,23 +32,22 @@ Current tooling state (at 72fbcc2): `Scripts/build-app.sh` assembles and **ad-ho
 ## 3. Build & sign
 
 - [ ] Clean release build: `swift build -c release` for **both** products (`DockKeeper`, `dockkeeper-cli`).
-- [ ] Assemble bundle: `Scripts/build-app.sh release`.
-- [ ] ⚙️ Sign with **Developer ID Application** identity (replaces the script's ad-hoc `-`), hardened runtime enabled.
+- [ ] Assemble bundle: `VERSION=x.y.z SIGNING_IDENTITY="Developer ID Application: …" Scripts/build-app.sh release` (hardened runtime applied automatically with a real identity).
+- [ ] ⚙️ Developer ID Application certificate present in the keychain (owner one-time setup; Apple Developer account).
+- [ ] App Intents metadata (`Metadata.appintents`) packaged so Shortcuts/Siri list the intents — `appintentsmetadataprocessor` is present in the toolchain (CONFIRMED) but plain `swift build` emits no const-values inputs; identified path: drive the release build through `xcodebuild` against Package.swift, which runs the extractor. Until then the `dockkeeper://` URL scheme is the working automation path (DK-FR-010 note).
 - [ ] Entitlements reviewed — no sandbox entitlement (would break `killall`/`dlsym` — ADR-002); nothing unexpected added.
 - [ ] `codesign --verify --strict --verbose=2` passes on app and CLI.
 - [ ] Universal binary confirmed if shipping Intel support (INFERRED unproblematic — verify first time, ADR-001).
 
 ## 4. Notarize & staple
 
-- [ ] ⚙️ `notarytool` credentials configured (keychain profile).
-- [ ] Submit app (and CLI artifact) for notarization; wait for `Accepted`. First run validates the TDD's INFERRED "no entitlement conflicts" claim — record the result in the decision log.
-- [ ] `stapler staple` the app; `stapler validate` passes.
+- [ ] ⚙️ `notarytool` credentials configured once: `xcrun notarytool store-credentials dockkeeper-notary --apple-id <id> --team-id <team>` (owner).
+- [ ] `Scripts/notarize.sh dist/DockKeeper-<version>.dmg` — submits, waits, staples, validates. First run validates the TDD's INFERRED "no entitlement conflicts" claim — record the result in the decision log.
 - [ ] Gatekeeper check on a clean machine/VM: `spctl --assess --type execute` passes; app launches from `~/Downloads` without warnings beyond the standard first-open dialog.
 
 ## 5. Package
 
-- [ ] Produce `.dmg` (or `.zip`) containing `DockKeeper.app`; CLI delivered via the cask/`.zip` (⚙️ decide layout first release).
-- [ ] Checksums (`shasum -a 256`) generated for release notes and cask.
+- [ ] `Scripts/package-dmg.sh` — produces `dist/DockKeeper-<version>.dmg` (app + `dockkeeper` CLI + /Applications symlink; layout decided 2026-07-23) and prints the sha256 for release notes and the cask.
 
 ## 6. Verify the artifact (fresh user pass, clean machine)
 
@@ -62,7 +61,7 @@ Current tooling state (at 72fbcc2): `Scripts/build-app.sh` assembles and **ad-ho
 ## 7. Publish
 
 - [ ] Git tag pushed; GitHub release created with changelog, artifacts, checksums.
-- [ ] ⚙️ Homebrew cask created (first release) / version+sha bumped (later releases); `brew install --cask` verified end-to-end including the CLI symlink.
+- [ ] Homebrew cask: fill version+sha in `Casks/dockkeeper.rb` (template ready); ⚙️ first release: host in a personal tap (`blamechris/homebrew-tap`) or submit to homebrew/cask; `brew install --cask` verified end-to-end including the CLI.
 - [ ] README install instructions point at the new release.
 
 ## 8. Post-release

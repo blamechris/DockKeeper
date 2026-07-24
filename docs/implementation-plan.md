@@ -83,9 +83,11 @@ No privacy-gated permission exists in v1 (TDD §10 — CONFIRMED); Login Items a
 
 **Acceptance.** Matrix results recorded per cell; budgets met or owner-ratified adjustments logged as ADR amendments; risk register updated with evidence. **Dependencies.** M2–M4 complete; rig available (schedule risk).
 
-## M7 — Release 🟡
+## M7 — Release 🟡 pipeline complete, owner artifacts pending
 
-Done 2026-07-23: privacy statement (`PRIVACY.md`), issue templates (`.github/ISSUE_TEMPLATE/`). Remaining: Developer ID signing + notarization pipeline, `.dmg`/`.zip` artifacts, Homebrew cask, app icon — executed via the [release checklist](release-checklist.md). **Dependencies.** M6 green; R-010 trademark check done. (ADR-003 ratified ✅.)
+Done 2026-07-23: privacy statement, issue templates, public repo + Sponsors live, **and the full release pipeline, locally verified end-to-end**: app icon (`Scripts/gen-icon.swift` → `AppIcon.icns`, wired into the bundle), `build-app.sh` with `SIGNING_IDENTITY`/`VERSION` + hardened runtime, `package-dmg.sh` (app + CLI + symlink, sha256), `notarize.sh` (notarytool wrapper), CI (`.github/workflows/ci.yml`: build, tests, DK-NFR-002 no-networking-symbols gate), cask template (`Casks/dockkeeper.rb`).
+
+Remaining (owner-gated ⚙️): Developer ID certificate + notarytool credentials (Apple Developer account) · App Intents metadata packaging (tool present; wire via an `xcodebuild`-driven release build — Shortcuts discovery until then via the URL scheme) · R-010 trademark call. **Dependencies.** M6 green before the first tag.
 
 ## M8 — Separate-Spaces pinning (parity workstream, targets v1.1) 🟡 spike phase
 

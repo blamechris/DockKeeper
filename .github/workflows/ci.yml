@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (warnings are errors in spirit — surface them)
+        run: swift build -c release 2>&1 | tee build.log
+
+      - name: Tests
+        run: swift test
+
+      - name: Assemble app bundle (ad-hoc)
+        run: bash Scripts/build-app.sh release
+
+      # DK-NFR-002 / DK-PRIV-001 gate: the binaries must reference no
+      # networking APIs. The only outbound action in the product is the
+      # user-initiated "Support Development" link (NSWorkspace.open).
+      - name: No-networking-symbols gate
+        run: |
+          for bin in dist/DockKeeper.app/Contents/MacOS/DockKeeper .build/release/dockkeeper-cli; do
+            echo "checking $bin"
+            if nm -u "$bin" | grep -iE 'NSURLSession|CFNetwork|NWConnection|NWListener|CFSocket' ; then
+              echo "::error::networking symbol referenced in $bin (DK-NFR-002 violation)"
+              exit 1
+            fi
+          done
+          echo "clean: no networking symbols referenced"
