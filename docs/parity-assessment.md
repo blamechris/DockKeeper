@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Living assessment — last updated 2026-07-23 (window-restore ADR-010 and G4 pause/hotkey both shipped) |
+| **Status** | Living assessment — last updated 2026-07-23 (window-restore ADR-010, G4 pause/hotkey, and G6 Shortcuts+URL scheme all shipped) |
 | **Date** | 2026-07-23 |
 | **Owner** | blamechris |
 | **Inputs** | [Product investigation](product-investigation.md) (E-1…E-5), [hardware-matrix results](hardware-matrix-results.md), shipped code + 66-test suite |
@@ -12,7 +12,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 ## Verdict, up front
 
 - **Replacement for this owner's setup (stacked portrait, left/right Dock): achieved.** Pinning, edge lock, recovery, identity, CLI all work today — in the macOS default mode, with zero permissions, on a topology where DockLock's own preferences flag incompatibility (P-015).
-- **Feature-for-feature parity with DockLock Plus: not yet.** Seven gaps remain (G1–G3, G5–G8 below); **G4 shipped 2026-07-23** (pause + optional hotkey, DK-FR-009). None blocks v1.0; the recommended attack order is at the bottom.
+- **Feature-for-feature parity with DockLock Plus: not yet.** Six gaps remain (G1–G3, G5, G7–G8 below); **G4 shipped 2026-07-23** (pause + optional hotkey, DK-FR-009) and **G6 shipped 2026-07-23** (Apple Shortcuts + `dockkeeper://` URL scheme, DK-FR-010). None blocks v1.0; the recommended attack order is at the bottom.
 - **DockKeeper already exceeds DockLock in six areas** — including two capabilities their unreleased "Pro" edition only *advertises*.
 
 ## Head-to-head
@@ -35,7 +35,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | Hide Dock during screen sharing / meetings | ✓ (Lite) | ✗ | **Gap G5** |
 | Follow mouse | ✓ (Plus) | ✗ deferred | **Gap G2** |
 | Follow active window / app | ✓ (Plus) | ✗ deferred | **Gap G3** |
-| Apple Shortcuts + URL scheme | ✓ (Plus) | ✗ | **Gap G6** |
+| Apple Shortcuts + URL scheme | ✓ (Plus) | ✓ App Intents + `dockkeeper://` scheme (DK-FR-010) | **G6 shipped** 2026-07-23 (Parity; free, zero-permission) |
 | Raycast extension | ✓ (Plus, official) | ✗ | **Gap G7** |
 | Sidecar / DisplayLink support | ✓ claimed (Plus) | UNKNOWN — untested | **Gap G8** (test cell) |
 | Price / model | $39.99 lifetime; Lite = trial + subscription IAP (nag reported) | Free, MIT, no prompts ever | **DockKeeper leads** (mission) |
@@ -49,14 +49,14 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | G3 | Follow active window/app | Needs Accessibility (focused-window geometry — TDD §10 anticipated this). After G1/G2. |
 | ~~G4~~ | ~~Temporary-move hotkey / pause~~ | **✅ Shipped 2026-07-23** (DK-FR-009, M10). Pause (15 min / 1 hour / until resumed) + "Resume Now", optional ⌃⌥⌘D hotkey (OFF by default). `RegisterEventHotKey` public and permission-free as predicted; made the reserved `Paused` state real; no new mechanism, no ADR. Unit-tested (machine transitions + coordinator orchestration). |
 | G5 | Hide Dock during screen sharing | Needs a capture-detection spike (candidate public signals exist; UNKNOWN reliability). Auto-hide toggling via `CoreDockSetAutoHideEnabled` already resolves (spike-confirmed symbol). |
-| G6 | Shortcuts + URL scheme | Straightforward: AppIntents (public) + a URL-scheme handler over the existing engine. |
+| ~~G6~~ | ~~Shortcuts + URL scheme~~ | **✅ Shipped 2026-07-23** (DK-FR-010, M11). App Intents (Lock/Unlock/Pause/Resume/Status) + `AppShortcutsProvider` and a `dockkeeper://` URL scheme, all funneled through one pure `ControlCommand` + `AppState.perform(_:)` — public APIs, zero permission, no new mechanism, no ADR. Parse table unit-tested; on-device Shortcuts/Siri discovery + the App Intents metadata packaging step are the honest INFERRED follow-ups (URL scheme works today). Unblocks G7. |
 | G7 | Raycast extension | Separate TypeScript deliverable against the CLI/URL scheme; post-first-release. |
 | G8 | Sidecar / DisplayLink | Not a feature — a hardware-matrix test cell (fingerprints for virtual displays UNKNOWN, e.g. UUID-less `cg-` cases already handled defensively). |
 
 ## Recommended order
 
 1. ~~**G4** (hotkey pause/temporary move)~~ — **✅ done 2026-07-23** (zero permissions, used the reserved machinery, as predicted).
-2. **G6** (Shortcuts + URL scheme) — small, makes G7 possible.
+2. ~~**G6** (Shortcuts + URL scheme)~~ — **✅ done 2026-07-23** (public APIs, zero permission; made G7 a thin downstream deliverable).
 3. **G1** (bottom-mode lock) — the flagship gap; spike first, own ADR, likely opt-in AX.
 4. **G5** (screen-share hide) — spike, then small feature.
 5. **G2/G3** (follow modes) — after G1; design constrained by the re-base cost.

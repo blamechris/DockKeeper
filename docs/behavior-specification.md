@@ -30,6 +30,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-006](#dk-fr-006-menu-bar-controls-and-preferences) | Menu-bar controls and Preferences | P0 | v1.0 |
 | [DK-FR-007](#dk-fr-007-command-line-interface) | Command-line interface | P1 | v1.0 |
 | [DK-FR-009](#dk-fr-009-pause-and-temporary-dock-move) | Pause and temporary Dock move | P2 | v1.1 |
+| [DK-FR-010](#dk-fr-010-apple-shortcuts--url-scheme-automation) | Apple Shortcuts + URL-scheme automation | P2 | v1.1 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -409,6 +410,59 @@ And the new duration governs
 **Testability.** Pure `RecoveryMachine` pause/resume transitions (incl. from-disabled rejection) and coordinator orchestration (strand-on-pause, ignore-events, auto-resume via fake scheduler, manual-resume strands stale timer, second-pause supersedes) are unit-tested with the existing simulated clock/scheduler harness ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift), S1–S5). The Carbon hot-key wrapper and menu wiring are manual (system-level registration is out of unit scope).
 
 **Priority / target.** P2 / v1.1. Justification: pure parity/convenience — not required to ship a trustworthy v1.0 (rule 20 favours it but does not gate on it), and it depends on no v1.0 work. Landed ahead of target as the cheapest parity win (zero permissions, reserved machinery). **Related risks:** R-005 (resume re-enters the reconcile machinery; the machine clears its oscillation budget on pause so a fresh fight is bounded again after resume).
+
+---
+
+## DK-FR-010: Apple Shortcuts + URL-scheme automation
+
+**Description.** DockKeeper's existing controls are exposed to automation two ways: (a) a `dockkeeper://` URL scheme — `lock?edge=bottom|left|right`, `unlock`, `pause` (optional `?minutes=`), `resume` — and (b) App Intents (`LockDockIntent`, `UnlockDockIntent`, `PauseDockKeeperIntent`, `ResumeDockKeeperIntent`, `DockKeeperStatusIntent`) with an `AppShortcutsProvider` for Siri/Shortcuts phrases. Both paths route through **one** pure command layer (`ControlCommand`) and a single app-side funnel (`AppState.perform(_:)`) — the same enable/lock/pause/resume surface the menu and CLI already drive. Closes parity gap **G6** ([parity assessment](parity-assessment.md)). (INFERRED framing; PROPOSED affordance.)
+
+**Rationale.** Kickoff §17 staged-parity: automation is a **DockLock Plus** premium differentiator (CONFIRMED — [product investigation](product-investigation.md)); exposing it needs no new engine mechanism and **no new permission** (App Intents and `CFBundleURLTypes` are public; the URL handler is a stock `NSApplicationDelegate` method). Makes **G7** (Raycast) a thin downstream deliverable over the same surface. No ADR — public APIs, no architectural deviation ([implementation plan](implementation-plan.md) M11).
+
+**Preconditions.** For mutating commands the menu-bar app must be running so the shared `AppState` funnel exists; the URL scheme and App Intents `openAppWhenRun` launch it if needed (CONFIRMED — plumbing; launch/perform ordering for an accessory app is INFERRED, see Testability). `DockKeeperStatusIntent` reads the shared `Settings`/`DockController`/`CoreDock` directly (`StatusSummary.live()`), so it works whether or not the app is running (CONFIRMED — same surface the CLI uses).
+
+**Trigger.** A `dockkeeper://…` URL opened by any app/script; or an intent run from Shortcuts, Siri, or the Shortcuts editor.
+
+**Expected result.**
+
+```text
+S1 — URL parse table is total and safe
+When a dockkeeper:// URL is opened
+Then lock?edge=bottom|left|right → lock (edge case-insensitive)
+And  unlock / resume → the matching command
+And  pause → pause-until-resumed; pause?minutes=N → timed pause (N>0, capped 24h)
+And  unknown scheme/host, top edge, or malformed minutes → the URL is ignored
+                                                          [CONFIRMED — unit table]
+
+S2 — Automation reuses the existing control surface
+When a valid command executes
+Then it funnels through AppState.perform(_:) — enable+lock, disable,
+     pause(for:), or resume — with no new engine path       [CONFIRMED — code]
+And  lock enables + sets the edge; unlock disables (CLI parity)
+
+S3 — Status mirrors the CLI
+When DockKeeperStatusIntent runs
+Then it returns enabled / lock edge / current edge / mechanism, built from the
+     same StatusSummary the `dockkeeper status` CLI prints  [CONFIRMED — shared type]
+
+S4 — Privacy: URL logging is contents-free
+When an invalid dockkeeper:// URL is opened
+Then only the host and a validity flag are logged at debug level; query values
+     (which could be anything) are never logged             [CONFIRMED — code]
+
+S5 — Shortcuts/Siri discovery (runtime)
+Given the App Intents + AppShortcutsProvider are compiled into the app
+When the user opens Shortcuts or asks Siri
+Then the intents and phrases are offered                    [INFERRED — see note]
+```
+
+**Failure behavior.** Unrecognized URLs are silently ignored (logged at debug, host only). A mutating intent whose `AppState` is not yet live is a safe no-op (no crash, no partial state). Malformed `minutes` never pauses. `unlock` while already disabled and `resume` while not paused are existing no-ops.
+
+**User-visible behavior.** No new UI. Automation surfaces appear in Shortcuts/Siri and via the URL scheme; results are the same Dock/menu changes the manual controls produce. `DockKeeperStatusIntent` returns a short spoken/printed line.
+
+**Testability.** The pure parse table (`ControlCommand.parse`) is exhaustively unit-tested — all four commands, edge case-insensitivity, top rejected, minutes present/absent/zero/negative/garbage/non-finite/over-cap, unknown hosts, foreign schemes, extra params ignored — plus `StatusSummary` line/format parity ([ControlCommandTests.swift](../Tests/DockKeeperTests/ControlCommandTests.swift), 19 tests). `ControlCommand` lives in `DockKeeperCore` (not the app target) precisely so the test target, which links only the core library, can import it; the side-effecting funnel stays in the app layer. **Manual / not-yet-executed (INFERRED, not CONFIRMED):** end-to-end Shortcuts/Siri invocation and URL-open dispatch on-device. **Known packaging gap (INFERRED):** App Intents metadata (`Metadata.appintents`) is normally emitted by an Xcode build phase; the current `swift build` + [build-app.sh](../Scripts/build-app.sh) path does not generate it, so Shortcuts/Siri *discovery* is UNKNOWN until packaging adds the extraction step. The intent/enum/provider code compiles under Swift 6 strict concurrency and is structurally correct; the URL scheme is the fully-working automation path in the interim.
+
+**Priority / target.** P2 / v1.1. Justification: pure parity/convenience over public APIs; no permission, no new mechanism, and it unblocks G7. Landed as recommended order #2 after G4. **Related risks:** none new (no network, no permission, no persisted config beyond the existing `isEnabled`/`lockEdge`).
 
 ---
 

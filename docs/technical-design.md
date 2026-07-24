@@ -62,7 +62,7 @@ Every product or technical claim in this document carries one of the kickoff pac
 
 - Follow-mouse / follow-focused-window / follow-active-app modes (deferred; follow-window would introduce the Accessibility permission we currently avoid)
 - Window management or display-arrangement management as a feature
-- Apple Shortcuts, Raycast, AppleScript integration
+- Apple Shortcuts, Raycast, AppleScript integration — *update: Apple Shortcuts (App Intents) + a `dockkeeper://` URL scheme **shipped for v1.1** as [DK-FR-010](behavior-specification.md#dk-fr-010-apple-shortcuts--url-scheme-automation) (parity gap G6, public APIs, zero permission); Raycast (G7) and AppleScript remain deferred.*
 - Per-app rules, display profiles, work/home automation
 - Mac App Store distribution (blocked by mechanism choices, §13)
 - Auto-update (v1 ships via Homebrew/direct download; Sparkle is a later ADR)
