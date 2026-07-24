@@ -178,3 +178,19 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 **Evidence.** `CGWindowListCopyWindowInfo` bounds are global CG top-left coordinates — CONFIRMED (API docs; same space as `CGDisplayBounds`, which `DisplayInfo.frame` already uses, so overlap assignment is direct). Re-base delta is uniform (`−target.originBefore` for every display) — CONFIRMED by construction from `MainDisplayPinner.liveApplyMain`, unit-tested on the owner's rig geometry. AX uses the same global CG top-left coordinate space as `CGWindowList`, so `kAXPositionAttribute` can be set to `oldOrigin + delta` directly — **INFERRED** (common AX behavior; not yet verified on hardware — the pure math is unit-tested, the AX write path is not). Reading geometry needs no permission; moving foreign windows needs AX — CONFIRMED (no public alternative exists).
 
 **Date / Status.** 2026-07-23 · **Accepted (owner-directed 2026-07-23)** — implemented (`Settings.preserveWindowLayout`, `WindowLayoutPreserver`, `RecoveryCoordinator` wiring, Advanced-tab UI, pure-math unit tests); resolves open question #11. The AX write path stays INFERRED until hardware validation (M6).
+
+---
+
+## ADR-011: Hide the Dock during screen capture, via the private CGSIsScreenWatcherPresent API
+
+**Context.** Parity gap G5 (DockLock hides the Dock during screen sharing/meetings). The [screen-share-hide spike](spikes/screen-share-hide.md) established that hiding works via the already-confirmed `CoreDockSetAutoHideEnabled`, but *detecting* a screen-capture session has **no public API** — the reliable signal is the private SkyLight `CGSIsScreenWatcherPresent`. The public camera-in-use signal (`CMIODevicePropertyDeviceIsRunningSomewhere`) detects only *video calls*, a different trigger. This is a rule-7 private-API decision, parallel to ADR-003.
+
+**Options.** (1) Skip G5. (2) Video-calls-only via the public camera signal (no private API, but not the requested feature). (3) True screen-capture detection via the private `CGSIsScreenWatcherPresent`, resolved at runtime with `dlsym` and degrading safely to "feature unavailable" if the symbol ever disappears.
+
+**Decision.** Option 3, owner-ratified 2026-07-23. The feature is **opt-in** (off by default — it changes Dock behavior), gated on the private symbol resolving; when the symbol is absent the toggle is disabled with an explanation, exactly as CoreDock degrades to the fallback path.
+
+**Consequences.** A second private-API dependency joins CoreDock under the same per-macOS-release smoke-test obligation (add a row to the release checklist and R-004's scope). Detection is **poll-based** while the feature is on (no capture-state notification exists) — a dedicated short-interval timer active only when the setting is enabled; principle 19 permits it since no event source exists. Interaction rules the implementation MUST honor: remember the user's prior auto-hide value and only toggle if DockKeeper changed it (never fight a user who set auto-hide themselves); use `CoreDockGetRect` for Dock-host detection while hidden, because the spike CONFIRMED auto-hide blinds the `visibleFrame` inset sensor; the coordinator must not count DockKeeper's own auto-hide toggle as drift. Mac App Store remains out (already true, ADR-002).
+
+**Evidence.** `CGSIsScreenWatcherPresent` resolves and reads on-rig (returned false with nothing capturing) — CONFIRMED it resolves; the true-case (flag flips when capture starts, latency, which capturers trip it: QuickTime/Zoom/Teams/Screen Sharing.app) is **UNKNOWN pending on-device verification** (a matrix item). Auto-hide toggle + prior-value restore CONFIRMED. visibleFrame-blinded-by-autohide gotcha CONFIRMED.
+
+**Date / Status.** 2026-07-23 · **Accepted (owner-ratified 2026-07-23)** — implementation delegated; true-case detection stays UNKNOWN until hardware validation (M6/M12).
