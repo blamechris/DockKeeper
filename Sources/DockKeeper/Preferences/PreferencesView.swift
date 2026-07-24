@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit  // NSApplication.didBecomeActiveNotification
 import DockKeeperCore
 
 /// The Preferences window. v0.1 covers the General and Dock tabs; Advanced and
@@ -35,8 +36,28 @@ private struct AdvancedTab: View {
                 .foregroundStyle(.secondary)
             Button("Reveal Diagnostics File") { state.revealDiagnosticsFile() }
                 .disabled(!state.diagnosticsFileEnabled)
+
+            Divider()
+
+            Toggle("Keep windows in place when pinning", isOn: $state.preserveWindowLayout)
+            Text("Off by default. Pinning the Dock to your preferred display can shift some windows to the other screen; turn this on to move them back afterward. This is the only feature that needs macOS Accessibility permission, and it's used solely to reposition your windows — nothing else does.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if state.preserveWindowLayout && !state.accessibilityGranted {
+                HStack(spacing: 8) {
+                    Text("Waiting for permission — windows won't move until Accessibility is granted.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Open Accessibility Settings") { state.openAccessibilitySettings() }
+                        .font(.caption)
+                }
+            }
         }
         .padding()
+        .onAppear { state.refreshAccessibilityStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            state.refreshAccessibilityStatus()
+        }
     }
 }
 
