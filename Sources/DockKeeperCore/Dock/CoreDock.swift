@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Thin wrapper over the private `CoreDock*` C functions that the macOS Dock
 /// exposes for reading and setting its orientation and pinning.
@@ -19,6 +20,9 @@ public enum CoreDock {
         UnsafeMutablePointer<Int32>, UnsafeMutablePointer<Int32>
     ) -> Void
     private typealias SetFn = @convention(c) (Int32, Int32) -> Void
+    private typealias GetAutoHideFn = @convention(c) () -> Bool
+    private typealias SetAutoHideFn = @convention(c) (Bool) -> Void
+    private typealias GetRectFn = @convention(c) (UnsafeMutablePointer<CGRect>) -> Void
 
     /// The CoreDock symbols live in HIServices, which is only guaranteed to be
     /// loaded in AppKit processes. Explicitly load the ApplicationServices
@@ -32,6 +36,9 @@ public enum CoreDock {
 
     private static let getFn: GetFn? = symbol("CoreDockGetOrientationAndPinning")
     private static let setFn: SetFn? = symbol("CoreDockSetOrientationAndPinning")
+    private static let getAutoHideFn: GetAutoHideFn? = symbol("CoreDockGetAutoHideEnabled")
+    private static let setAutoHideFn: SetAutoHideFn? = symbol("CoreDockSetAutoHideEnabled")
+    private static let getRectFn: GetRectFn? = symbol("CoreDockGetRect")
 
     private static func symbol<T>(_ name: String) -> T? {
         _ = frameworkHandle  // force the dlopen before any dlsym
@@ -68,5 +75,40 @@ public enum CoreDock {
         guard let setFn else { return false }
         setFn(Int32(orientation.rawValue), Int32(pinning.rawValue))
         return true
+    }
+
+    // MARK: - Auto-hide (screen-share Dock hide — DK-FR-011 / ADR-011)
+
+    /// The Dock's current auto-hide state, or `nil` if the private symbol is
+    /// unavailable. Used by `ScreenShareHider` to remember whether the user was
+    /// already running auto-hide before we consider hiding the Dock.
+    public static func getAutoHideEnabled() -> Bool? {
+        guard let getAutoHideFn else { return nil }
+        return getAutoHideFn()
+    }
+
+    /// Set the Dock's auto-hide state. Returns `false` if the private symbol is
+    /// unavailable (the caller then treats the feature as inert). This writes
+    /// through to the `com.apple.dock` domain the same way the orientation set
+    /// does, so a Dock restart preserves the value.
+    @discardableResult
+    public static func setAutoHideEnabled(_ enabled: Bool) -> Bool {
+        guard let setAutoHideFn else { return false }
+        setAutoHideFn(enabled)
+        return true
+    }
+
+    /// The Dock's on-screen rectangle in global display coordinates, or `nil`
+    /// when the symbol is unavailable. Auto-hide leaves `NSScreen.visibleFrame`
+    /// stale (spike gotcha), so this is the auto-hide-proof way to locate the
+    /// Dock's host display should a future feature need it while the Dock is
+    /// hidden. The shipped pinning path uses `CGDisplayBounds` / `CGMainDisplayID`
+    /// and is unaffected, so nothing calls this yet — it exists as the correct
+    /// sensor for that future work (ADR-011).
+    public static func getRect() -> CGRect? {
+        guard let getRectFn else { return nil }
+        var rect = CGRect.zero
+        getRectFn(&rect)
+        return rect
     }
 }

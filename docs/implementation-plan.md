@@ -138,6 +138,22 @@ Recommended order #2 ([parity assessment](parity-assessment.md)): expose the exi
 
 ---
 
+## M12 — Hide the Dock during screen capture (parity gap G5, DK-FR-011, targets v1.1) ✅ code complete (2026-07-23)
+
+Recommended-order #4 ([parity assessment](parity-assessment.md)), governed by **[ADR-011](decision-log.md#adr-011-hide-the-dock-during-screen-capture-via-a-private-screen-watcher-flag--dock-auto-hide-opt-in)** (owner-ratified). Matches DockLock Lite's screen-sharing hide with a zero-permission mechanism: detect a screen capture via the private SkyLight `CGSIsScreenWatcherPresent` (no public API exists for it — the rule-7 trade signed in ADR-011; the public camera signal is a *different* trigger, deliberately out of scope), and hide by toggling the already-CONFIRMED `CoreDockSetAutoHideEnabled`.
+
+- ✅ `ScreenCapture` (pure wrapper, **`DockKeeperCore`**) — `dlopen`s SkyLight and resolves `CGSIsScreenWatcherPresent` with the exact `dlsym` pattern as `CoreDock`; `isAvailable`, `isCapturing()` → `false` when the symbol is absent. No state, no polling.
+- ✅ `CoreDock` extended with `getAutoHideEnabled() -> Bool?` / `setAutoHideEnabled(_:) -> Bool` (over the existing `CoreDockGet/SetAutoHideEnabled`) and `getRect() -> CGRect?` (over `CoreDockGetRect`, `@convention(c) (UnsafeMutablePointer<CGRect>) -> Void`). `getRect` is the auto-hide-proof host sensor reserved for a future separate-Spaces bottom-Dock detector (spike gotcha) — **unused** by the shipped pinning path, which reads `CGDisplayBounds`/`CGMainDisplayID`.
+- ✅ `ScreenShareHider` (@MainActor, **`DockKeeperCore`**) — a **pure** `decide(capturing:weHidIt:currentAutoHide:) -> {none, hide, restore}` core (all ADR-011 rules; the single `weHidIt` flag suffices because we only ever hide from a prior "off"), plus a side-effecting `evaluate`/`tick` that reads/writes `CoreDock` auto-hide and logs. Owns a 3 s poll (`defaultCheckInterval`, a documented constant — no capture-state event source exists, Principle 19 satisfied by that absence) and an `onTransition` callback for the diagnostics note. `stop()` restores if we hid (never leaves the Dock hidden).
+- ✅ `Settings.hideDockDuringScreenShare` (Bool, default **false**, registered) — opt-in, off by default.
+- ✅ AppState wiring: published `hideDockDuringScreenShare` (persists + starts/stops the hider), `screenCaptureAvailable` for the UI; the poll runs only while the feature is on **and** DockKeeper is enabled **and** the symbol resolved (start/stop folded into `applyEnabledState`, so disabling DockKeeper also stops it and restores). `FileDiagnostics` note (`screenshare hidden`/`restored`, state only — no PII) on transitions.
+- ✅ Advanced-tab toggle "Hide the Dock while screen sharing" with a caption; disabled with an "unavailable on this macOS" note when `!ScreenCapture.isAvailable`.
+- ✅ **No `RecoveryMachine`/coordinator change** — verified: the auto-hide toggle is a direct `CoreDock` call outside the recovery machinery; it changes neither orientation (`currentEdge`) nor main display / display bounds (pin decision), so it can't produce a drift correction. A visibleFrame-driven `.screenParametersChanged` would reconcile to a guaranteed no-op (no effect, no oscillation budget). Documented in ADR-011 "Coordinator interaction".
+
+**Acceptance met (unit level):** the pure `decide` truth table is exhaustively green (all 8 `capturing × weHidIt × currentAutoHide` combos, incl. never-touch-user-auto-hide, idempotence, teardown-safe, and the registered default-false short-circuit) ([ScreenShareTests.swift](../Tests/DockKeeperTests/ScreenShareTests.swift)); full suite **114 tests** green; `swift build` clean under Swift 6 strict concurrency. **UNKNOWN pending on-device verification (folds into M6):** does the watcher flag actually flip on a real capture, its latency, and which apps trip it (QuickTime, Zoom, Teams, Screen Sharing.app) — not exercised here (starting a real capture would prompt/interfere; it is a documented hardware-matrix cell, ADR-011 Evidence). Do **not** treat the true-case detection as CONFIRMED.
+
+---
+
 ## Cross-cutting debt (fold into the touching milestone)
 
 From TDD A.4, tracked here so it isn't lost: ~~observer-removal fix + dead `DistributedNotificationCenter`~~ ✅ · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · ~~external-defaults observation~~ ✅ · `Log.verbose` static folded into diagnostics rework (M1) · ~~`autoRecover` removal per ADR-007~~ ✅ (all ✅ 2026-07-22 with M3/M4).

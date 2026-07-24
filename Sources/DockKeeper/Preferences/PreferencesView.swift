@@ -14,7 +14,7 @@ struct PreferencesView: View {
             AdvancedTab()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
-        .frame(width: 420, height: 320)
+        .frame(width: 420, height: 380)
     }
 }
 
@@ -59,6 +59,19 @@ private struct AdvancedTab: View {
             Text("Off by default. When on, press ⌃⌥⌘D anywhere to pause or resume DockKeeper. Uses a system hot-key registration — no extra permission.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle("Hide the Dock while screen sharing", isOn: $state.hideDockDuringScreenShare)
+                .disabled(!state.screenCaptureAvailable)
+            Text("Off by default. While a screen recording or share is running, DockKeeper turns on Dock auto-hide so the Dock stays out of the capture, then restores it when the share ends. If you already use Dock auto-hide, it's left untouched.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !state.screenCaptureAvailable {
+                Text("Unavailable on this version of macOS — the screen-capture signal DockKeeper relies on isn't present, so this stays off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
         .onAppear { state.refreshAccessibilityStatus() }
