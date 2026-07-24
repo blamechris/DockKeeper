@@ -11,6 +11,23 @@ struct MenuBarContent: View {
 
         Divider()
 
+        // Pause hides while disabled (nothing to suspend). Pausing is the
+        // "temporary move" path: pause, drag the Dock, resume → re-enforced.
+        if state.isEnabled {
+            if state.isPaused {
+                Text(state.pausedStatusText)
+                Button("Resume Now") { state.resume() }
+            } else {
+                Menu("Pause") {
+                    Button("Pause for 15 Minutes") { state.pause(for: 15 * 60) }
+                    Button("Pause for 1 Hour") { state.pause(for: 60 * 60) }
+                    Button("Pause Until Resumed") { state.pause(for: nil) }
+                }
+            }
+
+            Divider()
+        }
+
         Menu("Lock Edge") {
             ForEach(DockOrientation.userSelectable, id: \.self) { edge in
                 Button {

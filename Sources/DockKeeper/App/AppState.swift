@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     private let controller: DockController
     private let monitor: DockMonitor
     private let coordinator: RecoveryCoordinator
+    private let hotKeyCenter = HotKeyCenter()
 
     @Published var isEnabled: Bool {
         didSet {
@@ -74,6 +75,23 @@ final class AppState: ObservableObject {
     /// Current recovery state — drives the state-distinct menu-bar icon.
     @Published private(set) var recoveryState: RecoveryState = .disabled
 
+    /// Whether corrections are currently paused (DK-FR-009) — drives the menu's
+    /// pause/resume section. Mirrors the coordinator via `onStateChange`.
+    @Published private(set) var isPaused = false
+
+    /// When a timed pause auto-resumes; `nil` when paused until resumed (or not
+    /// paused). Drives the "Paused until …" menu note.
+    @Published private(set) var pausedUntil: Date?
+
+    /// Opt-in global hotkey (⌃⌥⌘D) to toggle pause (DK-FR-009). Off by default;
+    /// registered only while on (kickoff rule 20 — no surprise global hotkey).
+    @Published var pauseHotkeyEnabled: Bool {
+        didSet {
+            settings.pauseHotkeyEnabled = pauseHotkeyEnabled
+            applyHotkeyState()
+        }
+    }
+
     /// Opt-in bounded diagnostics file (DK-PRIV-001 S2).
     @Published var diagnosticsFileEnabled: Bool {
         didSet {
@@ -119,6 +137,7 @@ final class AppState: ObservableObject {
         self.diagnosticsFileEnabled = settings.diagnosticsFileEnabled
         self.verboseLogging = settings.verboseLogging
         self.preserveWindowLayout = settings.preserveWindowLayout
+        self.pauseHotkeyEnabled = settings.pauseHotkeyEnabled
         FileDiagnostics.shared.isEnabled = settings.diagnosticsFileEnabled
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
@@ -144,7 +163,10 @@ final class AppState: ObservableObject {
             }
             self.recoveryState = state
             self.statusMessage = state.userMessage
+            self.isPaused = (state == .paused)
+            self.pausedUntil = self.coordinator.pausedUntil
         }
+        hotKeyCenter.onHotKey = { [weak self] in self?.togglePause() }
         coordinator.onPinOutcome = { [weak self] outcome in
             if outcome != .noPreference, outcome != .alreadyOnTarget {
                 FileDiagnostics.shared.note("pin", String(describing: outcome))
@@ -156,11 +178,61 @@ final class AppState: ObservableObject {
         Log.verbose = settings.verboseLogging
         refreshPreferredSelection()
         applyEnabledState()
+        applyHotkeyState()
     }
 
     /// Set the lock edge from the menu and immediately enforce it.
     func lock(to edge: DockOrientation) {
         lockEdge = edge
+    }
+
+    // MARK: - Pause (DK-FR-009)
+
+    /// Pause corrections. `duration == nil` pauses until an explicit resume.
+    /// This is the "temporary move" path: pause, drag the Dock via normal
+    /// macOS, then resume — a full reconcile re-enforces the edge/pin. A no-op
+    /// while disabled (the menu hides pause items; the hotkey guards here).
+    func pause(for duration: TimeInterval?) {
+        guard isEnabled else { return }
+        FileDiagnostics.shared.note("pause", Self.pauseLabel(for: duration))
+        coordinator.pause(for: duration)
+    }
+
+    /// Resume corrections now and re-enforce (a full reconcile runs).
+    func resume() {
+        FileDiagnostics.shared.note("resume", "manual")
+        coordinator.resume()
+    }
+
+    /// Toggle pause/resume — the shared code path for the menu and the hotkey.
+    /// Pausing via toggle pauses until resumed (predictable; no hidden timer).
+    func togglePause() {
+        if coordinator.isPaused {
+            resume()
+        } else {
+            pause(for: nil)
+        }
+    }
+
+    /// Menu note while paused: "Paused" (until resumed) or "Paused until 3:45 PM".
+    var pausedStatusText: String {
+        guard isPaused else { return "" }
+        guard let pausedUntil else { return "Paused" }
+        return "Paused until \(pausedUntil.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private static func pauseLabel(for duration: TimeInterval?) -> String {
+        guard let duration else { return "until-resumed" }
+        let minutes = Int(duration / 60)
+        return minutes >= 60 ? "\(minutes / 60)h" : "\(minutes)m"
+    }
+
+    private func applyHotkeyState() {
+        if pauseHotkeyEnabled {
+            hotKeyCenter.start()
+        } else {
+            hotKeyCenter.stop()
+        }
     }
 
     /// Choose (or clear, with `nil`) the preferred display from the menu.

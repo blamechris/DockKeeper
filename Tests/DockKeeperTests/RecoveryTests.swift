@@ -197,6 +197,49 @@ struct RecoveryMachineTests {
         #expect(result.effects.isEmpty)
         #expect(result.state == .disabled)
     }
+
+    // MARK: - Pause (DK-FR-009)
+
+    @Test("Pause is rejected from Disabled (nothing to suspend)")
+    func pauseFromDisabledRejected() {
+        var machine = RecoveryMachine()  // disabled
+        machine.notePaused()
+        #expect(machine.state == .disabled)
+    }
+
+    @Test("Pause is reachable from Monitoring and ignores events while paused")
+    func pauseFromMonitoring() {
+        var machine = enabledMachine()
+        _ = machine.reconcile(passIndex: 0, input: ReconcileInput(currentEdge: .bottom, desiredEdge: .bottom), now: t0)
+        #expect(machine.state == .monitoring)
+
+        machine.notePaused()
+        #expect(machine.state == .paused)
+        // Events are ignored and reconcile is a no-op while paused.
+        #expect(!machine.shouldProcess(.wake, now: t0))
+        let result = machine.reconcile(
+            passIndex: 0,
+            input: ReconcileInput(currentEdge: .bottom, desiredEdge: .left),
+            now: t0
+        )
+        #expect(result.effects.isEmpty)
+        #expect(result.state == .paused)
+    }
+
+    @Test("Resume returns to Starting so the next reconcile re-derives steady state")
+    func resumeReturnsToStarting() {
+        var machine = enabledMachine()
+        machine.notePaused()
+        machine.noteResumed()
+        #expect(machine.state == .starting)
+    }
+
+    @Test("Resume from a non-paused state is a no-op")
+    func resumeWhenNotPausedIsNoop() {
+        var machine = enabledMachine()  // .starting
+        machine.noteResumed()
+        #expect(machine.state == .starting)
+    }
 }
 
 // MARK: - RecoveryCoordinator (orchestration with fakes)
@@ -371,5 +414,128 @@ struct RecoveryCoordinatorTests {
         // Events while disabled are ignored entirely.
         harness.coordinator.handle(.wake)
         #expect(harness.scheduled.isEmpty)
+    }
+}
+
+// MARK: - RecoveryCoordinator pause/resume (DK-FR-009)
+
+@Suite("RecoveryCoordinator pause")
+@MainActor
+struct RecoveryCoordinatorPauseTests {
+
+    @Test("Pause strands in-flight passes and suspends corrections (DK-FR-009 S1)")
+    func pauseStrandsInFlight() {
+        let harness = Harness(inputs: [drifting])
+        harness.coordinator.enable()       // schedules the initial reconcile
+        harness.coordinator.handle(.wake)  // schedules another
+
+        harness.coordinator.pause(for: nil)
+        harness.runAllScheduled()          // every stranded block no-ops
+
+        #expect(harness.appliedEdges.isEmpty, "no corrections while paused")
+        #expect(harness.coordinator.isPaused)
+        #expect(harness.coordinator.state == .paused)
+        #expect(harness.coordinator.pausedUntil == nil, "pause-until-resumed has no deadline")
+    }
+
+    @Test("Events during pause do nothing (DK-FR-009 S2)")
+    func eventsDuringPauseIgnored() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()          // converge to monitoring
+
+        harness.coordinator.pause(for: nil)
+        harness.scheduled.removeAll()
+        harness.coordinator.handle(.wake)
+        harness.coordinator.handle(.displayReconfigured)
+
+        #expect(harness.scheduled.isEmpty, "paused machine admits no events")
+        #expect(harness.appliedEdges.isEmpty)
+    }
+
+    @Test("Timed pause auto-resumes and re-enforces via a full reconcile (DK-FR-009 S3)")
+    func autoResumeReconciles() {
+        // enable consumes `aligned`; the post-resume reconcile finds `drifting`
+        // then settles on `aligned`.
+        let harness = Harness(inputs: [aligned, drifting, aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+
+        harness.coordinator.pause(for: 900)
+        #expect(harness.coordinator.isPaused)
+        #expect(harness.coordinator.pausedUntil == harness.now.addingTimeInterval(900))
+
+        harness.now = harness.now.addingTimeInterval(900)
+        harness.runAllScheduled()          // auto-resume fires → reconcile runs
+
+        #expect(!harness.coordinator.isPaused)
+        #expect(harness.coordinator.pausedUntil == nil)
+        #expect(harness.appliedEdges == [.left], "resume re-enforces the locked edge")
+        #expect(harness.coordinator.state == .monitoring)
+    }
+
+    @Test("Manual resume strands the pending auto-resume timer (DK-FR-009 S4)")
+    func manualResumeStrandsTimer() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+
+        harness.coordinator.pause(for: 900)
+        #expect(harness.scheduled.count == 1, "the only pending block is the auto-resume timer")
+        let staleTimer = harness.scheduled.removeFirst().block
+
+        harness.coordinator.resume()
+        harness.runAllScheduled()          // the reconcile from the manual resume
+        #expect(!harness.coordinator.isPaused)
+
+        let stateBefore = harness.coordinator.state
+        staleTimer()                       // the superseded timer must no-op
+        #expect(harness.coordinator.state == stateBefore)
+        #expect(!harness.coordinator.isPaused)
+    }
+
+    @Test("A second pause supersedes the first (DK-FR-009 S5)")
+    func secondPauseSupersedes() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+
+        harness.coordinator.pause(for: 900)
+        let firstTimer = harness.scheduled.removeFirst().block
+        harness.coordinator.pause(for: 3600)
+        #expect(harness.coordinator.pausedUntil == harness.now.addingTimeInterval(3600))
+
+        firstTimer()                       // the superseded first timer no-ops
+        #expect(harness.coordinator.isPaused, "first timer must not resume after being superseded")
+        #expect(harness.coordinator.state == .paused)
+
+        harness.now = harness.now.addingTimeInterval(3600)
+        harness.runAllScheduled()          // the second timer resumes
+        #expect(!harness.coordinator.isPaused)
+    }
+
+    @Test("Pause is a no-op while disabled")
+    func pauseWhileDisabledNoops() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.pause(for: 900)
+        #expect(!harness.coordinator.isPaused)
+        #expect(harness.coordinator.state == .disabled)
+        #expect(harness.scheduled.isEmpty)
+    }
+
+    @Test("Disable while paused strands the auto-resume timer")
+    func disableWhilePausedStrandsTimer() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+
+        harness.coordinator.pause(for: 900)
+        let staleTimer = harness.scheduled.removeFirst().block
+        harness.coordinator.disable()
+        #expect(harness.coordinator.pausedUntil == nil)
+
+        staleTimer()                       // stranded by the disable generation bump
+        #expect(harness.coordinator.state == .disabled)
+        #expect(!harness.coordinator.isPaused)
     }
 }
