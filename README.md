@@ -2,9 +2,10 @@
 
 A lightweight, native macOS menu-bar utility that keeps your Dock exactly where you want it — locked to your chosen edge and restored automatically whenever macOS tries to move it.
 
-**Free forever. Open source. No subscriptions, no telemetry, no ads.**
+**Free forever. Open source. No subscriptions, no telemetry, no ads, no permissions.**
 
-> ⚠️ Early development (v0.1). Core engine, menu-bar app, and CLI are scaffolded and building; not yet feature-complete.
+> 🚧 **v0.9 public beta** — feature-complete for v1.0; the multi-monitor
+> hardware test matrix is still being worked through. Signed and notarized.
 
 ## Why
 
@@ -12,30 +13,43 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 
 ## Features
 
-- Lock the Dock to **Bottom**, **Left**, or **Right**
-- Automatic recovery after sleep, wake, display plug/unplug, resolution and arrangement changes
-- **Preferred display (best-effort):** keep the Dock on a chosen monitor by making it the main display
-- **Launch at Login** via Apple's supported `SMAppService` API (requires the packaged `.app`)
-- Menu-bar app that stays out of your way (`.accessory` — no Dock icon of its own)
-- Command-line interface: `dockkeeper lock left`
-- Uses the private `CoreDock` API for flicker-free repositioning, with a `defaults`+restart fallback
+- Lock the Dock to **Bottom**, **Left**, or **Right** — flicker-free live repositioning
+- Automatic recovery after sleep, wake, display plug/unplug, resolution and arrangement changes — with burst coalescing, a retry ladder for slow wakes, and an oscillation guard that refuses to fight other software
+- **Preferred display:** keep the Dock on a chosen monitor. Works with *Displays have separate Spaces* **on** (the macOS default) for left/right Docks, and for any edge with it off
+- Displays recognized by a **multi-signal fingerprint** (survives docks, adapters, and UUID churn; never guesses between identical monitors)
+- **Keep windows in place** (opt-in): restores your window layout after a display pin — the only feature that uses a permission (Accessibility), strictly optional
+- **Pause** (15 min / 1 hour / until resumed) for temporary Dock moves, with an optional global hotkey (⌃⌥⌘D, off by default)
+- **Hide the Dock while screen sharing** (opt-in)
+- Automation: `dockkeeper` CLI, a `dockkeeper://` URL scheme, and Apple Shortcuts intents
+- Menu-bar app that stays out of your way (`.accessory` — no Dock icon of its own); **Launch at Login** via Apple's supported `SMAppService`
+- Opt-in, bounded, local-only diagnostics file for bug reports — nothing ever leaves your Mac ([privacy statement](PRIVACY.md))
 
-> **Note on Preferred Display:** macOS ties the Dock to the *main* display, so
-> pinning the Dock to a monitor also moves the **menu bar** there — this is
-> expected. Pinning requires *Displays have separate Spaces* to be **off**
-> (System Settings → Desktop & Dock); when it's on, edge-locking still works and
-> DockKeeper tells you why pinning is unavailable. See
-> [the spike](docs/spikes/preferred-display-spike.md).
+> **How pinning works:** macOS ties the Dock to the *main* display, so pinning
+> re-bases which display is main. With separate Spaces **off** that also moves
+> the menu bar (expected); with it **on** (default), every display keeps its own
+> menu bar and left/right Docks pin cleanly — a bottom Dock can't be pinned in
+> that mode, and DockKeeper says so instead of fighting the OS.
 
-### Planned (see roadmap)
+### Planned
 
-- Global hotkeys, Apple Shortcuts, AppleScript
+- Bottom-Dock pinning in separate-Spaces mode (mechanism research ongoing)
 - Follow mouse / active window / active app
+- Raycast extension; Shortcuts app discovery (the intents exist; the metadata packaging lands in v1.1 — the URL scheme works today)
+
+## Install
+
+**Download:** grab the notarized `DockKeeper-x.y.z.dmg` from [Releases](https://github.com/blamechris/DockKeeper/releases), drag `DockKeeper.app` to Applications (required for Launch at Login), and optionally copy `dockkeeper` somewhere on your `PATH`.
+
+**Homebrew:**
+
+```sh
+brew install --cask blamechris/tap/dockkeeper
+```
 
 ## Requirements
 
 - macOS 14+
-- Swift 6 toolchain (Xcode 26 / Swift 6.3)
+- To build from source: Swift 6 toolchain (Xcode 26 / Swift 6.3)
 - Apple Silicon (primary) or Intel (best effort)
 
 ## Build & Run

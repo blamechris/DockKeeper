@@ -21,7 +21,7 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 - [ ] Screen-watcher smoke test on the newest macOS point release (R-004, ADR-011 / DK-FR-011): `CGSIsScreenWatcherPresent` resolves (else the toggle is disabled with a note); with the feature on, starting a real screen capture (QuickTime / Zoom / Screen Sharing.app) flips the flag and the Dock auto-hides, and stopping restores it — and a pre-existing user auto-hide is left untouched. This is the DK-FR-011 true-case, **UNKNOWN until run here** (do not claim CONFIRMED before this passes).
 - [ ] Docs current: behavior spec, TDD, risk register, decision log reflect shipped behavior (AGENTS rule 13).
 - [ ] Open `Error`/`Degraded`-class bugs triaged; none release-blocking.
-- [ ] **First release only:** name/trademark review done (R-010 — competitor family is DockLock Lite/Plus/Pro; see the risk register). Done already: ADR-003 ratification ✅ (2026-07-22) · privacy statement + issue templates ✅ · public repo live at github.com/blamechris/DockKeeper with `main` pushed ✅ (2026-07-23 — in-app "Support Development" URL resolves) · donations live: GitHub Sponsors listing public + FUNDING.yml verified via the repo's funding links ✅ (2026-07-23).
+- [x] **First-release gates all met:** name/trademark review ✅ (R-010 closed 2026-07-24 — no conflicting product or filing; see register) · ADR-003 ratification ✅ · privacy statement + issue templates ✅ · public repo + Sponsors/FUNDING verified ✅. Owner decision 2026-07-24: first public tag is a **v0.9.0 pre-release beta** (hardware matrix completes before v1.0.0).
 
 ## 2. Version & changelog
 
@@ -34,7 +34,7 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 - [ ] Clean release build: `swift build -c release` for **both** products (`DockKeeper`, `dockkeeper-cli`).
 - [ ] Assemble bundle: `VERSION=x.y.z SIGNING_IDENTITY="Developer ID Application: …" Scripts/build-app.sh release` (hardened runtime applied automatically with a real identity).
 - [x] Developer ID Application certificate present ✅ (2026-07-23 — "Christopher Pishaki", team `PG8VP4PTGV`, already in the keychain from the owner's other apps; signed build verified: hardened-runtime flag set, Designated Requirement satisfied, signed DMG cut).
-- [ ] App Intents metadata (`Metadata.appintents`) packaged so Shortcuts/Siri list the intents — `appintentsmetadataprocessor` is present in the toolchain (CONFIRMED) but plain `swift build` emits no const-values inputs; identified path: drive the release build through `xcodebuild` against Package.swift, which runs the extractor. Until then the `dockkeeper://` URL scheme is the working automation path (DK-FR-010 note).
+- [ ] App Intents metadata (`Metadata.appintents`) — **attempted 2026-07-24 and root-caused**: the `ExtractAppIntentsMetadata` phase runs only for Xcode *app targets*; neither `swift build` nor `xcodebuild` against an SPM *executable product* triggers it (CONFIRMED — clean xcodebuild produced no metadata and logged no extraction step). Proper fix (v1.1): a minimal Xcode app-target shell embedding the package. Until then Shortcuts discovery is not guaranteed; the `dockkeeper://` URL scheme is the working automation path (noted in release notes).
 - [ ] Entitlements reviewed — no sandbox entitlement (would break `killall`/`dlsym` — ADR-002); nothing unexpected added.
 - [ ] `codesign --verify --strict --verbose=2` passes on app and CLI.
 - [ ] Universal binary confirmed if shipping Intel support (INFERRED unproblematic — verify first time, ADR-001).
