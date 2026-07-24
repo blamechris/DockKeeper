@@ -220,8 +220,8 @@ stateDiagram-v2
     Monitoring --> PreferredDisplayMissing: display disconnect event
     Restoring --> Degraded: CoreDock unavailable (fallback in use)
     Degraded --> Monitoring: CoreDock resolves again (relaunch)
-    Monitoring --> Paused: user pauses (planned)
-    Paused --> Monitoring: resume / timer
+    Monitoring --> Paused: user pauses (menu / hotkey — DK-FR-009)
+    Paused --> Starting: resume (manual / timer) → reconcile
     Restoring --> Error: retries exhausted
     Error --> Monitoring: next event or manual retry
     Monitoring --> Disabled: user disables
@@ -239,7 +239,7 @@ States (all PROPOSED except where noted):
 | Restoring | A reconcile pass is in flight (retry ladder may be active) | — (must be invisible; no oscillation) |
 | PreferredDisplayMissing | Edge enforced; pin target not connected — **no fallback pinning occurs** (§7.4) | Menu note: "preferred display isn't connected" (copy exists in v0.1) |
 | Degraded | Private API unavailable; `defaults`+restart fallback active | Menu note; CLI `status` already reports this (v0.1 ✅) |
-| Paused | Temporarily suspended without losing settings (planned affordance, e.g. "Pause for 1 hour") | Distinct icon |
+| Paused | Temporarily suspended without losing settings ("Pause for 15 Minutes" / "1 Hour" / "Until Resumed"; optional ⌃⌥⌘D hotkey) — corrections stop until resume, then a full reconcile re-enforces. Reachable only from a non-disabled state; resume routes back through `Starting`. Implemented 2026-07-23 (DK-FR-009, M10) | Distinct icon (`pause.rectangle`) |
 | Error | Retry ladder exhausted without convergence | Menu note + last error |
 
 ### 5.2 Tracked state

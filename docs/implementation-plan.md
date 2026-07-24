@@ -110,6 +110,18 @@ The former "top post-v1 candidate" (TDD open question #11) is shipped as an opt-
 
 **Acceptance met (unit level):** max-overlap assignment (incl. straddle), rig-geometry delta, restore-plan (affected/unaffected/missing displays), tolerance matching, and settings-default all unit-green ([WindowLayoutTests.swift](../Tests/DockKeeperTests/WindowLayoutTests.swift); 76 tests total passing). The AX write path's coordinate-system assumption is **INFERRED** — hardware validation folds into **M6** (does `kAXPositionAttribute` restore windows exactly on the pinned rig).
 
+## M10 — Pause & temporary Dock move (parity gap G4, DK-FR-009, targets v1.1) ✅ code complete (2026-07-23)
+
+The cheapest parity win ([parity assessment](parity-assessment.md) recommended order #1): makes the reserved `Paused` state (TDD §5.1) reachable and adds an optional zero-permission hotkey. **No ADR** — no architectural deviation: pause reuses the existing pure `RecoveryMachine` + injected-scheduler coordinator; the hotkey mirrors the established `Unmanaged` C-callback pattern (DockMonitor's CG callback). The "temporary move" story is exactly pause → drag via normal macOS → resume → full reconcile re-enforces.
+
+- ✅ `RecoveryMachine.notePaused()` / `noteResumed()` — pure transitions; `Paused` reachable only from a non-disabled state; resume → `.starting` so the follow-up reconcile re-derives steady state. Machine stays timer-free.
+- ✅ `RecoveryCoordinator.pause(for:)` / `resume()` + readable `pausedUntil` / `isPaused`; auto-resume via the injected `schedule` closure with a **pause-generation counter** (manual resume or a second pause strands the stale timer — same pattern as reconcile generations). `resume()` triggers `requestReconcile()`; `disable()` strands a pending auto-resume timer.
+- ✅ `HotKeyCenter` (@MainActor, app target): thin Carbon `RegisterEventHotKey`/`UnregisterEventHotKey` wrapper, ⌃⌥⌘D fixed, C-callback trampoline via `GetEventDispatcherTarget`/`InstallEventHandler`. Registered only while the setting is on. Customization deferred (future work).
+- ✅ `Settings.pauseHotkeyEnabled` (Bool, default **false**, registered) — no surprise global hotkey (kickoff rule 20).
+- ✅ AppState published `isPaused` / `pausedUntil` mirrors (driven by `onStateChange` + coordinator queries); menu pause/resume section (hidden while disabled); Advanced-tab toggle with combo-naming caption; hotkey and menu share one toggle path; `FileDiagnostics` note on pause/resume.
+
+**Acceptance met (unit level):** machine pause/resume transitions incl. from-disabled rejection, and coordinator orchestration — strand-on-pause, ignore-events-while-paused, auto-resume fires reconcile via the fake scheduler, manual-resume strands the stale auto-resume timer, second-pause supersedes — all unit-green ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift); 87 tests total passing). The Carbon registration and menu wiring are manual (system-level, out of unit scope), folding into **M6**.
+
 ---
 
 ## Cross-cutting debt (fold into the touching milestone)

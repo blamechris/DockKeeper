@@ -12,7 +12,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 ## Verdict, up front
 
 - **Replacement for this owner's setup (stacked portrait, left/right Dock): achieved.** Pinning, edge lock, recovery, identity, CLI all work today — in the macOS default mode, with zero permissions, on a topology where DockLock's own preferences flag incompatibility (P-015).
-- **Feature-for-feature parity with DockLock Plus: not yet.** Eight gaps remain (G1–G8 below). None blocks v1.0; the recommended attack order is at the bottom.
+- **Feature-for-feature parity with DockLock Plus: not yet.** Seven gaps remain (G1–G3, G5–G8 below); **G4 shipped 2026-07-23** (pause + optional hotkey, DK-FR-009). None blocks v1.0; the recommended attack order is at the bottom.
 - **DockKeeper already exceeds DockLock in six areas** — including two capabilities their unreleased "Pro" edition only *advertises*.
 
 ## Head-to-head
@@ -31,7 +31,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | Launch at login | ✓ (macOS 12+) | ✓ (`SMAppService`) | Parity |
 | CLI | ✓ paid (Plus) | ✓ free | Parity (free) |
 | Hide own icons / discrete mode | ✓ paid | menu-bar-only app by design | Parity-ish (n/a) |
-| Temporary Dock move via modifier/hotkey | ✓ (Lite paid) | ✗ | **Gap G4** |
+| Temporary Dock move via modifier/hotkey | ✓ (Lite paid) | ✓ pause + optional ⌃⌥⌘D hotkey (DK-FR-009) | **G4 shipped** 2026-07-23 (Parity; free, zero-permission) |
 | Hide Dock during screen sharing / meetings | ✓ (Lite) | ✗ | **Gap G5** |
 | Follow mouse | ✓ (Plus) | ✗ deferred | **Gap G2** |
 | Follow active window / app | ✓ (Plus) | ✗ deferred | **Gap G3** |
@@ -47,7 +47,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | G1 | **Bottom-Dock lock in separate-Spaces mode** | The big one — DockLock's core for default-config users. Needs the summon-lock mechanism spike ([separate-spaces-pinning](spikes/separate-spaces-pinning.md) queued candidates: pointer summon, AX, killall-relocation); likely needs opt-in Accessibility; own ADR. Note: macOS itself makes this fragile on stacked topologies (their own `warn_incompatible_display` — P-015). |
 | G2 | Follow mouse | After G1. For left/right Docks it would mean a main-relocation per pointer-display change — a re-base storm (window shuffles each hop) that likely fails the reliability bar; for bottom Docks it needs G1's mechanism. PROPOSED: treat as G1-dependent, possibly left/right-excluded. |
 | G3 | Follow active window/app | Needs Accessibility (focused-window geometry — TDD §10 anticipated this). After G1/G2. |
-| G4 | Temporary-move hotkey / pause | **Cheapest win.** `RegisterEventHotKey` is public and permission-free; the state machine already reserves `Paused`. PROPOSED next feature after current work. |
+| ~~G4~~ | ~~Temporary-move hotkey / pause~~ | **✅ Shipped 2026-07-23** (DK-FR-009, M10). Pause (15 min / 1 hour / until resumed) + "Resume Now", optional ⌃⌥⌘D hotkey (OFF by default). `RegisterEventHotKey` public and permission-free as predicted; made the reserved `Paused` state real; no new mechanism, no ADR. Unit-tested (machine transitions + coordinator orchestration). |
 | G5 | Hide Dock during screen sharing | Needs a capture-detection spike (candidate public signals exist; UNKNOWN reliability). Auto-hide toggling via `CoreDockSetAutoHideEnabled` already resolves (spike-confirmed symbol). |
 | G6 | Shortcuts + URL scheme | Straightforward: AppIntents (public) + a URL-scheme handler over the existing engine. |
 | G7 | Raycast extension | Separate TypeScript deliverable against the CLI/URL scheme; post-first-release. |
@@ -55,7 +55,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 
 ## Recommended order
 
-1. **G4** (hotkey pause/temporary move) — days-scale, zero permissions, uses reserved machinery.
+1. ~~**G4** (hotkey pause/temporary move)~~ — **✅ done 2026-07-23** (zero permissions, used the reserved machinery, as predicted).
 2. **G6** (Shortcuts + URL scheme) — small, makes G7 possible.
 3. **G1** (bottom-mode lock) — the flagship gap; spike first, own ADR, likely opt-in AX.
 4. **G5** (screen-share hide) — spike, then small feature.
