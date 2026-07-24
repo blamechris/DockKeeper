@@ -96,14 +96,35 @@ support isn't just a differentiator here — a left/right Dock may be the *only*
 edge that can host/summon on the upper display of a stacked pair. Test queued:
 set Dock edge to left (CLI), attempt summon at the Dell's free left edge.
 
+## Bottom-mode (G1) probe results — 2026-07-23, second session
+
+| Candidate / probe | Result |
+|---|---|
+| **killall-relocation** (park pointer on Dell → restart Dock) | ✗ **FALSIFIED** — the restarted Dock reappeared on the previous host (laptop), not the pointer's display. CONFIRMED on-rig. |
+| **`CoreDockGetRect(CGRect*)`** (signature verified by careful call) | ✓ **works** — returned the Dock's exact global rect (origin (382,1039), 963×78 = centered, bottom of laptop, height == the 78 pt visibleFrame inset). A second, corroborating host-detection signal. CONFIRMED. |
+
+**Sharpened G1 scope (INFERRED, important):** on stacked arrangements where
+the target display's bottom edge is shared, even a *real* pointer cannot
+summon the Dock there — so any summon-based mechanism (synthesized events
+included) is likely impossible on such topologies, which is presumably exactly
+why DockLock ships `warn_incompatible_display`. G1 should therefore target
+only topologies where the preferred display has a **free bottom edge**
+(detectable from pure geometry), with honest copy otherwise ("that display's
+bottom edge borders another screen — use a left/right Dock to pin there").
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
       **failed on this topology** (shared edge; see field observations).
+- [x] ~~killall-relocation candidate~~ — falsified (table above).
+- [x] ~~`CoreDockGetRect` read-only call~~ — verified; usable as a detector.
 - [ ] **Side-by-side test**: temporarily rearrange Dell beside laptop
-      (programmatic, reversible), retry bottom summon on the freed edge.
-- [ ] **Left-edge test**: `dockkeeper lock left`, attempt summon at the Dell's
-      free left edge in the current stacked arrangement.
+      (programmatic, reversible), retry bottom summon on the freed edge —
+      also decides whether free-bottom-edge topologies are G1-viable at all.
+- [ ] Warp-only vs synthesized-event summon experiment on a free bottom edge
+      (the latter needs a one-time dev-machine Accessibility grant).
+- [ ] SkyLight/HIServices export enumeration for dock-display symbols beyond
+      the guessed names (resolve-only).
 - [ ] Careful `CoreDockGetRect` read-only call (probe script only).
 - [ ] Warp-only summon experiment; if inert, event-synthesis experiment (needs
       a one-time Accessibility grant **for the dev machine only** — a product

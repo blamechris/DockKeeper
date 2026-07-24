@@ -52,6 +52,8 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 | **Bottom Dock does NOT follow main (Spaces ON)** | ✅ CONFIRMED (stayed put through a main swap) | 1 |
 | Pointer summon: shared bottom edge (stacked) / free left edge | ✅ CONFIRMED fails for both (owner-observed) | 1 |
 | Leftmost-arrangement hypothesis for left Dock | ✅ falsified | 1 |
+| killall-relocation candidate (bottom Dock, pointer parked on Dell) | ✅ falsified — restarted Dock returns to previous host | 2 |
+| `CoreDockGetRect` signature + accuracy | ✅ CONFIRMED (963×78 at (382,1039), matches insets exactly) | 2 |
 | **Dock follows main display (Spaces OFF)** | ⏳ pending Spaces-OFF logout (strongly corroborated by the Spaces-ON left-Dock result) | — |
 | Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
 | Edge lock survives display events (2-display, app running) | ⏳ | — |
