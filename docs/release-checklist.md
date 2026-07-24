@@ -41,8 +41,8 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 
 ## 4. Notarize & staple
 
-- [ ] ⚙️ `notarytool` credentials configured once (the **last** owner-gated setup step): `xcrun notarytool store-credentials dockkeeper-notary --apple-id <developer-account-apple-id> --team-id PG8VP4PTGV` — prompts for an app-specific password (generate at account.apple.com ▸ Sign-In and Security).
-- [ ] `Scripts/notarize.sh dist/DockKeeper-<version>.dmg` — submits, waits, staples, validates. First run validates the TDD's INFERRED "no entitlement conflicts" claim — record the result in the decision log.
+- [x] `notarytool` credentials configured ✅ (2026-07-23, profile `dockkeeper-notary`; required accepting an updated Apple Developer agreement first — 403 until it propagated).
+- [ ] `Scripts/notarize.sh dist/DockKeeper-<version>.dmg` — submits, waits, staples, validates; fails fast with the notary log on rejection. **Pipeline validated 2026-07-23**: submission `b981d4de` Accepted, stapled, and the mounted app assessed `Notarized Developer ID` — the TDD's "no entitlement conflicts" claim is CONFIRMED (first attempt `eb36ef6c` was Invalid solely for the then-unsigned CLI; fixed in `package-dmg.sh`).
 - [ ] Gatekeeper check on a clean machine/VM: `spctl --assess --type execute` passes; app launches from `~/Downloads` without warnings beyond the standard first-open dialog.
 
 ## 5. Package

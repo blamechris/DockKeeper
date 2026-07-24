@@ -46,5 +46,11 @@ echo "==> Creating $DMG"
 hdiutil create -volname "DockKeeper $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG" > /dev/null
 rm -rf "$STAGE"
 
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    # Signing the container too keeps `spctl --type open` quiet; the ticket
+    # staple is what actually satisfies Gatekeeper.
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG"
+fi
+
 echo "==> Checksum (for release notes and Casks/dockkeeper.rb):"
 shasum -a 256 "$DMG"

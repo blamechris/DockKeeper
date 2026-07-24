@@ -486,7 +486,7 @@ Onboarding-completion flag: not needed (no onboarding flow; the app is functiona
 
 | Channel | Verdict | Reasoning |
 |---|---|---|
-| **Developer ID direct download** (notarized `.dmg`/`.zip`) | **Primary — PROPOSED (ADR-002)** | No sandbox; private-API `dlsym` and `killall` both work; hardened runtime + notarization required and unproblematic (no entitlement conflicts known — INFERRED, verify at first notarization) |
+| **Developer ID direct download** (notarized `.dmg`/`.zip`) | **Primary — ADR-002, validated** | No sandbox; private-API `dlsym` and `killall` both work; hardened runtime + notarization **CONFIRMED unproblematic 2026-07-23** — first submission passed Apple's scan with zero issues on the app (submission `b981d4de`: Accepted, stapled, Gatekeeper `Notarized Developer ID`) |
 | **Homebrew Cask** | **Yes, alongside direct** | Cask points at the notarized artifact; also solves the `dockkeeper` CLI install/symlink (build product is `dockkeeper-cli` to avoid the case-insensitive collision with the app binary — already handled ✅) |
 | Mac App Store | **No for v1** | Sandbox blocks `killall` (signaling other processes) — CONFIRMED sandbox policy; private-API use fails review — CONFIRMED App Store policy; a CoreDock-free sandboxed build would have *no* working restore mechanism (defaults write to another app's domain + no restart = nothing). Revisit only if a supported mechanism appears |
 | Source build (`swift build`) | Supported for developers | Documented caveat: `SMAppService` login item needs the packaged `.app` (✅ surfaced in-app today) |
