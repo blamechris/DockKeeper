@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import ApplicationServices  // AXIsProcessTrusted / kAXTrustedCheckOptionPrompt
 import DockKeeperCore
 
 /// Observable bridge between SwiftUI and the `DockKeeperCore` engine.
@@ -85,6 +86,25 @@ final class AppState: ObservableObject {
         didSet { settings.verboseLogging = verboseLogging }
     }
 
+    /// Opt-in window restore across a pin (ADR-010). Enabling without the
+    /// Accessibility grant prompts once (the caption is the contextual
+    /// explanation shown *before* this point — TDD §10); the toggle may stay on
+    /// while the grant is pending — `WindowLayoutPreserver` no-ops until trusted.
+    @Published var preserveWindowLayout: Bool {
+        didSet {
+            settings.preserveWindowLayout = preserveWindowLayout
+            if preserveWindowLayout, !AXIsProcessTrusted() {
+                requestAccessibilityPermission()
+            }
+            refreshAccessibilityStatus()
+        }
+    }
+
+    /// Whether Accessibility is currently granted — drives the "waiting for
+    /// permission" caption. Refreshed on toggle and when the app reactivates
+    /// (the user may grant it in System Settings and switch back).
+    @Published private(set) var accessibilityGranted = AXIsProcessTrusted()
+
     init() {
         let controller = DockController(settings: settings)
         self.controller = controller
@@ -98,6 +118,7 @@ final class AppState: ObservableObject {
         self.lockEdge = settings.lockEdge
         self.diagnosticsFileEnabled = settings.diagnosticsFileEnabled
         self.verboseLogging = settings.verboseLogging
+        self.preserveWindowLayout = settings.preserveWindowLayout
         FileDiagnostics.shared.isEnabled = settings.diagnosticsFileEnabled
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
@@ -179,6 +200,28 @@ final class AppState: ObservableObject {
     /// Open System Settings so the user can approve the login item.
     func openLoginItemsSettings() {
         LoginItemManager.openLoginItemsSettings()
+    }
+
+    /// Re-check the Accessibility grant and publish it if changed. Called from
+    /// the Advanced tab on appear and on app reactivation.
+    func refreshAccessibilityStatus() {
+        let granted = AXIsProcessTrusted()
+        if granted != accessibilityGranted { accessibilityGranted = granted }
+    }
+
+    /// Deep-link to the Accessibility pane so the user can grant the permission.
+    func openAccessibilitySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Explain-then-prompt: the caption is the contextual explanation, shown
+    /// before the user enables the toggle; this fires the system prompt once.
+    private func requestAccessibilityPermission() {
+        // Literal value of `kAXTrustedCheckOptionPrompt` — referencing the SDK
+        // global directly is a Swift 6 concurrency-unsafe shared-mutable read.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     /// Reveal the diagnostics file in Finder (support-bundle flow).

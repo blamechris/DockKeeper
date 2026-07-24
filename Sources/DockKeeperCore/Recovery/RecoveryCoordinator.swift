@@ -97,7 +97,20 @@ public final class RecoveryCoordinator {
             applyPin: { id in
                 // Placement guards re-checked on a fresh snapshot inside the
                 // pinner; returns the typed outcome for the UI.
-                MainDisplayPinner().pin(toDisplayID: id, dockEdge: settings.lockEdge)
+                //
+                // Opt-in window restore (ADR-010): capture window geometry
+                // against the pre-pin display list, then move each window back
+                // after a successful re-base. No-op unless the setting is on
+                // and Accessibility is granted; never prompts from here.
+                let restoreLayout = settings.preserveWindowLayout && WindowLayoutPreserver.isTrusted()
+                let preSnapshot = restoreLayout
+                    ? WindowLayoutPreserver.snapshot(displays: DisplayManager.activeDisplays())
+                    : nil
+                let outcome = MainDisplayPinner().pin(toDisplayID: id, dockEdge: settings.lockEdge)
+                if let preSnapshot, outcome == .pinned {
+                    WindowLayoutPreserver.restore(preSnapshot, displaysAfter: DisplayManager.activeDisplays())
+                }
+                return outcome
             }
         )
     }

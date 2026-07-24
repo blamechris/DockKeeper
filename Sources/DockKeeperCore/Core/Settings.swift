@@ -23,6 +23,7 @@ public final class Settings: @unchecked Sendable {
         Keys.launchAtLogin: false,
         Keys.verboseLogging: false,
         Keys.diagnosticsFileEnabled: false,
+        Keys.preserveWindowLayout: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
         Keys.settingsVersion: 1,
@@ -39,6 +40,7 @@ public final class Settings: @unchecked Sendable {
         static let launchAtLogin = "launchAtLogin"
         static let verboseLogging = "verboseLogging"
         static let diagnosticsFileEnabled = "diagnosticsFileEnabled"
+        static let preserveWindowLayout = "preserveWindowLayout"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -143,6 +145,14 @@ public final class Settings: @unchecked Sendable {
     public var diagnosticsFileEnabled: Bool {
         get { defaults.bool(forKey: Keys.diagnosticsFileEnabled) }
         set { defaults.set(newValue, forKey: Keys.diagnosticsFileEnabled) }
+    }
+
+    /// Opt-in window restore across a pin (ADR-010). Off by default; when on
+    /// *and* Accessibility is granted, DockKeeper moves windows back to their
+    /// original display after a main-display re-base. No-op without the grant.
+    public var preserveWindowLayout: Bool {
+        get { defaults.bool(forKey: Keys.preserveWindowLayout) }
+        set { defaults.set(newValue, forKey: Keys.preserveWindowLayout) }
     }
 
     /// Schema version hook for future migrations (current: 1).

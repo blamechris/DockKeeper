@@ -98,6 +98,18 @@ Owner-directed 2026-07-23 (ADR-008): full DockLock replacement requires pinning 
 
 **Acceptance.** Left/right pinning survives the matrix in separate-Spaces mode without oscillation (no drift source exists — the pointer can't summon left/right Docks, CONFIRMED); bottom remains an honest decline until a mechanism earns its ADR.
 
+## M9 — Window restore across a pin (opt-in comfort feature, ADR-010) ✅ code complete (2026-07-23)
+
+The former "top post-v1 candidate" (TDD open question #11) is shipped as an opt-in toggle. The main-display re-base can shuffle windows to the other screen (owner-observed); this moves them back.
+
+- ✅ `Settings.preserveWindowLayout` (Bool, default **false**, registered) — the zero-permission default is untouched.
+- ✅ `WindowLayoutPreserver` (@MainActor): `CGWindowList` snapshot of layer-0 windows (owner-PID + global bounds; **no titles/names** — §12), max-overlap display assignment, and AX restore (`kAXPositionAttribute`) gated on `AXIsProcessTrusted()`. Pure decision core (assignment/delta/plan/tolerance) split from the `CGWindowList`/AX side effects.
+- ✅ `RecoveryCoordinator` wiring: the production `applyPin` closure snapshots pre-pin, pins, and restores post-pin only on `.pinned` — inside the closure, coordinator core logic and tests untouched.
+- ✅ Advanced-tab toggle with contextual caption, explain-then-prompt-once on enable (never from the core), a "waiting for permission" note + deep link to the Accessibility pane, and `accessibilityGranted` refreshed on toggle and app reactivation.
+- ✅ ADR-010 recorded; §10 permissions table + open question #11 + DK-FR-002 updated.
+
+**Acceptance met (unit level):** max-overlap assignment (incl. straddle), rig-geometry delta, restore-plan (affected/unaffected/missing displays), tolerance matching, and settings-default all unit-green ([WindowLayoutTests.swift](../Tests/DockKeeperTests/WindowLayoutTests.swift); 76 tests total passing). The AX write path's coordinate-system assumption is **INFERRED** — hardware validation folds into **M6** (does `kAXPositionAttribute` restore windows exactly on the pinned rig).
+
 ---
 
 ## Cross-cutting debt (fold into the touching milestone)
