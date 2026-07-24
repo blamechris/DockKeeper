@@ -1,0 +1,8 @@
+# Shows a "Sponsor" button on the GitHub repo once the account is enrolled.
+# github: activates when blamechris enrolls at https://github.com/sponsors
+# (identity/bank steps only the owner can complete). Alternatives — uncomment
+# and fill in if a different platform is chosen, then update the in-app
+# "Support Development" URL in MenuBarContent.swift to match:
+github: blamechris
+# ko_fi: <username>
+# buy_me_a_coffee: <username>

@@ -59,7 +59,11 @@ Consequences (all PROPOSED as roadmap input, none changing v1 — Decision 3 sta
 3. DockLock **Pro**'s unreleased claims (any edge, Spaces-off support, direct distribution) mirror DockKeeper's shipped v1 mechanism profile — INFERRED that both converge on non-sandboxed approaches for those capabilities.
 4. R-010 (name/trademark) is live: an active, paid, similarly-named product family exists.
 
-## 4. Open investigation work
+## 4. Parity status
+
+Tracked separately and kept current: [parity-assessment.md](parity-assessment.md) (verdict + gap ladder G1–G8).
+
+## 5. Open investigation work
 
 - Black-box test on a legitimately installed DockLock Lite (free tier): verify P-001/P-006 behavior, latency, and oscillation under the [hardware matrix](hardware-matrix-results.md) — turns "claimed" rows into observed facts.
 - Mine E-4 (GitHub landing) for changelog/mechanism hints (public info only).

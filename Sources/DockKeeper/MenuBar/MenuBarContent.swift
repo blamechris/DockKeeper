@@ -69,6 +69,10 @@ struct MenuBarContent: View {
         .keyboardShortcut(",")
 
         Button("Support Development") {
+            // Passive, user-initiated link only (kickoff non-negotiable 3) —
+            // the repo's Sponsor button (.github/FUNDING.yml) carries the
+            // donation path. Release-checklist gate: this URL must be live
+            // (repo published) before the first public release.
             if let url = URL(string: "https://github.com/blamechris/DockKeeper") {
                 NSWorkspace.shared.open(url)
             }
