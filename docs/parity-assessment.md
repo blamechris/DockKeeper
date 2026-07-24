@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Point-in-time assessment (repo state `63e00f2` + window-restore feature in flight) |
+| **Status** | Living assessment — last updated 2026-07-23 (window-restore ADR-010 and G4 pause/hotkey both shipped) |
 | **Date** | 2026-07-23 |
 | **Owner** | blamechris |
 | **Inputs** | [Product investigation](product-investigation.md) (E-1…E-5), [hardware-matrix results](hardware-matrix-results.md), shipped code + 66-test suite |
@@ -26,7 +26,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 | Works with a single display (edge lock) | ✗ (needs ≥2 displays) | ✓ | **DockKeeper leads** |
 | Recovery after sleep/wake/display changes | ✓ claimed | ✓ event-driven + retry ladder + oscillation guard, unit-tested | Parity (ours verified, theirs untested claim) |
 | Permissions | Accessibility **required** | None (AX strictly opt-in for window restore only) | **DockKeeper leads** |
-| Windows kept in place on pin | n/a (different mechanism) | 🟡 opt-in restore feature in flight (ADR-010) | in progress |
+| Windows kept in place on pin | n/a (different mechanism) | ✓ opt-in restore shipped (ADR-010; only opt-in permission in the app) | **DockKeeper-only capability** |
 | Menu-bar controls, enable/disable | ✓ | ✓ | Parity |
 | Launch at login | ✓ (macOS 12+) | ✓ (`SMAppService`) | Parity |
 | CLI | ✓ paid (Plus) | ✓ free | Parity (free) |
