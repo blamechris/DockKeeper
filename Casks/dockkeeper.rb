@@ -12,8 +12,6 @@ cask "dockkeeper" do
   desc "Keeps the macOS Dock on the edge and display you chose"
   homepage "https://github.com/blamechris/DockKeeper"
 
-  depends_on macos: ">= :sonoma"
-
   app "DockKeeper.app"
   binary "dockkeeper"
 
@@ -22,6 +20,8 @@ cask "dockkeeper" do
   ]
 
   caveats <<~EOS
+    Requires macOS 14 (Sonoma) or later.
+
     DockKeeper is free and open source (MIT), with no telemetry and no network
     use. Launch at Login is approved in System Settings › Login Items.
   EOS
