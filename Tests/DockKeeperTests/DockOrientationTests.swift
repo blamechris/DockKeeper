@@ -44,11 +44,8 @@ struct SettingsTests {
 
     /// Isolated defaults so tests don't touch the real user domain. A unique
     /// suite name per call keeps parallel tests from racing on shared state.
-    private func makeSettings() -> Settings {
-        let suiteName = "com.dockkeeper.tests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: suiteName)!
-        suite.removePersistentDomain(forName: suiteName)
-        return Settings(defaults: suite)
+    private func makeSettings(_ test: String = #function) -> Settings {
+        makeTestSettings("DockOrientation", test)
     }
 
     @Test("Registers sensible defaults")

@@ -325,7 +325,7 @@ Then the menu-bar icon is visually distinct per state
 
 **Rationale.** Shipped early (kickoff deferred it post-v1 — harmless, keep; TDD A.3). Useful for scripting and headless fixes.
 
-**Preconditions.** Same-user session (settings shared via standard defaults domain — CONFIRMED working). The build product is `dockkeeper-cli` to avoid the case-insensitive product-name collision with the app (CONFIRMED — git history).
+**Preconditions.** Same-user session. Both processes open the **explicitly named** `com.dockkeeper.app` suite (`Settings.suiteName`) — *not* `UserDefaults.standard`, which resolves by bundle identifier for the app but by process name for an unbundled executable. v0.9.0 shipped on `.standard`, so the CLI wrote to its own `dockkeeper`/`dockkeeper-cli` domain and `dockkeeper unlock` never reached the running app (CONFIRMED by the two separate plists on disk; fixed 2026-07-25, regression-tested by the shared-domain assertion in `ControlCommandTests`). The build product is `dockkeeper-cli` to avoid the case-insensitive product-name collision with the app (CONFIRMED — git history).
 
 **Trigger.** User invocation.
 

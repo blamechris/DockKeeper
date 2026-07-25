@@ -231,13 +231,20 @@ public enum WindowLayoutPreserver {
 
     /// Current global frame of an AX window, or `nil` if either attribute reads
     /// fail (window closed, app unresponsive).
+    ///
+    /// The attribute values cross a process boundary — another application
+    /// answers these reads — so the `AXValue` casts are conditional. A buggy or
+    /// hostile app returning an unexpected type must not take DockKeeper down
+    /// with it; it just means we can't place that one window.
     private static func axFrame(of window: AXUIElement) -> CGRect? {
         var positionValue: CFTypeRef?
         var sizeValue: CFTypeRef?
         guard
             AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
             AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
-            let positionAX = positionValue, let sizeAX = sizeValue
+            let positionAX = positionValue, let sizeAX = sizeValue,
+            CFGetTypeID(positionAX) == AXValueGetTypeID(),
+            CFGetTypeID(sizeAX) == AXValueGetTypeID()
         else { return nil }
 
         var origin = CGPoint.zero

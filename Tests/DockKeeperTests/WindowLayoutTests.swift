@@ -148,11 +148,8 @@ struct SnapshotBuildTests {
 @Suite("Settings.preserveWindowLayout")
 struct PreserveWindowLayoutSettingTests {
 
-    private func makeSettings() -> Settings {
-        let name = "com.dockkeeper.tests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: name)!
-        suite.removePersistentDomain(forName: name)
-        return Settings(defaults: suite)
+    private func makeSettings(_ test: String = #function) -> Settings {
+        makeTestSettings("PreserveWindowLayout", test)
     }
 
     @Test("Defaults to false (zero-permission default)")

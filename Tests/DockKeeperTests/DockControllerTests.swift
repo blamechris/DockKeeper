@@ -28,11 +28,8 @@ private final class RecordingAdapter: DockAdapter, @unchecked Sendable {
 @Suite("DockController")
 struct DockControllerTests {
 
-    private func makeSettings() -> Settings {
-        let suiteName = "com.dockkeeper.tests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: suiteName)!
-        suite.removePersistentDomain(forName: suiteName)
-        return Settings(defaults: suite)
+    private func makeSettings(_ test: String = #function) -> Settings {
+        makeTestSettings("DockController", test)
     }
 
     @Test("Drift is corrected through the primary adapter")

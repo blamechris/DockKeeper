@@ -29,6 +29,15 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 > the menu bar (expected); with it **on** (default), every display keeps its own
 > menu bar and left/right Docks pin cleanly — a bottom Dock can't be pinned in
 > that mode, and DockKeeper says so instead of fighting the OS.
+>
+> **This change is permanent, and turning DockKeeper off does not undo it.**
+> Pinning writes the display arrangement the same way System Settings does, so
+> your chosen display stays the main one after you disable or uninstall
+> DockKeeper. That is deliberate — silently rearranging your displays at quit
+> would be worse — but it means the setting outlives the app. To put it back,
+> drag the white menu-bar strip in System Settings › Displays › Arrange.
+> **Edge locking alone changes nothing permanently**; only preferred-display
+> pinning does.
 
 ### Planned
 
@@ -45,6 +54,35 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 ```sh
 brew install --cask blamechris/tap/dockkeeper
 ```
+
+## Automation
+
+The CLI and the app share one settings store, so either can drive the other:
+
+```sh
+dockkeeper lock left
+dockkeeper unlock
+dockkeeper status
+```
+
+The same commands are available as a URL scheme, for Shortcuts, Raycast, Alfred,
+or anything else that can open a URL:
+
+```
+dockkeeper://lock?edge=bottom|left|right
+dockkeeper://unlock
+dockkeeper://pause              (until resumed)
+dockkeeper://pause?minutes=15   (capped at 24h)
+dockkeeper://resume
+```
+
+> **Note on the URL scheme:** it is unauthenticated by design — any process on
+> your Mac that can open a URL can unlock or pause DockKeeper, with no prompt.
+> The worst case is that your Dock stops being held in place, and anything able
+> to run `open` on your Mac can already do more than that. It reads and changes
+> nothing else, and it is never reachable from the network. If you would rather
+> not have the surface at all, delete the `CFBundleURLTypes` key from
+> `DockKeeper.app/Contents/Info.plist` — everything else keeps working.
 
 ## Requirements
 
