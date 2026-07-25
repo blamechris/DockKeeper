@@ -18,3 +18,7 @@ DerivedData/
 # Editor
 .vscode/
 *.swp
+
+# Agent tooling — skills and their compiled targets are tracked; these are local
+.claude/worktrees/
+.claude/settings.local.json
