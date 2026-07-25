@@ -30,6 +30,16 @@ TARGET="${TARGET%/}"
 
 [[ -e "$TARGET" ]] || { echo "error: $TARGET not found"; exit 1; }
 
+# Everything that is not a .app takes the dmg path below, so reject anything
+# else here rather than failing later with a notarytool error about the format.
+case "$TARGET" in
+    *.app|*.dmg) ;;
+    *)  echo "error: unsupported artifact '$TARGET' — expected a .app bundle or a .dmg."
+        echo "       notarytool also accepts .zip and .pkg, but this script only drives"
+        echo "       the DockKeeper app-then-dmg flow (release checklist §4-§5)."
+        exit 1 ;;
+esac
+
 ZIP=""
 cleanup() { [[ -n "$ZIP" ]] && rm -f "$ZIP"; return 0; }
 trap cleanup EXIT

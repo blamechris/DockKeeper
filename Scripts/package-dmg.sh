@@ -85,7 +85,13 @@ if [[ "$SIGNING_IDENTITY" != "-" && "${ALLOW_UNSTAPLED_APP:-0}" != "1" ]]; then
     hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT" > /dev/null
     STAPLE_OK=0
     if xcrun stapler validate "$MOUNT/DockKeeper.app" > /dev/null 2>&1; then STAPLE_OK=1; fi
-    hdiutil detach "$MOUNT" > /dev/null
+    # A transient busy volume must not abort the release before the ticket
+    # verdict below is reported — retry with -force, then give up quietly and
+    # let the trap have a last go.
+    if ! hdiutil detach "$MOUNT" > /dev/null 2>&1; then
+        echo "note: first detach of $MOUNT failed (busy?) — retrying with -force"
+        hdiutil detach "$MOUNT" -force > /dev/null 2>&1 || echo "warning: could not detach $MOUNT; unmount it manually"
+    fi
     rmdir "$MOUNT" 2> /dev/null || true
     trap - EXIT
     if [[ "$STAPLE_OK" != 1 ]]; then
