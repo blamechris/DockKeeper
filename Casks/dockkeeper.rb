@@ -1,11 +1,12 @@
 # Homebrew cask for DockKeeper (release checklist §7).
 #
-# Canonical copy; mirrored into blamechris/homebrew-tap at each release
-# (version + sha256 come from Scripts/package-dmg.sh output). Submit to
-# homebrew/cask central once notability requirements are met.
+# Canonical copy; mirrored into blamechris/homebrew-tap at each release. The
+# sha256 must come from Scripts/notarize.sh's final line (the stapled DMG) —
+# package-dmg.sh's hash is pre-staple and will not match what users download.
+# Submit to homebrew/cask central once notability requirements are met.
 cask "dockkeeper" do
   version "0.9.0"
-  sha256 "c9a37ed11d523aa11567664a8c281feccea8342f9c9fb27407758579ccff41f6"
+  sha256 "2639f68329939b5606d1f5b5799e9017f8e7c4d3eaca7ed3f6a3c6b3536c6137"
 
   url "https://github.com/blamechris/DockKeeper/releases/download/v#{version}/DockKeeper-#{version}.dmg"
   name "DockKeeper"

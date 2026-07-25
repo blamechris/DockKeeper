@@ -85,7 +85,7 @@ No privacy-gated permission exists in v1 (TDD §10 — CONFIRMED); Login Items a
 
 ## M7 — Release ✅ **v0.9.0 public beta shipped 2026-07-24**
 
-Tag `v0.9.0` (pre-release): notarized, stapled DMG (Gatekeeper `Notarized Developer ID`) on [GitHub Releases](https://github.com/blamechris/DockKeeper/releases/tag/v0.9.0); `brew install --cask blamechris/tap/dockkeeper` live and verified resolving. R-010 trademark reviewed and cleared. v1.0.0 follows once M6's hardware matrix and soak complete. Remaining v1.1 packaging item: App Intents metadata (needs an Xcode app-target shell — root-caused; URL scheme works today).
+Tag `v0.9.0` (pre-release): notarized, stapled DMG (Gatekeeper `Notarized Developer ID`) on [GitHub Releases](https://github.com/blamechris/DockKeeper/releases/tag/v0.9.0); `brew install --cask blamechris/tap/dockkeeper` live — the tap resolved, but the cask carried the **pre-staple** sha256 and every install failed on a checksum mismatch until it was corrected 2026-07-24 (resolving ≠ installing; §7 now requires a real `brew install` before the tap is called done). R-010 trademark reviewed and cleared. v1.0.0 follows once M6's hardware matrix and soak complete. Remaining v1.1 packaging item: App Intents metadata (needs an Xcode app-target shell — root-caused; URL scheme works today).
 
 ### Pre-beta state (for the record) — pipeline completed 2026-07-23
 
