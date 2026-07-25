@@ -11,6 +11,25 @@
         "codex"
       ]
     },
+    "catchup": {
+      "hash": "3f7f775",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    },
+    "changelog": {
+      "hash": "3254376",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
     "check-pr": {
       "hash": "cc062bc",
       "installed": "2026-07-25",
@@ -40,8 +59,48 @@
         "codex"
       ]
     },
+    "fix-ci": {
+      "hash": "3768ea6",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
     "full-review": {
       "hash": "1e5962e",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "merge": {
+      "hash": "d34b05d",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "release": {
+      "hash": "3254376",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "rollback": {
+      "hash": "969295a",
       "installed": "2026-07-25",
       "profileHash": "138d576",
       "targets": [
