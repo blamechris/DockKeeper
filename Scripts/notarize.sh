@@ -43,8 +43,12 @@ fi
 SUBMISSION="$TARGET"
 if [[ "$TARGET" == *.app ]]; then
     # Ad-hoc signatures are rejected by the notary service with a much less
-    # obvious error, so fail here instead.
-    if codesign --display --verbose=2 "$TARGET" 2>&1 | grep -q 'Signature=adhoc'; then
+    # obvious error, so fail here instead. Capture first, then match: under
+    # `set -o pipefail` a `codesign | grep -q` pipeline reports grep's early
+    # exit as a SIGPIPE failure once the left side outgrows the pipe buffer,
+    # which would silently invert this guard.
+    SIG_INFO="$(codesign --display --verbose=2 "$TARGET" 2>&1 || true)"
+    if [[ "$SIG_INFO" == *"Signature=adhoc"* ]]; then
         echo "error: $TARGET is ad-hoc signed — rebuild with SIGNING_IDENTITY set:"
         echo "       VERSION=x.y.z SIGNING_IDENTITY='Developer ID Application: …' Scripts/build-app.sh release"
         exit 1
@@ -78,13 +82,16 @@ if [[ "$TARGET" == *.app ]]; then
 else
     spctl --assess --type open --context context:primary-signature -v "$TARGET" || true
 
+    echo "==> Verify the copied-out app still carries its ticket (checklist §6):"
+    echo "       hdiutil attach $TARGET && xcrun stapler validate /Volumes/DockKeeper*/DockKeeper.app"
+    echo "==> First run validates the TDD's 'no entitlement conflicts' claim — record the result in docs/decision-log.md."
+
     # Stapling rewrites the DMG, so the checksum package-dmg.sh printed is
     # already stale by now. This one is the shipped bytes — it is what goes in
     # the cask and the release notes (v0.9.0 shipped with the pre-staple hash
     # and `brew install` failed on a checksum mismatch until it was corrected).
+    # Keep this LAST: the checklist and the cask both say "notarize.sh's final
+    # line", and that instruction is load-bearing.
     echo "==> Checksum of the STAPLED dmg — use this one in Casks/dockkeeper.rb:"
     shasum -a 256 "$TARGET"
-    echo "==> Verify the copied-out app still carries its ticket (checklist §6):"
-    echo "       hdiutil attach $TARGET && xcrun stapler validate /Volumes/DockKeeper*/DockKeeper.app"
-    echo "==> Done. First run validates the TDD's 'no entitlement conflicts' claim — record the result in docs/decision-log.md."
 fi

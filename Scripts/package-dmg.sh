@@ -22,6 +22,14 @@ DIST="$ROOT/dist"
 APP="$DIST/DockKeeper.app"
 [[ -d "$APP" ]] || { echo "error: $APP not found — run Scripts/build-app.sh first"; exit 1; }
 
+# The override disables both the pre-package gate and the post-package ticket
+# check, which is enough to reproduce the v0.9.0 defect. Say so loudly — a
+# bypass that prints nothing is one an unattended release can ship through.
+if [[ "$SIGNING_IDENTITY" != "-" && "${ALLOW_UNSTAPLED_APP:-0}" == "1" ]]; then
+    echo "WARNING: ALLOW_UNSTAPLED_APP=1 — staple gate and packaged-ticket check are DISABLED."
+    echo "WARNING: the resulting DMG may contain an app with no notarization ticket. Do not ship it."
+fi
+
 # Only release builds can be stapled at all — ad-hoc builds skip the gate.
 if [[ "$SIGNING_IDENTITY" != "-" && "${ALLOW_UNSTAPLED_APP:-0}" != "1" ]]; then
     if ! xcrun stapler validate "$APP" > /dev/null 2>&1; then
@@ -71,11 +79,15 @@ rm -rf "$STAGE"
 if [[ "$SIGNING_IDENTITY" != "-" && "${ALLOW_UNSTAPLED_APP:-0}" != "1" ]]; then
     echo "==> Verifying the packaged app kept its ticket"
     MOUNT="$(mktemp -d)"
+    # Detach on any exit path — an abort between attach and detach would leave
+    # the image mounted, mid-release, with the DMG still unsigned.
+    trap 'hdiutil detach "$MOUNT" > /dev/null 2>&1 || true; rmdir "$MOUNT" 2> /dev/null || true' EXIT
     hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT" > /dev/null
     STAPLE_OK=0
     if xcrun stapler validate "$MOUNT/DockKeeper.app" > /dev/null 2>&1; then STAPLE_OK=1; fi
     hdiutil detach "$MOUNT" > /dev/null
     rmdir "$MOUNT" 2> /dev/null || true
+    trap - EXIT
     if [[ "$STAPLE_OK" != 1 ]]; then
         echo "error: the app inside $DMG has no ticket — it was lost during packaging."
         exit 1
