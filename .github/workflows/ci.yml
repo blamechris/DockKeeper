@@ -23,13 +23,46 @@ jobs:
       # DK-NFR-002 / DK-PRIV-001 gate: the binaries must reference no
       # networking APIs. The only outbound action in the product is the
       # user-initiated "Support Development" link (NSWorkspace.open).
+      #
+      # Checks both halves, because the high-level-API grep alone was porous:
+      # raw BSD sockets, getaddrinfo, and a hand-rolled TLS client would all
+      # have sailed straight through it while "zero network, ever" stayed on
+      # the README.
+      #
+      # Known limit: symbol checks only see what THIS binary imports. A
+      # dependency could do the networking instead and the greps would stay
+      # quiet (/usr/bin/curl passes them — libcurl does the work). The
+      # otool -L check is the backstop, and it holds only while the package
+      # keeps zero third-party dependencies. Revisit if that ever changes.
       - name: No-networking-symbols gate
         run: |
+          # High-level networking APIs, then the raw syscalls beneath them.
+          # Anchored (grep -x) so substrings of unrelated Swift mangled names
+          # — "Sendable" contains "send" — can't trip it.
+          HIGH_LEVEL='NSURLSession|NSURLConnection|CFNetwork|NWConnection|NWListener|NWBrowser|CFSocket|CFReadStream|CFWriteStream|SSLHandshake|SecureTransport'
+          RAW_SYSCALLS='_(socket|socketpair|connect|connectx|bind|listen|accept|send|sendto|sendmsg|recv|recvfrom|recvmsg|getaddrinfo|gethostbyname|res_query|res_search)'
+
+          fail=0
           for bin in dist/DockKeeper.app/Contents/MacOS/DockKeeper .build/release/dockkeeper-cli; do
             echo "checking $bin"
-            if nm -u "$bin" | grep -iE 'NSURLSession|CFNetwork|NWConnection|NWListener|CFSocket' ; then
-              echo "::error::networking symbol referenced in $bin (DK-NFR-002 violation)"
-              exit 1
+
+            if nm -u "$bin" | grep -iE "$HIGH_LEVEL"; then
+              echo "::error::high-level networking symbol in $bin (DK-NFR-002 violation)"
+              fail=1
+            fi
+
+            if nm -u "$bin" | grep -xE "$RAW_SYSCALLS"; then
+              echo "::error::raw network syscall in $bin (DK-NFR-002 violation)"
+              fail=1
+            fi
+
+            # A linked networking framework is a violation even with no symbol
+            # referenced yet — it is the capability we promise not to have.
+            if otool -L "$bin" | tail -n +2 | grep -E '/(CFNetwork|Network|Security)\.framework/'; then
+              echo "::error::networking framework linked into $bin (DK-NFR-002 violation)"
+              fail=1
             fi
           done
-          echo "clean: no networking symbols referenced"
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "clean: no networking symbols, syscalls, or frameworks"

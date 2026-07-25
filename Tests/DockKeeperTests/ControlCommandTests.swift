@@ -178,3 +178,30 @@ struct StatusSummaryTests {
         #expect(disabled.voiceLine.contains("DockKeeper is disabled"))
     }
 }
+
+// MARK: - Shared settings domain (DK-FR-007)
+
+@Suite("Settings shared domain")
+struct SettingsSharedDomainTests {
+
+    @Test("App and CLI resolve to one named suite, not UserDefaults.standard")
+    func sharedSuiteIsExplicit() {
+        // `.standard` resolves by bundle identifier for the app but by process
+        // name for an unbundled executable, so it silently gave the CLI its own
+        // store — v0.9.0's `dockkeeper unlock` never reached the running app.
+        // The domain must therefore be named outright.
+        #expect(Settings.suiteName == "com.dockkeeper.app")
+
+        // Prove it really is that domain: a write through the shared handle has
+        // to be visible to an independently-opened handle on the same suite,
+        // which is exactly the cross-process path the app and CLI rely on.
+        let probeKey = "__sharedDomainProbe"
+        let shared = Settings.sharedDefaults()
+        let independent = UserDefaults(suiteName: Settings.suiteName)
+
+        shared.set(4242, forKey: probeKey)
+        defer { shared.removeObject(forKey: probeKey) }
+
+        #expect(independent?.integer(forKey: probeKey) == 4242)
+    }
+}

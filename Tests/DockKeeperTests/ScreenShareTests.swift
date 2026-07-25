@@ -89,11 +89,8 @@ struct ScreenShareDecideTests {
 struct ScreenShareLifecycleTests {
 
     /// Isolated defaults so the test never touches the real user domain.
-    private func makeSettings() -> Settings {
-        let suiteName = "com.dockkeeper.tests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: suiteName)!
-        suite.removePersistentDomain(forName: suiteName)
-        return Settings(defaults: suite)
+    private func makeSettings(_ test: String = #function) -> Settings {
+        makeTestSettings("ScreenShare", test)
     }
 
     @Test("Feature is opt-in: off by default (setting-off short-circuit)")

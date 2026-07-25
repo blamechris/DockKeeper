@@ -180,16 +180,13 @@ struct DisplayIdentityResolverTests {
 @Suite("Settings display preference")
 struct SettingsDisplayPreferenceTests {
 
-    private func makeSuite() -> (UserDefaults, String) {
-        let name = "com.dockkeeper.tests.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: name)!
-        suite.removePersistentDomain(forName: name)
-        return (suite, name)
+    private func makeSuite(_ test: String = #function) -> UserDefaults {
+        makeTestDefaults("SettingsDisplayPreference", test)
     }
 
     @Test("Storing a preference persists the fingerprint and mirrors the legacy UUID key")
     func storeAndMirror() {
-        let (suite, _) = makeSuite()
+        let suite = makeSuite()
         let settings = Settings(defaults: suite)
         settings.setPreferredDisplay(fingerprint: fp(uuid: "U", vendor: 10, model: 20))
 
@@ -203,7 +200,7 @@ struct SettingsDisplayPreferenceTests {
 
     @Test("A v0.1 bare-UUID preference migrates into a fingerprint once")
     func migratesLegacyUUID() {
-        let (suite, _) = makeSuite()
+        let suite = makeSuite()
         suite.set("LEGACY-UUID", forKey: "preferredDisplayUUID")
 
         let settings = Settings(defaults: suite)
@@ -213,7 +210,7 @@ struct SettingsDisplayPreferenceTests {
 
     @Test("Unstable cg- pseudo-UUIDs are discarded on migration, never persisted (TDD §7.1)")
     func discardsPseudoUUID() {
-        let (suite, _) = makeSuite()
+        let suite = makeSuite()
         suite.set("cg-5", forKey: "preferredDisplayUUID")
 
         let settings = Settings(defaults: suite)
@@ -223,7 +220,7 @@ struct SettingsDisplayPreferenceTests {
 
     @Test("Migration never overwrites an existing fingerprint")
     func migrationIsWriteOnce() {
-        let (suite, _) = makeSuite()
+        let suite = makeSuite()
         let settings = Settings(defaults: suite)
         settings.setPreferredDisplay(fingerprint: fp(uuid: "CURRENT"))
 
@@ -235,7 +232,7 @@ struct SettingsDisplayPreferenceTests {
 
     @Test("Repair rewrites the stored fingerprint with fresh evidence (TDD §7.3)")
     func repairRewrites() {
-        let (suite, _) = makeSuite()
+        let suite = makeSuite()
         let settings = Settings(defaults: suite)
         settings.setPreferredDisplay(fingerprint: fp(uuid: "OLD", vendor: 10, model: 20, serial: 30))
 

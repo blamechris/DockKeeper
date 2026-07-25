@@ -55,7 +55,7 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 - [ ] Download → open → menu-bar item appears; no Dock icon (`LSUIElement` honored in the *shipped* plist).
 - [ ] Edge lock works; forced fallback shows `Degraded` honestly.
 - [ ] Launch at Login registers from the packaged app; `.requiresApproval` deep link works.
-- [ ] `dockkeeper status` reports correctly; CLI and app share settings.
+- [ ] `dockkeeper status` reports correctly. **Verify sharing by divergence, not agreement**: set a lock edge in the app, confirm the CLI reports *that* edge, then `dockkeeper unlock` and confirm the running app goes disabled. Matching output alone proves nothing — v0.9.0's CLI read its own domain and still printed a plausible answer, because both sides happened to fall back to the same registration default.
 - [ ] **Zero network**: network monitor shows no connections during a full exercise of the app (DK-NFR-002); CI no-networking-symbols check green (PROPOSED gate).
 - [ ] Logs contain no sensitive names (DK-PRIV-001 spot check).
 

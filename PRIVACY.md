@@ -23,12 +23,28 @@ DockKeeper is built on a simple rule: **nothing ever leaves your Mac.**
   user defaults on your Mac; the identity of your preferred display is stored
   as hardware identifiers (UUID, vendor/model/serial, display name) for
   matching only.
-- **No special permissions.** DockKeeper requests no Accessibility, screen
-  recording, or other privacy-gated permission. Launch at Login uses the
-  standard macOS Login Items mechanism, which you approve in System Settings.
+- **No permissions by default; exactly one optional ask.** Out of the box
+  DockKeeper requests no Accessibility, screen recording, or other
+  privacy-gated permission. The single exception is **Keep windows in place**
+  (Preferences ▸ Displays), which is off by default and asks for Accessibility
+  only when *you* turn it on. With it granted, DockKeeper reads window
+  positions, sizes, and owning process IDs so it can move windows back after a
+  pin — never window titles, contents, or keystrokes. Turn the setting off, or
+  revoke the permission in System Settings, and the feature silently does
+  nothing. Launch at Login uses the standard macOS Login Items mechanism,
+  which you approve in System Settings.
 
-This statement describes the app as built; the "no network" property is
-verifiable from the source (no networking APIs are referenced anywhere) and is
-enforced as a release gate. If any future feature ever needed a network
-request (for example, an optional update check), it would be off by default,
-clearly disclosed, and this statement would be updated first.
+This statement describes the app as built. Don't take the "no network" claim on
+trust — check it yourself on the copy you downloaded:
+
+```sh
+# No networking frameworks linked:
+otool -L /Applications/DockKeeper.app/Contents/MacOS/DockKeeper | grep -E 'CFNetwork|Network\.framework|Security'
+# No network syscalls referenced:
+nm -u /Applications/DockKeeper.app/Contents/MacOS/DockKeeper | grep -xE '_(socket|connect|send|recv|getaddrinfo)'
+```
+
+Both should print nothing. The same checks run as a release gate in CI. If any
+future feature ever needed a network request (for example, an optional update
+check), it would be off by default, clearly disclosed, and this statement would
+be updated first.

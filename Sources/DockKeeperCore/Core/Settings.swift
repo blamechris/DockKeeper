@@ -7,11 +7,26 @@ import Foundation
 /// observation on top via its own wrapper.
 public final class Settings: @unchecked Sendable {
 
+    /// The domain both the app and the CLI read and write.
+    ///
+    /// **Not** `UserDefaults.standard`: that resolves by bundle identifier for
+    /// the app but by *process name* for an unbundled executable, so the CLI
+    /// silently wrote to its own `dockkeeper`/`dockkeeper-cli` domain and
+    /// `dockkeeper unlock` never reached the running app (v0.9.0 bug). Naming
+    /// the suite explicitly makes the two share one store, as documented.
+    public static let suiteName = "com.dockkeeper.app"
+
+    /// The store both executables must use. Falls back to `.standard` only if
+    /// the suite cannot be opened at all, which would mean a broken container.
+    public static func sharedDefaults() -> UserDefaults {
+        UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
     public static let shared = Settings()
 
     private let defaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = Settings.sharedDefaults()) {
         self.defaults = defaults
         self.defaults.register(defaults: Self.registrationDomain())
         migratePreferredDisplayIfNeeded()
