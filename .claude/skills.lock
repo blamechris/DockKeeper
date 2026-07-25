@@ -1,0 +1,72 @@
+{
+  "registry": "blamechris/skill-templates",
+  "skills": {
+    "agent-review": {
+      "hash": "a10ef75",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "check-pr": {
+      "hash": "cc062bc",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "create-issue": {
+      "hash": "12b011f",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    },
+    "create-pr": {
+      "hash": "12b011f",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "full-review": {
+      "hash": "1e5962e",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "skill": {
+      "hash": "f937026",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    },
+    "skill-profile": {
+      "hash": "8bc2550",
+      "installed": "2026-07-25",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    }
+  }
+}
