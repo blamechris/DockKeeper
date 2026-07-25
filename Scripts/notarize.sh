@@ -34,4 +34,11 @@ xcrun stapler validate "$DMG"
 
 echo "==> Gatekeeper check"
 spctl --assess --type open --context context:primary-signature -v "$DMG" || true
+
+# Stapling rewrites the DMG, so the checksum package-dmg.sh printed is already
+# stale by now. This one is the shipped bytes — it is what goes in the cask and
+# the release notes (v0.9.0 shipped with the pre-staple hash and `brew install`
+# failed on a checksum mismatch until it was corrected).
+echo "==> Checksum of the STAPLED dmg — use this one in Casks/dockkeeper.rb:"
+shasum -a 256 "$DMG"
 echo "==> Done. First run validates the TDD's 'no entitlement conflicts' claim — record the result in docs/decision-log.md."

@@ -52,5 +52,7 @@ if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG"
 fi
 
-echo "==> Checksum (for release notes and Casks/dockkeeper.rb):"
+# NOT the cask checksum: notarize.sh staples the ticket into this file, which
+# changes its bytes. Take the hash from notarize.sh's final line instead.
+echo "==> Checksum (pre-notarization — informational only):"
 shasum -a 256 "$DMG"

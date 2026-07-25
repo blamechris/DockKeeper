@@ -47,7 +47,8 @@ Current tooling state (2026-07-23): the pipeline is **built and locally verified
 
 ## 5. Package
 
-- [ ] `Scripts/package-dmg.sh` — produces `dist/DockKeeper-<version>.dmg` (app + `dockkeeper` CLI + /Applications symlink; layout decided 2026-07-23) and prints the sha256 for release notes and the cask.
+- [ ] `Scripts/package-dmg.sh` — produces `dist/DockKeeper-<version>.dmg` (app + `dockkeeper` CLI + /Applications symlink; layout decided 2026-07-23).
+- [ ] **Take the cask/release-notes sha256 from `Scripts/notarize.sh`'s final line, not `package-dmg.sh`'s** — stapling rewrites the DMG. v0.9.0 shipped the pre-staple hash and `brew install --cask` failed with a checksum mismatch until it was corrected (2026-07-24).
 
 ## 6. Verify the artifact (fresh user pass, clean machine)
 
