@@ -12,6 +12,11 @@
 #                                                       defaults to ad-hoc "-"
 #   VERSION=1.0.0                                       overrides the bundle
 #                                                       version stamped in
+#
+# Release order (checklist §3–§5): this script, then Scripts/notarize.sh on the
+# .app, then Scripts/package-dmg.sh, then Scripts/notarize.sh on the .dmg. This
+# script rebuilds the bundle from scratch, so re-running it discards any
+# notarization ticket already stapled to it — notarize the app again after.
 
 set -euo pipefail
 
@@ -63,3 +68,6 @@ fi
 codesign --verify --strict --verbose=1 "$APP"
 
 echo "==> Done: $APP"
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    echo "==> Next: Scripts/notarize.sh $APP (staple the app before packaging it)"
+fi
