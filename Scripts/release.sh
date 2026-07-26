@@ -70,11 +70,25 @@ export SIGNING_IDENTITY
 # invert this guard. It fails closed either way, and it does not reproduce on
 # this machine even at 108 KB of synthetic identities — but the safe form costs
 # nothing and keeps the two scripts consistent about it.
+#
+# Match the WHOLE identity, not a substring of one. `security` prints each as
+#   1) <sha1> "Developer ID Application: Name (TEAMID)"
+# so the quoted field is compared exactly: a prefix like "Developer ID
+# Application" would otherwise sail through here and then let codesign pick
+# among several matches, which is how you sign a release with the wrong cert.
+# An exact name matching more than one identity is equally refused — ambiguity
+# must not resolve silently.
 IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
-if [[ "$IDENTITIES" != *"$SIGNING_IDENTITY"* ]]; then
-    echo "error: '$SIGNING_IDENTITY' is not in the keychain."
+MATCHES="$(printf '%s\n' "$IDENTITIES" | sed -n 's/.*"\(.*\)".*/\1/p' | grep -cxF "$SIGNING_IDENTITY" || true)"
+if [[ "$MATCHES" -eq 0 ]]; then
+    echo "error: '$SIGNING_IDENTITY' is not in the keychain (exact match required)."
     echo "Available:"
     printf '%s\n' "$IDENTITIES" | grep "Developer ID Application" || echo "  (none found)"
+    exit 1
+elif [[ "$MATCHES" -gt 1 ]]; then
+    echo "error: '$SIGNING_IDENTITY' matches $MATCHES identities in the keychain."
+    echo "       codesign would pick one; which one is not something a release should leave to chance."
+    printf '%s\n' "$IDENTITIES" | grep -F "$SIGNING_IDENTITY"
     exit 1
 fi
 
@@ -149,7 +163,10 @@ if ! hdiutil detach "$MOUNT" > /dev/null 2>&1; then
     hdiutil detach "$MOUNT" -force > /dev/null 2>&1 || echo "warning: could not detach $MOUNT"
 fi
 rmdir "$MOUNT" 2> /dev/null || true
-trap - EXIT
+# The trap stays armed deliberately. Both detach attempts above are tolerated
+# failures, so disarming here would throw away the last chance to unmount a busy
+# volume. Re-running it after a successful detach is a no-op — every command in
+# it is already `|| true`.
 if [[ "$INNER_OK" != 1 ]]; then
     echo "error: the app inside the shipped DMG has no ticket. Do not release this artifact."
     # notarize.sh has already printed its "use this one in Casks/dockkeeper.rb"
