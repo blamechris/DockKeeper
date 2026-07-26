@@ -94,7 +94,8 @@ else
 
     echo "==> Verify the copied-out app still carries its ticket (checklist §6):"
     echo "       hdiutil attach $TARGET && xcrun stapler validate /Volumes/DockKeeper*/DockKeeper.app"
-    echo "==> First run validates the TDD's 'no entitlement conflicts' claim — record the result in docs/decision-log.md."
+    echo "==> Entitlement compatibility is already CONFIRMED (ADR-002, submission b981d4de);"
+    echo "    record anything NEW this run teaches you in docs/decision-log.md."
 
     # Stapling rewrites the DMG, so the checksum package-dmg.sh printed is
     # already stale by now. This one is the shipped bytes — it is what goes in

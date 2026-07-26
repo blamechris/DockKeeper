@@ -39,9 +39,9 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 **Consequences.** No sandbox constraints on `dlsym`/`killall`; requires hardened runtime + notarization pipeline (release checklist); no App Store discovery; auto-update deferred (Sparkle would add a network call — needs its own ADR post-v1 to honor the no-unnecessary-network principle).
 
-**Evidence.** Sandbox blocks signaling other processes (`killall Dock`) — CONFIRMED policy; private-API use fails App Store review — CONFIRMED policy; a sandboxed CoreDock-free build would have no working restore mechanism at all (TDD §13). No entitlement conflicts expected for notarization — INFERRED, verify at first notarization run.
+**Evidence.** Sandbox blocks signaling other processes (`killall Dock`) — CONFIRMED policy; private-API use fails App Store review — CONFIRMED policy; a sandboxed CoreDock-free build would have no working restore mechanism at all (TDD §13). No entitlement conflicts for notarization — **CONFIRMED 2026-07-23**: submission `b981d4de` (`DockKeeper-0.1.0.dmg`) was Accepted with no issues and the mounted app assessed Gatekeeper `Notarized Developer ID`. That is the verification this line originally deferred ("INFERRED, verify at first notarization run"); the run happened and the entitlement set passed. Scope it precisely: it confirms the *entitlements*, not that the app carried a ticket of its own — it did not, which is the v0.9.0 defect fixed for v1.0.0 (TDD §13, [release checklist](release-checklist.md) §4).
 
-**Date / Status.** 2026-07-22 · **Accepted**.
+**Date / Status.** 2026-07-22 · **Accepted** · evidence updated 2026-07-25 with the first notarization result.
 
 ---
 
