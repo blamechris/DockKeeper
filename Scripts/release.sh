@@ -33,10 +33,22 @@ PROFILE="${2:-dockkeeper-notary}"
 APP="$ROOT/dist/DockKeeper.app"
 DMG="$ROOT/dist/DockKeeper-$VERSION.dmg"
 
+# The version becomes a filename the cask references as DockKeeper-#{version}.dmg.
+# A version containing a space or a shell metacharacter produces an artifact that
+# string can never name, so reject it here rather than at `brew install`.
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9]+)*$ ]]; then
+    echo "error: version '$VERSION' is not of the form x.y.z (optionally x.y.z-beta1)."
+    echo "       It names the DMG the cask resolves, so it must be filename-safe."
+    exit 1
+fi
+
 # --- preflight: fail before doing any work, not after a notary round trip -----
 
-if [[ -n "${ALLOW_UNSTAPLED_APP:-}" ]]; then
-    echo "error: ALLOW_UNSTAPLED_APP is set (=$ALLOW_UNSTAPLED_APP)."
+# ${VAR+set} — tests whether it is SET, not whether it is non-empty. Exported
+# empty still reaches package-dmg.sh, where "${ALLOW_UNSTAPLED_APP:-0}" != "1"
+# happens to be safe today; not worth depending on from here.
+if [[ -n "${ALLOW_UNSTAPLED_APP+set}" ]]; then
+    echo "error: ALLOW_UNSTAPLED_APP is set (=${ALLOW_UNSTAPLED_APP:-<empty>})."
     echo "       That flag disables the staple gate and the packaged-ticket check —"
     echo "       the two things standing between here and reshipping the v0.9.0 defect."
     echo "       It is for test builds only. Unset it and re-run:  unset ALLOW_UNSTAPLED_APP"
@@ -52,10 +64,17 @@ if [[ -z "${SIGNING_IDENTITY:-}" || "$SIGNING_IDENTITY" == "-" ]]; then
 fi
 export SIGNING_IDENTITY
 
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$SIGNING_IDENTITY"; then
+# Capture, then match. `security … | grep -q` is the shape notarize.sh documents
+# as a hazard: under pipefail, grep's early exit can surface as the producer's
+# SIGPIPE once its output outgrows the pipe buffer, and the leading `!` would
+# invert this guard. It fails closed either way, and it does not reproduce on
+# this machine even at 108 KB of synthetic identities — but the safe form costs
+# nothing and keeps the two scripts consistent about it.
+IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+if [[ "$IDENTITIES" != *"$SIGNING_IDENTITY"* ]]; then
     echo "error: '$SIGNING_IDENTITY' is not in the keychain."
     echo "Available:"
-    security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" || echo "  (none found)"
+    printf '%s\n' "$IDENTITIES" | grep "Developer ID Application" || echo "  (none found)"
     exit 1
 fi
 
@@ -133,6 +152,10 @@ rmdir "$MOUNT" 2> /dev/null || true
 trap - EXIT
 if [[ "$INNER_OK" != 1 ]]; then
     echo "error: the app inside the shipped DMG has no ticket. Do not release this artifact."
+    # notarize.sh has already printed its "use this one in Casks/dockkeeper.rb"
+    # checksum by now. The checklist and the cask both say to trust that line,
+    # so say plainly that it does not apply to a rejected artifact.
+    echo "       IGNORE the sha256 printed above — it belongs to a DMG that must not ship."
     exit 1
 fi
 
