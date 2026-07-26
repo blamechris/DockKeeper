@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Draft for review (no release has run through this yet) |
-| **Date** | 2026-07-22 |
+| **Status** | In use — v0.9.0 ran through it (2026-07-24); §3–§5 reordered for v1.0.0 |
+| **Date** | 2026-07-22 · last revised 2026-07-25 |
 | **Owner** | blamechris |
-| **Scope** | Every public release (v1.0 onward), Developer ID direct download + Homebrew cask per ADR-002 |
+| **Scope** | Every public release (v0.9.0 onward), Developer ID direct download + Homebrew cask per ADR-002 |
 | **Inputs** | [Technical design](technical-design.md) §13, [decision log](decision-log.md), [risk register](risk-register.md), [test strategy](test-strategy.md) |
 
 Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**.

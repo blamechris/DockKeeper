@@ -88,13 +88,18 @@ xcrun stapler validate "$TARGET"
 echo "==> Gatekeeper check"
 if [[ "$TARGET" == *.app ]]; then
     spctl --assess --type execute -vv "$TARGET" || true
+    # This branch has never run against the notary service — the app-first order
+    # is new for v1.0.0. Its result is the one worth writing down.
+    echo "==> This was the first app-level submission if the checklist still"
+    echo "    labels §4 INFERRED — record the outcome in docs/decision-log.md."
     echo "==> Done. Next: Scripts/package-dmg.sh — it builds the DMG from this stapled app."
 else
     spctl --assess --type open --context context:primary-signature -v "$TARGET" || true
 
     echo "==> Verify the copied-out app still carries its ticket (checklist §6):"
     echo "       hdiutil attach $TARGET && xcrun stapler validate /Volumes/DockKeeper*/DockKeeper.app"
-    echo "==> First run validates the TDD's 'no entitlement conflicts' claim — record the result in docs/decision-log.md."
+    echo "==> Entitlement compatibility is already CONFIRMED (ADR-002, submission b981d4de);"
+    echo "    record anything NEW this run teaches you in docs/decision-log.md."
 
     # Stapling rewrites the DMG, so the checksum package-dmg.sh printed is
     # already stale by now. This one is the shipped bytes — it is what goes in

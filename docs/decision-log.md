@@ -39,9 +39,15 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. R
 
 **Consequences.** No sandbox constraints on `dlsym`/`killall`; requires hardened runtime + notarization pipeline (release checklist); no App Store discovery; auto-update deferred (Sparkle would add a network call — needs its own ADR post-v1 to honor the no-unnecessary-network principle).
 
-**Evidence.** Sandbox blocks signaling other processes (`killall Dock`) — CONFIRMED policy; private-API use fails App Store review — CONFIRMED policy; a sandboxed CoreDock-free build would have no working restore mechanism at all (TDD §13). No entitlement conflicts expected for notarization — INFERRED, verify at first notarization run.
+**Evidence.** Sandbox blocks signaling other processes (`killall Dock`) — CONFIRMED policy; private-API use fails App Store review — CONFIRMED policy; a sandboxed CoreDock-free build would have no working restore mechanism at all (TDD §13). No entitlement conflicts for notarization — **CONFIRMED 2026-07-23**, the verification this line originally deferred ("INFERRED, verify at first notarization run"). Three submissions, and it is worth naming them separately because the docs elsewhere cite only the middle one:
 
-**Date / Status.** 2026-07-22 · **Accepted**.
+- `eb36ef6c` (`DockKeeper-0.1.0.dmg`) — **Invalid**, solely for the then-unsigned CLI inside the image. Fixed in `package-dmg.sh`.
+- `b981d4de` (`DockKeeper-0.1.0.dmg`) — **Accepted**, mounted app assessed Gatekeeper `Notarized Developer ID`. A dry run on the version-0.1.0 artifact; this is the id quoted in TDD §13 and [release checklist](release-checklist.md) §5.
+- `05a4dd99` (`DockKeeper-0.9.0.dmg`) — **Accepted**, and this is the one that actually shipped: the release asset was uploaded 109 seconds later.
+
+The entitlement set passed on both Accepted submissions, so the claim holds regardless of which is cited. Scope it precisely: what is confirmed is the *entitlements*, not that the shipped app carried a ticket of its own — `05a4dd99`'s app did not, which is the v0.9.0 defect fixed for v1.0.0 (TDD §13, [release checklist](release-checklist.md) §4).
+
+**Date / Status.** 2026-07-22 · **Accepted** · evidence updated 2026-07-25 with the first notarization result.
 
 ---
 
