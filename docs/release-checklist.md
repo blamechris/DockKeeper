@@ -33,6 +33,20 @@ Update 2026-07-24 (targeting v1.0.0): §3–§5 were **reordered** so the `.app`
 
 ## 3. Build & sign
 
+> **The four scripted steps of §3–§5 are one command:**
+> `SIGNING_IDENTITY="Developer ID Application: …" Scripts/release.sh x.y.z`
+>
+> It runs build → notarize app → package → notarize DMG in order, asserts each
+> step's postcondition before continuing, refuses to start if
+> `ALLOW_UNSTAPLED_APP` is set or the identity is ad-hoc/absent, never re-enters
+> `build-app.sh` after the app is stapled, and ends with the stapled DMG's
+> sha256 — the cask value.
+>
+> **It does not cover the human boxes.** Still yours: the clean build, the
+> entitlements review, `codesign --verify --verbose=2` on app and CLI, the
+> universal-binary check, and §5's Gatekeeper pass on a clean machine. The
+> driver removes the *ordering* hazards, not the checklist.
+
 - [ ] Clean release build: `swift build -c release` for **both** products (`DockKeeper`, `dockkeeper-cli`).
 - [ ] Assemble bundle: `VERSION=x.y.z SIGNING_IDENTITY="Developer ID Application: …" Scripts/build-app.sh release` (hardened runtime applied automatically with a real identity). Export `SIGNING_IDENTITY` for the whole §3–§5 sequence — `package-dmg.sh` signs the CLI with it too.
 - [ ] Nothing may modify the bundle after §4 staples it: stamp the version here, sign here, then leave it alone.
