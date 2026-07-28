@@ -62,3 +62,90 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 | Sleep/wake with external connected | ⏳ | — |
 | Mirroring / clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
 | Identical twin externals | n/a on this rig (different panels) | — |
+
+---
+
+## Session 3 run-sheet — the six cells that remain
+
+Everything below is what stands between today and closing M6. Ordered by what
+each cell *buys*: the first retires the project's top risk, the rest are
+regression evidence. Work top-down and stop whenever you like — each cell is
+independently recordable.
+
+Rig assumed: the same MacBook Pro built-in + Dell S2719DGF (portrait) as
+sessions 1–2, macOS 26.5.
+
+### 1. Dock follows main display, separate Spaces OFF — **the v1.0.0 gate** (R-002)
+
+This is the last unverified half of the project's founding claim, and the only
+cell that gates the release. Everything else here is nice to have.
+
+**Setup (needs a logout):**
+1. System Settings ▸ Desktop & Dock → scroll to Mission Control → turn **off**
+   "Displays have separate Spaces".
+2. Log out and back in. The setting does not take effect until you do.
+3. Confirm it took: `defaults read com.apple.spaces spans-displays` → `1`.
+
+**Test, for each edge:**
+1. `dockkeeper status` — note the current edge and preferred display.
+2. Set the Dock to **bottom**. Pin the preferred display to the **Dell**.
+3. Observe: does the Dock move to the Dell?
+4. Repeat for **left**, then **right**.
+
+**Why bottom matters most:** session 1 CONFIRMED that with Spaces **ON**, a
+left/right Dock follows the main display but a **bottom** Dock does not — that
+asymmetry is the entire basis of ADR-009. If bottom follows with Spaces OFF,
+ADR-009's scope is a Spaces-ON limitation, not a fundamental one, and the
+README's copy should say so. If bottom still does not follow, that is a genuine
+macOS constraint and DK-FR-002 stays best-effort for bottom permanently.
+
+Record: pass/fail per edge, and whether the menu bar moved with it.
+
+**Afterwards:** turn separate Spaces back ON and log in again — it is the macOS
+default and the mode most users run.
+
+### 2. Edge lock survives display events, app running, 2 displays
+
+With the app enabled and an edge locked, perform each and check the edge is
+restored: unplug the Dell · replug · sleep/wake (close the lid, reopen) ·
+change the Dell's resolution · change arrangement in Settings · `killall Dock`.
+
+Record: restored / not, and roughly how long it took. The latency number feeds
+ADR-005's poll-interval evidence — a drift caught only by the 30 s poll rather
+than an event is worth noting specifically.
+
+### 3. Unplug / replug drift presentation
+
+Same as above but watching the **menu bar UI**, not just the outcome: does the
+state read `Degraded` or `Error` at any point, and is what it says true? This is
+the honesty check — a wrong `Degraded` is a bug even if the Dock ends up right.
+
+### 4. UUID stability across ports, adapters, reboot (R-003)
+
+Baseline from session 1: Dell UUID `F4F6E6E4-69D2-40D1-A83C-6F346E264A9B`.
+
+Re-probe after each of: a different physical port · a dock or adapter if you
+have one · a full reboot. Diff each against the baseline.
+
+If the UUID changes, that is the case ADR-004's scored matching exists for —
+check the app still recognises the display (it should, via
+`vendor+model+serial`, since this panel ships a real serial). A UUID change with
+successful re-match is a **pass**, and closes open question #2.
+
+### 5. Sleep/wake with external connected
+
+Lid close and reopen, plus an idle sleep if you can wait one out. Check the edge
+and the pin both survive, and that no oscillation is visible on wake.
+
+### 6. Mirroring / clamshell — currently UNKNOWN (open question #6)
+
+Turn on display mirroring, then try clamshell (lid shut, external only). There
+is no expected result recorded for these — the goal is to find out what happens
+and write it down. If DockKeeper does something wrong or confusing here, that
+is a finding worth an issue rather than a failure.
+
+### Recording
+
+Append results to the "Matrix cells" table above, one row per cell, with macOS
+version and hardware path. Anything surprising goes in the risk register.
+Cell 1 additionally updates R-002 and, if bottom follows, ADR-009's scope.
