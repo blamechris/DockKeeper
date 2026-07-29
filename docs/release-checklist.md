@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | In use — v0.9.0 ran through it (2026-07-24); §3–§5 reordered for v1.0.0 |
+| **Status** | In use — v0.9.0 (2026-07-24) and v0.9.1 (2026-07-28) both ran through it; the reordered §3–§5 is proven |
 | **Date** | 2026-07-22 · last revised 2026-07-25 |
 | **Owner** | blamechris |
 | **Scope** | Every public release (v0.9.0 onward), Developer ID direct download + Homebrew cask per ADR-002 |
@@ -12,7 +12,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**.
 
 Current tooling state (2026-07-23): the pipeline is **built and locally verified end-to-end** — `Scripts/build-app.sh` (icon + version stamping + `SIGNING_IDENTITY` env for Developer ID with hardened runtime, ad-hoc fallback), `Scripts/package-dmg.sh` (app + CLI + /Applications symlink, sha256 output, staple gate), `Scripts/notarize.sh` (notarytool submit/staple/validate for **both** the `.app` and the `.dmg`, graceful without credentials), `Scripts/gen-icon.swift` (regenerable `AppIcon.icns`), `.github/workflows/ci.yml` (build + tests + the DK-NFR-002 no-networking-symbols gate), `Casks/dockkeeper.rb` (template). Items marked ⚙️ still need the owner's one-time setup (Apple Developer account artifacts).
 
-Update 2026-07-24 (targeting v1.0.0): §3–§5 were **reordered** so the `.app` is notarized and stapled *before* it is packaged — v0.9.0 stapled only the DMG, leaving cask-installed copies without a ticket of their own (§4). The scripts enforce the new order themselves; the sequence is build → notarize app → package → notarize DMG. Not yet exercised end-to-end against the notary service — the local gates are CONFIRMED (a real-Developer-ID-signed, unstapled app is refused by `package-dmg.sh`), the submission halves are INFERRED until the first v1.0.0 run.
+Update 2026-07-24 (targeting v1.0.0): §3–§5 were **reordered** so the `.app` is notarized and stapled *before* it is packaged — v0.9.0 stapled only the DMG, leaving cask-installed copies without a ticket of their own (§4). The scripts enforce the new order themselves; the sequence is build → notarize app → package → notarize DMG. **Exercised end-to-end 2026-07-28 in the v0.9.1 release — all of it now CONFIRMED.** `Scripts/release.sh 0.9.1` ran the four steps in order: app submission `cfb5b19a` (`DockKeeper-notarize.zip`) Accepted and stapled, `package-dmg.sh`'s staple gate and its post-package ticket re-check both passed, DMG submission `6635e783` Accepted and stapled. The shipped artifact was verified from inside the image: `xcrun stapler validate` on the mounted `.../DockKeeper.app` reported *"The validate action worked!"* — where the same check on v0.9.0 reported *"does not have a ticket stapled to it"*. The two-ticket model is no longer INFERRED anywhere.
 
 ## 1. Gates (before cutting anything)
 

@@ -497,7 +497,7 @@ Packaging status (updated after main's `72fbcc2` "Package as a signed DockKeeper
 
 The pipeline now notarizes and staples the `.app` *before* `package-dmg.sh` builds the image from it, then notarizes and staples the DMG as before ([release-checklist](release-checklist.md) §3–§5). With a real `SIGNING_IDENTITY` and no `ALLOW_UNSTAPLED_APP` override, `package-dmg.sh` refuses to package an un-stapled app and re-mounts the finished image to confirm the ticket survived. The `dockkeeper` CLI is notarized as DMG payload but **cannot** be stapled — a bare Mach-O has nowhere to store a ticket (INFERRED limitation, accepted).
 
-What has actually been executed, stated precisely: the refusal gate is **CONFIRMED** (a real-Developer-ID-signed, un-stapled app is refused). The post-package ticket-survival re-check has only ever been observed *failing*, which is the correct behaviour for its input — it cannot yet have been seen passing, because that needs a stapled app and no app has been stapled. Both notary submissions are **INFERRED**: nothing has been submitted to Apple under the new order. All three become CONFIRMED or not at the first v1.0.0 run.
+What has actually been executed: **all of it, and all three are now CONFIRMED** as of the v0.9.1 release (2026-07-28). The refusal gate rejects a real-Developer-ID-signed, un-stapled app. The post-package ticket-survival re-check — previously only ever observed *failing*, because passing needs a stapled app and none had been stapled — passed. Both notary submissions were Accepted: `cfb5b19a` for the app zip, `6635e783` for the DMG. The shipped v0.9.1 artifact validates from inside the image, where v0.9.0's reported *"does not have a ticket stapled to it"*.
 
 ---
 
