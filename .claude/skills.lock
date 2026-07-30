@@ -2,8 +2,8 @@
   "registry": "blamechris/skill-templates",
   "skills": {
     "agent-review": {
-      "hash": "a10ef75",
-      "installed": "2026-07-25",
+      "hash": "5c35725",
+      "installed": "2026-07-30",
       "profileHash": "138d576",
       "targets": [
         "claude",
@@ -79,6 +79,16 @@
         "codex"
       ]
     },
+    "learn": {
+      "hash": "df2de5e",
+      "installed": "2026-07-30",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
     "merge": {
       "hash": "d34b05d",
       "installed": "2026-07-25",
@@ -109,9 +119,19 @@
         "codex"
       ]
     },
+    "session-lifecycle": {
+      "hash": "f7bc0db",
+      "installed": "2026-07-30",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
     "skill": {
-      "hash": "f937026",
-      "installed": "2026-07-25",
+      "hash": "7b4d37f",
+      "installed": "2026-07-30",
       "profileHash": "138d576",
       "targets": [
         "claude",
@@ -119,8 +139,27 @@
       ]
     },
     "skill-profile": {
-      "hash": "8bc2550",
-      "installed": "2026-07-25",
+      "hash": "ea888eb",
+      "installed": "2026-07-30",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "codex"
+      ]
+    },
+    "tiered-delegation": {
+      "hash": "a9ed830",
+      "installed": "2026-07-30",
+      "profileHash": "138d576",
+      "targets": [
+        "claude",
+        "gemini",
+        "codex"
+      ]
+    },
+    "visual-brief": {
+      "hash": "a85c799",
+      "installed": "2026-07-30",
       "profileHash": "138d576",
       "targets": [
         "claude",
