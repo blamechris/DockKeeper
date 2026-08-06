@@ -1,15 +1,59 @@
 # DockKeeper
 
-A lightweight, native macOS menu-bar utility that keeps your Dock exactly where you want it — locked to your chosen edge and restored automatically whenever macOS tries to move it.
+**Free, open-source macOS utility that keeps your Dock on the edge and display you chose.**
 
-**Free forever. Open source. No subscriptions, no telemetry, no ads, no required permissions.**
+[![CI](https://github.com/blamechris/DockKeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/blamechris/DockKeeper/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/blamechris/DockKeeper)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/blamechris/DockKeeper?include_prereleases)](https://github.com/blamechris/DockKeeper/releases)
+
+<p align="center">
+  <img src="docs/images/dock-snap-back.gif"
+       alt="Screen recording: the macOS Dock sits on the left edge of the screen, then DockKeeper automatically returns it to the bottom edge."
+       width="720">
+</p>
+<p align="center"><em>DockKeeper returning the Dock to its configured bottom edge — displaced here with
+<code>defaults write … && killall Dock</code>, snapped back in under two seconds.</em></p>
+
+**No subscriptions, no telemetry, no ads, no required permissions.**
 
 > 🚧 **v0.9 public beta** — feature-complete for v1.0; the multi-monitor
 > hardware test matrix is still being worked through. Signed and notarized.
 
-## Why
+## Why DockKeeper
 
-macOS loves to relocate the Dock — after sleep, display changes, or when you least expect it. DockKeeper watches for those events and puts the Dock back on your preferred edge, silently.
+macOS loves to relocate the Dock — after sleep, display changes, or when you least expect it. DockKeeper watches for those events and puts the Dock back on your preferred edge and display, silently. Compared to the usual workarounds:
+
+- **No Dock restart.** The classic fix — `defaults write com.apple.dock orientation left && killall Dock` — kills and relaunches the Dock every time. DockKeeper repositions it live through the `CoreDock` API, flicker-free, and keeps the `defaults`/`killall` route only as a runtime fallback.
+- **Event-driven, not a polling loop.** It reacts to sleep, wake, display, and preference events instead of running a timer.
+- **Nothing taken on trust.** No telemetry and no network code — and CI fails the build if a networking symbol, raw socket syscall, or networking framework shows up in either binary ([the gate](.github/workflows/ci.yml), [privacy statement](PRIVACY.md)).
+- **No required permissions.** Everything core runs with zero privacy-gated permissions. One optional feature (Keep windows in place) asks for Accessibility, and only if you turn it on.
+- **It won't fight your Mac.** An oscillation guard backs off instead of dueling other Dock-moving software, and cases macOS doesn't allow (a bottom Dock pinned while *separate Spaces* is on) get an explanation instead of a fight.
+
+An evidence-labeled, feature-by-feature comparison with the commercial alternative in this space lives in [docs/parity-assessment.md](docs/parity-assessment.md).
+
+## Screenshots
+
+| The menu-bar menu | Preferences ▸ Dock |
+|---|---|
+| ![DockKeeper's menu-bar dropdown with Enabled checked and items for Lock Edge, Preferred Display, Launch at Login, and Preferences.](docs/images/still-menu-dropdown.png) | ![DockKeeper's Preferences window on the Dock tab, with the Lock Edge picker set to Bottom.](docs/images/still-preferences-dock-tab.png) |
+
+| Dock pushed to the left edge… | …and back on its configured bottom edge |
+|---|---|
+| ![A macOS desktop with the Dock displaced to the left edge of the screen.](docs/images/still-dock-displaced-left.png) | ![The same desktop after DockKeeper restored the Dock to the bottom edge.](docs/images/still-dock-restored-bottom.png) |
+
+*Stills from the same session as the recording above: the Dock is moved off its configured edge (simulated with `defaults`/`killall`), and DockKeeper puts it back.*
+
+## Install
+
+**Download:** grab the notarized `DockKeeper-x.y.z.dmg` from [Releases](https://github.com/blamechris/DockKeeper/releases), drag `DockKeeper.app` to Applications (required for Launch at Login), and optionally copy `dockkeeper` somewhere on your `PATH`.
+
+**Homebrew:**
+
+```sh
+brew install --cask blamechris/tap/dockkeeper
+```
+
+**Requirements:** macOS 14+ · Apple Silicon (primary) or Intel (best effort).
 
 ## Features
 
@@ -45,16 +89,6 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 - Follow mouse / active window / active app
 - Raycast extension; Shortcuts app discovery (the intents exist; the metadata packaging lands in v1.1 — the URL scheme works today)
 
-## Install
-
-**Download:** grab the notarized `DockKeeper-x.y.z.dmg` from [Releases](https://github.com/blamechris/DockKeeper/releases), drag `DockKeeper.app` to Applications (required for Launch at Login), and optionally copy `dockkeeper` somewhere on your `PATH`.
-
-**Homebrew:**
-
-```sh
-brew install --cask blamechris/tap/dockkeeper
-```
-
 ## Automation
 
 The CLI and the app share one settings store, so either can drive the other:
@@ -84,13 +118,9 @@ dockkeeper://resume
 > not have the surface at all, delete the `CFBundleURLTypes` key from
 > `DockKeeper.app/Contents/Info.plist` — everything else keeps working.
 
-## Requirements
-
-- macOS 14+
-- To build from source: Swift 6 toolchain (Xcode 26 / Swift 6.3)
-- Apple Silicon (primary) or Intel (best effort)
-
 ## Build & Run
+
+Building from source needs a Swift 6 toolchain (Xcode 26 / Swift 6.3):
 
 ```sh
 # Build everything
@@ -136,13 +166,24 @@ DockKeeperCore   — shared engine (no UI deps; used by app + CLI)
 ├── Dock         — DockController, DockMonitor, CoreDock bridge, orientation model
 ├── Display      — DisplayManager (UUID-stable display identification)
 └── Core         — Settings, logging
-
-DockKeeper       — menu-bar app (SwiftUI MenuBarExtra + preferences)
-dockkeeper-cli   — command-line front end
 ```
 
-The Dock is repositioned via the private `CoreDock` C API (`CoreDockSetOrientationAndPinning`), resolved at runtime with `dlsym` so a future macOS change degrades gracefully to the `defaults write com.apple.dock orientation` + `killall Dock` fallback.
+`DockKeeper` is the menu-bar app (SwiftUI `MenuBarExtra` + preferences); `dockkeeper-cli` is the command-line front end. The Dock is repositioned via the private `CoreDock` C API (`CoreDockSetOrientationAndPinning`), resolved at runtime with `dlsym` so a future macOS change degrades gracefully to the `defaults write com.apple.dock orientation` + `killall Dock` fallback.
 
-## License
+### Documentation
 
-MIT © 2026 blamechris. See [LICENSE](LICENSE).
+The design docs under [`docs/`](docs/) are the contract for this repo (see [AGENTS.md](AGENTS.md)):
+
+- [Behavior specification](docs/behavior-specification.md) — what the app does, edge case by edge case
+- [Technical design](docs/technical-design.md) — architecture and mechanisms
+- [Decision log](docs/decision-log.md) — ADRs, including the one ratified private-API exception
+- [Parity assessment](docs/parity-assessment.md) — evidence-labeled comparison with the commercial alternative
+- [Release checklist](docs/release-checklist.md) — the signed/notarized two-ticket release pipeline
+- [CHANGELOG.md](CHANGELOG.md) — release history
+
+## Contributing, security, license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — build, test, and PR conventions
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability (privately, please)
+- [PRIVACY.md](PRIVACY.md) — the "nothing ever leaves your Mac" statement, and how to verify it yourself
+- MIT © 2026 blamechris — see [LICENSE](LICENSE)

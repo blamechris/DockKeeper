@@ -28,7 +28,7 @@ Update 2026-07-24 (targeting v1.0.0): §3–§5 were **reordered** so the `.app`
 ## 2. Version & changelog
 
 - [ ] Choose version; tag plan (`vX.Y.Z`).
-- [ ] Changelog written (user-facing behavior, not commit list).
+- [ ] Root [`CHANGELOG.md`](../CHANGELOG.md) updated: move *Unreleased* into a new `[x.y.z]` section, dated (user-facing behavior, not commit list; Keep-a-Changelog format). GitHub release notes draw from it.
 - [ ] README screenshots/instructions still accurate (incl. `swift run` vs packaged-app login-item caveat).
 
 ## 3. Build & sign
