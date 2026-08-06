@@ -14,7 +14,7 @@ DockKeeper is pre-1.0. Only the **latest release** receives security fixes.
 
 | Version | Supported |
 |---|---|
-| Latest release (currently 0.9.x) | ✅ |
+| Latest tagged release | ✅ |
 | Anything older | ❌ |
 
 ## Security posture (what you're auditing)

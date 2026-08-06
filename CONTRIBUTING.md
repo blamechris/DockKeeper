@@ -4,7 +4,7 @@ Thanks for wanting to help. This is a small, documentation-driven repo: the docs
 
 ## Build and test
 
-macOS 14+ with a Swift 6 toolchain (Xcode 26 / Swift 6.3):
+macOS 14+ with a Swift 6 toolchain (as declared in [Package.swift](Package.swift)):
 
 ```sh
 swift build                      # build everything

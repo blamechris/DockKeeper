@@ -120,7 +120,7 @@ dockkeeper://resume
 
 ## Build & Run
 
-Building from source needs a Swift 6 toolchain (Xcode 26 / Swift 6.3):
+Building from source needs a Swift 6 toolchain (as declared in [Package.swift](Package.swift)):
 
 ```sh
 # Build everything
