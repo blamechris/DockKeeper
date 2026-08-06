@@ -26,7 +26,7 @@ Scripts/build-app.sh             # assemble dist/DockKeeper.app (ad-hoc signed)
 
 ## Off the table
 
-Some contributions can't be accepted regardless of quality, per [AGENTS.md](AGENTS.md): network services or telemetry (rule 10), payment gates or donation prompts (rule 11), new private-API use without a ratified ADR (rule 7), and new required permissions (rule 18).
+Some contributions can't be accepted regardless of quality, per [AGENTS.md](AGENTS.md): network services or telemetry (rule 10), payment gates or donation prompts (rule 11), new private-API use without a ratified ADR (rule 7), and new required permissions (project posture — see [PRIVACY.md](PRIVACY.md); rule 18 additionally requires any Accessibility use to be explained).
 
 ## Not sure?
 

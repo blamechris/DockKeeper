@@ -39,7 +39,7 @@ An evidence-labeled, feature-by-feature comparison with the commercial alternati
 
 | Dock pushed to the left edge… | …and back on its configured bottom edge |
 |---|---|
-| ![A macOS desktop with the Dock displaced to the left edge of the screen.](docs/images/still-dock-displaced-left.png) | ![The same desktop after DockKeeper restored the Dock to the bottom edge.](docs/images/still-dock-restored-bottom.png) |
+| ![A macOS desktop with the Dock displaced to the left edge of the screen.](docs/images/still-dock-displaced-left.jpg) | ![The same desktop after DockKeeper restored the Dock to the bottom edge.](docs/images/still-dock-restored-bottom.jpg) |
 
 *Stills from the same session as the recording above: the Dock is moved off its configured edge (simulated with `defaults`/`killall`), and DockKeeper puts it back.*
 
