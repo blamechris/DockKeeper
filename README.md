@@ -2,7 +2,7 @@
 
 A lightweight, native macOS menu-bar utility that keeps your Dock exactly where you want it — locked to your chosen edge and restored automatically whenever macOS tries to move it.
 
-**Free forever. Open source. No subscriptions, no telemetry, no ads, no permissions.**
+**Free forever. Open source. No subscriptions, no telemetry, no ads, no required permissions.**
 
 > 🚧 **v0.9 public beta** — feature-complete for v1.0; the multi-monitor
 > hardware test matrix is still being worked through. Signed and notarized.
