@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--diagnostics` no longer opens with a warning that reads like a fault.** Every support report began with a system line saying an internal settings name *"does not make sense and will not work"* — alarming, and the first thing anyone sends us. Nothing was ever wrong: the app and the command-line tool deliberately share one settings store, and the app was reaching it by a route macOS grumbles about but honours. It now takes the route macOS expects, reads and writes exactly the same settings, and prints nothing extra. ([#34](https://github.com/blamechris/DockKeeper/issues/34))
+
 ## [0.9.2] — 2026-08-18
 
 Third public beta. Two reliability fixes: one for the opt-in screen-share feature, one for running DockKeeper twice by accident.
