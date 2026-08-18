@@ -62,11 +62,20 @@ enum Diagnostics {
     /// from a cold process. Cross-check `Other instances:` when it looks odd.
     private static func pauseStatus() -> String {
         guard let record = Settings.shared.pauseRecord else { return "no" }
-        let age = Int(Date().timeIntervalSince(record.pausedAt))
+        // One clock read for both quantities, so the age and the remaining time
+        // cannot disagree about when "now" was.
+        let now = Date()
+        guard let age = DisplayDuration.wholeSeconds(now.timeIntervalSince(record.pausedAt)) else {
+            return "yes (timestamp unreadable — record may be corrupt)"
+        }
         guard let until = record.pausedUntil else {
             return "yes (\(age)s ago; until resumed — no timer)"
         }
-        let remaining = Int(until.timeIntervalSince(Date()))
+        guard let remaining = DisplayDuration.wholeSeconds(until.timeIntervalSince(now)) else {
+            return "yes (\(age)s ago; deadline unreadable — record may be corrupt)"
+        }
+        // Negating is safe: `wholeSeconds` bounds the magnitude well inside
+        // `Int`, so `-remaining` cannot overflow the way `-Int.min` would.
         return remaining > 0
             ? "yes (\(age)s ago; auto-resumes in \(remaining)s)"
             : "yes (\(age)s ago; auto-resume overdue by \(-remaining)s)"
@@ -78,8 +87,13 @@ enum Diagnostics {
     /// content rule the rest of the report follows.
     private static func screenShareHideStatus() -> String {
         guard let record = Settings.shared.screenShareHideRecord else { return "no record held" }
-        let age = Int(Date().timeIntervalSince(record.hiddenAt))
         let window = Int(ScreenShareHider.repairWindow)
+        // Same trap as `pauseStatus()`, and pre-existing here since ADR-013:
+        // `hiddenAt` is decoded from a user-writable defaults domain, so a
+        // decodable-but-absurd stamp crashed the support command outright.
+        guard let age = DisplayDuration.wholeSeconds(Date().timeIntervalSince(record.hiddenAt)) else {
+            return "record held (timestamp unreadable — record may be corrupt; repair window \(window)s)"
+        }
         return "record held (\(age)s old; repair window \(window)s)"
     }
 

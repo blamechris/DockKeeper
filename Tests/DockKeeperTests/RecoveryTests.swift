@@ -776,3 +776,59 @@ struct StatusSummaryPauseTests {
         #expect(summary(pause: nil).voiceLine.contains("enabled"))
     }
 }
+
+
+// MARK: - Diagnostics duration rendering (crash-safety)
+
+/// `Int(_: Double)` traps, and every interval `--diagnostics` prints comes from a
+/// `Date` decoded out of a user-writable defaults domain. These pin the guard on
+/// the one command support asks users to run.
+@Suite("DisplayDuration.wholeSeconds")
+struct DisplayDurationTests {
+
+    @Test("Ordinary intervals render unchanged, both signs")
+    func ordinaryIntervals() {
+        #expect(DisplayDuration.wholeSeconds(0) == 0)
+        #expect(DisplayDuration.wholeSeconds(900) == 900)
+        #expect(DisplayDuration.wholeSeconds(-42) == -42)
+        #expect(DisplayDuration.wholeSeconds(1.9) == 1, "truncates toward zero, as the old Int(_:) did")
+        #expect(DisplayDuration.wholeSeconds(-1.9) == -1)
+    }
+
+    @Test("A finite but absurd interval is refused rather than trapping")
+    func absurdFiniteInterval() {
+        // The measured case: `{"pausedAt": 1e300}` is valid JSON and decodes to
+        // a finite Date, so `isFinite` alone would NOT have caught this. Before
+        // the guard, this input crashed `--diagnostics` with SIGTRAP.
+        #expect(1e300.isFinite, "the hazard is finite — that is the whole point")
+        #expect(DisplayDuration.wholeSeconds(1e300) == nil)
+        #expect(DisplayDuration.wholeSeconds(-1e300) == nil)
+    }
+
+    @Test("NaN and infinities are refused")
+    func nonFiniteIntervals() {
+        #expect(DisplayDuration.wholeSeconds(.nan) == nil)
+        #expect(DisplayDuration.wholeSeconds(.infinity) == nil)
+        #expect(DisplayDuration.wholeSeconds(-.infinity) == nil)
+    }
+
+    @Test("The bound itself converts, and just past it is refused")
+    func boundIsUsable() {
+        // Guards the clamp constant against being "tidied" to Double(Int.max),
+        // which rounds above Int.max and would trap on its own bound.
+        #expect(DisplayDuration.wholeSeconds(9.0e18) == 9_000_000_000_000_000_000)
+        #expect(DisplayDuration.wholeSeconds(-9.0e18) == -9_000_000_000_000_000_000)
+        #expect(DisplayDuration.wholeSeconds(9.3e18) == nil)
+        #expect(DisplayDuration.wholeSeconds(Double(Int.max)) == nil,
+                "Double(Int.max) rounds ABOVE Int.max — converting it would trap")
+    }
+
+    @Test("A negated result cannot overflow (the overdue branch)")
+    func negationIsSafe() {
+        // `pauseStatus()` prints `-remaining` on the overdue branch; the bound
+        // keeps that well inside Int, unlike -Int.min.
+        let seconds = DisplayDuration.wholeSeconds(-9.0e18)
+        #expect(seconds != nil)
+        #expect(-(seconds ?? 0) == 9_000_000_000_000_000_000)
+    }
+}
