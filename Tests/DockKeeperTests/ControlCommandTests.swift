@@ -204,4 +204,27 @@ struct SettingsSharedDomainTests {
 
         #expect(independent?.integer(forKey: probeKey) == 4242)
     }
+
+    @Test("App-shaped and CLI-shaped processes resolve to the same domain")
+    func resolutionIsPerProcessButOneDomain() {
+        // The app's bundle id *is* the suite name. Asking for the suite by name
+        // is then the documented no-op — nil back, plus AppKit's "does not make
+        // sense and will not work" logged as the first line of every
+        // `--diagnostics` report a user sends us (#34). `.standard` for a
+        // bundled app already *is* its bundle-identifier domain, so this branch
+        // reaches the same store without the warning.
+        #expect(Settings.resolution(forBundleIdentifier: Settings.suiteName) == .standard)
+
+        // Everything else must name the suite outright. `.standard` resolves by
+        // process name for an unbundled executable, which is how v0.9.0 gave the
+        // CLI a private store and `dockkeeper unlock` never reached the app.
+        // `nil` is the CLI's real case: it has no bundle identifier at all.
+        #expect(Settings.resolution(forBundleIdentifier: "com.dockkeeper.cli") == .suite(Settings.suiteName))
+        #expect(Settings.resolution(forBundleIdentifier: nil) == .suite(Settings.suiteName))
+
+        // The property that matters is that neither branch can drift onto a
+        // different domain: both carry `suiteName`, and `.standard` is only ever
+        // chosen when the process's own identifier equals it.
+        #expect(Settings.resolution(forBundleIdentifier: "com.dockkeeper.app") == .standard)
+    }
 }

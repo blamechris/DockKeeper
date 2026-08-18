@@ -16,10 +16,43 @@ public final class Settings: @unchecked Sendable {
     /// the suite explicitly makes the two share one store, as documented.
     public static let suiteName = "com.dockkeeper.app"
 
-    /// The store both executables must use. Falls back to `.standard` only if
-    /// the suite cannot be opened at all, which would mean a broken container.
+    /// How one process reaches ``suiteName``.
+    ///
+    /// The app's own bundle identifier *is* `com.dockkeeper.app`, and passing
+    /// your own identifier to `UserDefaults(suiteName:)` is the documented
+    /// no-op: it returns `nil` and AppKit logs *"does not make sense and will
+    /// not work"*. The fallback below caught that and the app did reach the
+    /// right store — but by accident, and with that warning as the first line
+    /// of every `--diagnostics` report a user pastes into a bug report (#34).
+    /// Deciding per process makes the intent explicit and the log clean. Both
+    /// cases name the same domain; only the handle used to open it differs.
+    enum DefaultsResolution: Equatable {
+        /// The process *is* the suite, so `.standard` already is that domain.
+        case standard
+        /// Every other process — the CLI, a test host — must name it outright.
+        case suite(String)
+    }
+
+    static func resolution(forBundleIdentifier bundleID: String?) -> DefaultsResolution {
+        bundleID == suiteName ? .standard : .suite(suiteName)
+    }
+
+    /// The store both executables must use.
+    ///
+    /// The `?? .standard` fallback is load-bearing, not defensive padding, and
+    /// it is **not** a second correct answer. Post-fix only a non-app process
+    /// can reach it, and for one of those `.standard` resolves by *process
+    /// name*, i.e. a private per-executable domain — exactly the v0.9.0 split
+    /// that naming the suite exists to prevent. It stays because a degraded
+    /// store beats trapping at launch, but anything landing there has a broken
+    /// container and is off the shared domain.
     public static func sharedDefaults() -> UserDefaults {
-        UserDefaults(suiteName: suiteName) ?? .standard
+        switch resolution(forBundleIdentifier: Bundle.main.bundleIdentifier) {
+        case .standard:
+            return .standard
+        case .suite(let name):
+            return UserDefaults(suiteName: name) ?? .standard
+        }
     }
 
     public static let shared = Settings()
