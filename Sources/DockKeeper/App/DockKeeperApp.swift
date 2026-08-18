@@ -12,6 +12,17 @@ struct DockKeeperApp: App {
     init() {
         // Handle one-shot CLI flags before any UI or engine starts.
         Diagnostics.runIfRequested()
+        // Then stand down if another DockKeeper already owns this user's Dock
+        // (DK-FR-012). Ordering is load-bearing in both directions: strictly
+        // after Diagnostics, because `--diagnostics` is a support flow run
+        // *while* an instance is live; and strictly here rather than in
+        // AppDelegate, because `@StateObject private var state = AppState()`
+        // stores an @autoclosure thunk that is not evaluated until the scene
+        // graph is built — i.e. after init() returns but before
+        // applicationWillFinishLaunching. By either delegate hook the duplicate
+        // has already run monitor.start()/coordinator.enable() and moved the
+        // real Dock; by didFinishLaunching it also has a visible status item.
+        SingleInstance.yieldIfDuplicate()
     }
 
     var body: some Scene {
