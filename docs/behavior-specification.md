@@ -33,6 +33,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-010](#dk-fr-010-apple-shortcuts--url-scheme-automation) | Apple Shortcuts + URL-scheme automation | P2 | v1.1 |
 | [DK-FR-011](#dk-fr-011-hide-the-dock-during-screen-capture) | Hide the Dock during screen capture | P2 | v1.1 |
 | [DK-FR-012](#dk-fr-012-single-instance-guard) | Single-instance guard | P1 | v1.0 |
+| [DK-FR-013](#dk-fr-013-restore-borrowed-dock-auto-hide-across-process-death) | Restore borrowed Dock auto-hide across process death | P1 | v1.1 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -515,10 +516,12 @@ Then the poll never runs and the Dock is never touched; the toggle is disabled
 S6 — Teardown never leaves the Dock hidden
 Given DockKeeper hid the Dock
 When the user turns the feature off, or disables DockKeeper
-Then auto-hide is restored to OFF                              [CONFIRMED — code]
+Then auto-hide is restored to OFF        [CONFIRMED — code, for the feature-off
+    and app-disabled exits ONLY; every other exit — quit, SIGKILL, Force Quit,
+    a crash, the logout kill — is DK-FR-013, not this scenario]
 ```
 
-**Failure behavior.** Symbol absent → feature unavailable, toggle disabled, no-op (never a crash, no fallback needed — hiding the Dock is a comfort feature). A failed `CoreDockSetAutoHideEnabled` (private API gone at write time) leaves the flag unset so no phantom "restore" is attempted. The auto-hide toggle is a direct `CoreDock` call outside the recovery machinery, so it can never trigger a drift correction or oscillation (ADR-011 "Coordinator interaction", verified).
+**Failure behavior.** Symbol absent → feature unavailable, toggle disabled, no-op (never a crash, no fallback needed — hiding the Dock is a comfort feature). A failed `CoreDockSetAutoHideEnabled` (private API gone at write time) leaves the flag unset so no phantom "restore" is attempted. The auto-hide toggle is a direct `CoreDock` call outside the recovery machinery, so it can never trigger a drift correction or oscillation (ADR-011 "Coordinator interaction", verified). **An untrappable death while a hide is held** — SIGKILL, Force Quit, a crash, the logout kill — is **not** covered here: the in-memory hide flag dies with the process, and the recovery is [DK-FR-013](#dk-fr-013-restore-borrowed-dock-auto-hide-across-process-death) (durable record + launch repair + a manual floor), added 2026-08-17 for issue #29.
 
 **User-visible behavior.** The Dock auto-hides for the duration of a screen capture and returns afterward. Advanced-tab toggle "Hide the Dock while screen sharing" with a caption (off by default; explains the auto-hide-during-capture-and-restore behavior and that an existing auto-hide setting is left untouched); disabled with a "unavailable on this version of macOS" note when the symbol is absent.
 
@@ -637,6 +640,112 @@ Then nothing is deflected — dockkeeper-cli is a legitimate separate process an
 **Testability.** The whole decision is pure and lives in `DockKeeperCore` (`InstanceGuard.decide`), which the test target links, so it is exhaustively unit-tested: sole instance, self-in-peer-list, newcomer yields, junior ignored, bundle path is never consulted so both duplicate vectors reduce to one decision, pid wrap-around vs start time, a dateless newcomer yields, a dated process beats a dateless one regardless of pid, **a newcomer yields to an already-settled incumbent in either pid order** (the sequential-incumbency invariant the simultaneous sweep does not model), `--diagnostics` never pre-empted, exact-match escape hatch, and a 27-combination sweep asserting **exactly one survivor** across every start-time shape (a two-element test cannot catch a cyclic comparator; three can) — [InstanceGuardTests.swift](../Tests/DockKeeperTests/InstanceGuardTests.swift). The `NSRunningApplication` read, the kernel start-time substitution and the `exit()` are behind `SingleInstance` in the app target and are **not** unit-tested (the last of them ends the process). **Not yet run, and therefore not CONFIRMED:** the assembled guard against a real double launch — the ten-item manual matrix in [test-strategy.md](test-strategy.md) is outstanding, item 1 (a second user account under fast user switching) first, since a wrong answer there would mean the shipped guard *itself* silently denies the second user an instance, and it also gates the `LSMultipleInstancesProhibited` follow-on.
 
 **Priority / target.** P1 / v1.0. Justification: it is the inter-process enforcement of an invariant the design already assumes ([technical design](technical-design.md) §9, "exactly one owner of reconciliation state"), the failure it prevents is user-visible, self-inflicted by a normal upgrade, and unrecoverable through the app's own UI. **Related risks:** none new (no network, no permission, no persisted state; the guard reads process state and exits); see **R-012** (DockLock coexistence — ADR-012 records an orphaned enabled login item for a deleted DockLock Lite, and that entry is the unrefuted alternative explanation for one of the two icons that prompted this requirement).
+
+---
+
+## DK-FR-013: Restore borrowed Dock auto-hide across process death
+
+**Description.** When DockKeeper has turned macOS Dock auto-hide on for a screen capture ([DK-FR-011](#dk-fr-011-hide-the-dock-during-screen-capture)) and the process then dies without restoring it — quit, SIGKILL, Force Quit, a crash, or the kill at logout — the next launch turns auto-hide back off and says so. A durable record written *before* the borrowing write is what makes that possible; a manual "turn it off" command is the floor beneath it, available even when no record exists. Governed by **[ADR-013](decision-log.md#adr-013-borrowed-system-state-is-persisted-before-the-borrowing-write-and-reconciled-at-launch-termination-hooks-are-an-optimization-not-the-mechanism)**, which also amends [ADR-011](decision-log.md#adr-011-hide-the-dock-during-screen-capture-via-a-private-screen-watcher-flag--dock-auto-hide-opt-in).
+
+**Rationale.** DK-FR-011's `weHidIt` flag was in-memory only, so an untrappable death left Dock auto-hide **on** with nothing recording that DockKeeper put it there. On the next launch the flag reads false while auto-hide reads on, and `decide` — correctly, per ADR-011's "never touch a user who already auto-hides" rule — returns `none` from then on: the feature never fires again and there is **no in-app recovery** (GitHub issue [#29](https://github.com/blamechris/DockKeeper/issues/29)). The user *can* recover by turning auto-hide off in System Settings, but nothing tells them DockKeeper is the cause. A termination hook cannot fix this on its own: for background (`LSUIElement`) processes loginwindow sends the Quit Apple Event but does not wait for a reply before killing (INFERRED — Apple, *System Startup Programming Topics*; ADR-013 Evidence), and logout is the most common real exit path.
+
+**Preconditions.** None for the automatic repair beyond a persisted record existing — it deliberately runs **before** the enable/feature gating, so a Dock left auto-hidden is repaired even when the user has since turned the feature, or DockKeeper itself, off. "Beyond a persisted record existing" is enforced, not merely described: with no record the repair returns before evaluating either private port, so DK-FR-011's opt-in guarantee — the screen-watcher and the auto-hide read are untouched unless the user opted in — survives this launch hook (asserted by `repairWithNoRecordTouchesNoPrivateAPI`). The Dock write requires the private `CoreDock` symbols to resolve (ADR-003); when they do not, the repair is inert and the record is preserved. No permission is required; the manual recovery (S11) needs no record at all.
+
+**Trigger.** Three: a capture hide or restore (writes/clears the record); process launch (`AppState.init`, once, before any start/stop gating); and the user invoking the manual recovery from the menu or Preferences ▸ Advanced.
+
+**Expected result.**
+
+```text
+S1 — A hide is recorded before it is taken
+Given the feature is on and a capture starts with auto-hide OFF
+Then a hide record is persisted BEFORE Dock auto-hide is turned ON
+And a failed auto-hide write clears the record again      [CONFIRMED — unit test;
+    the ordering is asserted from inside the injected Dock write, and CONFIRMED
+    by mutation: reversing the two lines fails that assertion alone]
+
+S2 — A restore clears the record after it lands
+Given DockKeeper holds a hide
+When it restores (capture stop, feature off, app disabled, or quit)
+Then Dock auto-hide is set OFF first and only then is the record cleared
+And a failed write keeps the record, so the claim outlives the failure
+                                                          [CONFIRMED — unit test]
+
+S3 — Trappable quit restores immediately
+Given DockKeeper holds a hide
+When the user quits from the menu, or the process receives SIGTERM/SIGINT
+Then auto-hide is restored before the process exits       [CONFIRMED — unit test
+    for the restore itself; that the hook fires in the real signed bundle is
+    manual and INFERRED — test-strategy §3c]
+
+S4 — Untrappable death leaves a repairable trace
+Given DockKeeper holds a hide
+When the process is SIGKILLed, force-quit, crashes, or is killed at logout
+Then the persisted record survives and the next launch has enough to repair
+                                                          [record durability
+    across process death CONFIRMED — measured 25/25, spikes/termination-and-
+    defaults-durability.md; across kernel panic or power loss UNKNOWN — ADR-013]
+
+S5 — Repair on next launch (the headline case, issue #29)
+Given a hide record no older than the 7-day attribution window
+And Dock auto-hide currently reads ON, with no capture running
+When DockKeeper launches
+Then auto-hide is set back OFF, the record is dropped, and a one-line note is
+    shown in the menu                                     [CONFIRMED — repair
+                                                           table + ports test]
+
+S6 — Repair adopts rather than un-hides during a live capture
+Given a hide record and a capture still running, with the poll about to start
+When DockKeeper launches
+Then it takes ownership of the existing hide and issues NO Dock write
+And the normal capture-stop restore puts auto-hide back    [CONFIRMED — the
+    "no Dock write" property; that the far end sees no Dock is on-device]
+
+S7 — Never restores an auto-hide it did not observe as ON
+Given a hide record and auto-hide currently reading OFF, or unreadable
+When DockKeeper launches
+Then no Dock write is issued; an OFF reading drops the record, an unreadable
+    one keeps it for a macOS where the symbol resolves     [CONFIRMED — 48-case
+                                                            safety sweep]
+
+S8 — Never takes away a setting the user has lived with
+Given a hide record older than the 7-day attribution window
+When DockKeeper launches with auto-hide ON
+Then the record is dropped and auto-hide is left exactly as it is
+                                                          [CONFIRMED]
+
+S9 — Repair runs even when the feature, or DockKeeper, is off
+Given a hide record and the user has since disabled the feature in frustration
+When DockKeeper launches
+Then the repair still runs, and restores rather than adopts   [CONFIRMED —
+    repair table, for the rule (featureActive: false -> .restore); that the call
+    site in AppState.init is ungated and runs before applyEnabledState() is
+    code-inspection only, since the test target does not link the app target]
+
+S10 — A crash between the two writes is never worse than the bug
+Given the process dies between the record write and the auto-hide ON write
+Then the next launch sees auto-hide OFF and discards the record, at no cost
+                                                          [CONFIRMED]
+
+S11 — Manual recovery needs no record
+Given the Dock is auto-hiding and the feature is on
+Then both the menu and Preferences ▸ Advanced offer "Turn Off Dock Auto-Hide",
+    the Preferences one unconditionally while the CoreDock auto-hide symbols
+    resolve (which is the gate that matches the write, not CoreDock.isAvailable)
+When the user invokes either
+Then Dock auto-hide is turned OFF and any record is cleared, regardless of
+    age, provenance, or whether a record exists at all     [CONFIRMED — unit
+    test; the menu item's visibility and wording are manual, §3c]
+```
+
+**Failure behavior.** `CoreDock` unavailable → the repair is inert (`none`) and the record is **preserved**, so a macOS on which the symbol resolves can still repair. An undecodable record is treated as absent, which is the safe answer in every branch. A record lost to a kernel panic, a power loss, a wiped preferences domain, or a downgrade is unrecoverable automatically — S11 is the recovery, and that is why it is unconditional. The repair is announced rather than silent (one menu line), because it mutates a global system preference the user did not just ask for. **Known interaction, not a regression:** invoking S11 while a capture is genuinely running with the feature on will re-hide within one poll (3 s) — that is DK-FR-011 working as designed, and turning the feature off is the exit from that loop, which restores on the way out (`featureOffRestoresEvenWhileCapturing`). **Known bound on the window:** the record is stamped at the hide and never refreshed, so a *single* capture that runs longer than 7 days and is then killed repairs to `discard`; the outcome is the pre-fix status quo plus S11, and re-stamping was declined against the DK-NFR-001 tick budget (ADR-013).
+
+**Ambiguity that is not resolved, and is not claimed to be.** At launch, "nothing touched auto-hide since we died" is **not separable** from "the user turned it off and then deliberately on", "the user saw it on and decided they like it", or "a third party set it" — all present identically as *record present, auto-hide on, not capturing*. No intent signal exists (ADR-013, Consequences). The design therefore bounds exposure with one honest quantity, `now − hiddenAt`, which over-estimates it and so errs toward *not* restoring; inside 7 days it restores, and the cost asymmetry is why: a false restore is visible in seconds, announced, reversible in one checkbox, fires at most once per crash, and self-clears, while a false non-restore is the status quo bug. **Related risk:** R-014.
+
+**User-visible behavior.** After a crash or a logout with a hide held, the Dock stops auto-hiding on the next launch and the menu carries one line — *"Restored your Dock after a screen share ended unexpectedly."* — superseded by the next real screen-share transition. A launch that *adopts* (S6) is announced too, with its disclosure deferred to the restore that eventually discharges it, so neither acting branch mutates the setting silently. The note sits **below** the recovery `statusMessage` in the menu: it is sticky, and a `Degraded` / `Not converging` message is the only health surface this app has. While the Dock is auto-hiding and the feature is on, the menu offers **Turn Off Dock Auto-Hide**; Preferences ▸ Advanced carries the same **Turn Off Dock Auto-Hide** permanently, with a caption explaining when to use it. `--diagnostics` gains a read-only `Screen-share:` line reporting whether a record is held and its **relative** age (state only, no wall-clock stamp — DK-PRIV-001 S2). Nothing else changes: no new prompt, no new permission, no new poll.
+
+**Testability.** `ScreenShareHider.repair(record:currentAutoHide:capturing:featureActive:now:window:)` is pure and total, and is exhaustively unit-tested: a 10-row rule table (one row per branch plus both window boundaries), a **48-combination** sweep asserting the safety property *never `.restore` or `.adopt` without observing auto-hide ON*, one-step convergence, and the 7-day window as an asserted constant. The side-effecting half — write-ahead/write-behind ordering, the end-to-end "process 1 killed, process 2 repairs", `.adopt` issuing no Dock write, and the manual recovery with and without a record — is driven through the injected `probe`/`readAutoHide`/`writeAutoHide` ports against a recording fake Dock and an isolated `UserDefaults` suite ([ScreenShareTests.swift](../Tests/DockKeeperTests/ScreenShareTests.swift)). **No private API is called and the real Dock never moves.** `ScreenShareHider.decide`'s 8-row ADR-011 table is deliberately **unchanged** (CONFIRMED by diff) and must stay passing — that is the proof obligation for the ADR-011 contract. **Manual / on-device, therefore INFERRED rather than CONFIRMED** ([test-strategy.md](test-strategy.md) §3c): the hook actually firing in the signed bundle at menu-Quit and at logout; `kill -TERM` on the installed app restoring; a real capture → real hide → `kill -9` → relaunch cycle; the `.adopt` no-flash property as seen by the far end of a real share; the menu item's visibility and wording; the logout path specifically; and cross-user behavior (argued from per-user domains, not measured).
+
+**Priority / target.** P1 / v1.1. Justification: this is a **correctness defect in shipped behavior**, not a feature — the affected user is left with an auto-hiding Dock, no explanation, and a feature that silently never fires again — so it outranks DK-FR-011's own P2 even though it is confined to that feature's blast radius. **Related risks:** R-014 (cross-launch repair restores an auto-hide the user set themselves), R-004 (the repair's Dock write is the same private-API path).
 
 ---
 

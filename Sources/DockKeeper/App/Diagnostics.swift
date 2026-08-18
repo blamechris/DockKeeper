@@ -45,7 +45,19 @@ enum Diagnostics {
         Dock edge:       \(DockController().currentOrientation()?.displayName ?? "unknown")
         Displays:        \(DisplayManager.activeDisplays().count)
         Separate Spaces: \(separateSpaces ? "on (pinning unsupported)" : "off (pinning supported)")
+        Screen-share:    \(screenShareHideStatus())
         """
+    }
+
+    /// Whether a screen-capture hide record is outstanding — the support answer
+    /// to "why is my Dock auto-hiding?" (DK-FR-013). Strictly read-only, and a
+    /// relative age rather than a wall-clock stamp, matching the state-only
+    /// content rule the rest of the report follows.
+    private static func screenShareHideStatus() -> String {
+        guard let record = Settings.shared.screenShareHideRecord else { return "no record held" }
+        let age = Int(Date().timeIntervalSince(record.hiddenAt))
+        let window = Int(ScreenShareHider.repairWindow)
+        return "record held (\(age)s old; repair window \(window)s)"
     }
 
     /// Every *other* live copy, with its path — so a support report answers

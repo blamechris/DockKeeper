@@ -48,8 +48,16 @@ public enum CoreDock {
         return unsafeBitCast(handle, to: T.self)
     }
 
-    /// True when the private API resolved and can be used.
+    /// True when the private API resolved and can be used. Answers for the
+    /// *orientation* pair only — see `isAutoHideAvailable` for the auto-hide one.
     public static var isAvailable: Bool { getFn != nil && setFn != nil }
+
+    /// True when the auto-hide symbols specifically resolved. `isAvailable`
+    /// answers for `CoreDockGet/SetOrientationAndPinning` and is not a proxy for
+    /// these: the four symbols are `dlsym`'d independently, so a UI gate that
+    /// consults the wrong pair can enable a control whose write cannot land (and
+    /// disable one whose write can).
+    public static var isAutoHideAvailable: Bool { getAutoHideFn != nil && setAutoHideFn != nil }
 
     /// The Dock's current orientation and pinning, or `nil` if the API is
     /// unavailable or returns an unrecognized value.

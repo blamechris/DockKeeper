@@ -69,12 +69,31 @@ struct MenuBarContent: View {
 
         Toggle("Launch at Login", isOn: $state.launchAtLogin)
 
-        if let message = state.statusMessage ?? state.lastPinMessage ?? state.loginItemMessage {
+        // `statusMessage` first, deliberately: it is the *only* surface an
+        // LSUIElement app has for "DockKeeper is degraded / not converging", and
+        // the screen-share repair note is sticky — in the DK-FR-013 S9 case (the
+        // user turned the feature off after being poisoned) no further
+        // screen-share transition ever fires to clear it, so putting the note
+        // first would occlude a live health message for the whole process
+        // lifetime. Health outranks an informational one-off.
+        if let message = state.statusMessage ?? state.screenShareRepairMessage
+            ?? state.lastPinMessage ?? state.loginItemMessage {
             Divider()
             Text(message)
             if state.loginItemMessage != nil {
                 Button("Open Login Items…") { state.openLoginItemsSettings() }
             }
+        }
+
+        // DK-FR-013 S11 — the recovery that needs no persisted record. Shown only
+        // while the Dock is actually auto-hiding and this feature is on, so it
+        // is not a general Dock control bolted onto a menu that must stay
+        // minimal (kickoff rule 20). Phrased as a plain action rather than a
+        // claim about what DockKeeper did, because outside the record window we
+        // genuinely do not know.
+        if state.canOfferAutoHideRestore {
+            Divider()
+            Button("Turn Off Dock Auto-Hide") { state.restoreDockAutoHide() }
         }
 
         Divider()

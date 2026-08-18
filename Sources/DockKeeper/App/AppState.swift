@@ -79,6 +79,18 @@ final class AppState: ObservableObject {
     /// `nil` when everything is healthy.
     @Published private(set) var statusMessage: String?
 
+    /// One-line note that a cross-launch repair changed a system setting the
+    /// user did not just ask for (DK-FR-013 S5). A silent mutation of a global
+    /// preference is the one thing that would make this fix worse than the bug;
+    /// this is the cheapest honest disclosure, on the surface the menu already
+    /// has. Cleared by the next real screen-share transition.
+    @Published private(set) var screenShareRepairMessage: String?
+
+    /// Set when a launch repair `.adopt`ed a leftover hide, so the restore that
+    /// eventually discharges it is announced instead of passing silently. Not
+    /// published: it only decides which string the next transition writes.
+    private var pendingRepairDisclosure = false
+
     /// Current recovery state — drives the state-distinct menu-bar icon.
     @Published private(set) var recoveryState: RecoveryState = .disabled
 
@@ -127,6 +139,13 @@ final class AppState: ObservableObject {
     /// Whether the private screen-watcher symbol resolved on this macOS. Fixed
     /// for the process lifetime; drives the Advanced-tab "unavailable" note.
     let screenCaptureAvailable = ScreenCapture.isAvailable
+
+    /// Whether the private Dock *auto-hide* symbols resolved. Distinct from
+    /// `screenCaptureAvailable` (SkyLight) and from `CoreDock.isAvailable`
+    /// (the orientation pair): the manual recovery writes auto-hide, so this is
+    /// the only honest gate for it. Held here rather than read from the view so
+    /// the private-API wrapper stays behind the adapter (kickoff rule 8).
+    let coreDockAutoHideAvailable = CoreDock.isAutoHideAvailable
 
     /// Opt-in window restore across a pin (ADR-010). Enabling without the
     /// Accessibility grant prompts once (the caption is the contextual
@@ -192,9 +211,22 @@ final class AppState: ObservableObject {
             self.pausedUntil = self.coordinator.pausedUntil
         }
         hotKeyCenter.onHotKey = { [weak self] in self?.togglePause() }
-        screenShareHider.onTransition = { transition in
+        screenShareHider.onTransition = { [weak self] transition in
             // State only — no PII (DK-PRIV-001 S2). Mirrors the pin/state notes.
             FileDiagnostics.shared.note("screenshare", transition.rawValue)
+            guard let self else { return }
+            switch transition {
+            case .repaired:
+                break                       // the note is set by the repair path itself
+            case .restored where self.pendingRepairDisclosure:
+                // This is the restore an `.adopt` was waiting for: the cross-launch
+                // mutation has now happened, so say so rather than going quiet.
+                self.pendingRepairDisclosure = false
+                self.screenShareRepairMessage = Self.repairRestoredMessage
+            case .restored, .hidden, .manual:
+                self.pendingRepairDisclosure = false
+                self.screenShareRepairMessage = nil
+            }
         }
         coordinator.onPinOutcome = { [weak self] outcome in
             if outcome != .noPreference, outcome != .alreadyOnTarget {
@@ -206,6 +238,7 @@ final class AppState: ObservableObject {
         // Property observers don't fire from within init, so start explicitly.
         Log.verbose = settings.verboseLogging
         refreshPreferredSelection()
+        repairScreenShareHideIfNeeded()   // DK-FR-013 — before any start/stop gating
         applyEnabledState()
         applyHotkeyState()
 
@@ -215,6 +248,56 @@ final class AppState: ObservableObject {
     /// Set the lock edge from the menu and immediately enforce it.
     func lock(to edge: DockOrientation) {
         lockEdge = edge
+    }
+
+    // MARK: - Termination (DK-FR-013)
+
+    /// Last-chance cleanup, driven by `AppDelegate.applicationWillTerminate`.
+    ///
+    /// Exactly one line here is *correctness*: putting Dock auto-hide back if
+    /// the screen-share hider turned it on (DK-FR-011). It therefore runs
+    /// *first*, before any hygiene teardown that could block or throw.
+    ///
+    /// This is a **latency optimization, not the mechanism**. It fires for
+    /// `NSApp.terminate(nil)` and, via `TerminationSignals`, for SIGTERM and
+    /// SIGINT; at logout/restart the Quit Apple Event is sent to a background
+    /// (`LSUIElement`) process but *not waited for* before loginwindow kills it
+    /// (ADR-013), and SIGKILL, Force Quit, and a crash are untrappable by
+    /// construction. Restoring on those paths is the job of the persisted
+    /// `ScreenShareHideRecord` and `repairScreenShareHideIfNeeded()` at the next
+    /// launch (DK-FR-013). Restoring here simply means the user never sees the
+    /// leftover auto-hide at all.
+    ///
+    /// What is deliberately **not** done here:
+    /// - The locked edge and the display pin are left exactly as they are.
+    ///   They are the user's persisted preference (`Settings.lockEdge`,
+    ///   `preferredDisplayFingerprint`), not something DockKeeper borrowed:
+    ///   no "previous edge" is stored anywhere to restore *to*, and undoing a
+    ///   main-display re-base at logout would shuffle the user's screens on the
+    ///   way out.
+    /// - `isEnabled` is never written. Quitting is not disabling; persisting a
+    ///   disable here would bring DockKeeper back inert at the next login.
+    ///   Note that the ordinary disable path reaches the hider through
+    ///   `applyEnabledState()` — do not reuse it here for that reason.
+    /// - `coordinator.disable()` is not called: it persists nothing, and it
+    ///   would publish a state change into a scene graph that is being torn
+    ///   down.
+    /// - `WindowLayoutPreserver` holds no state between pins (its snapshot is
+    ///   created and consumed inside a single `applyPin`), so there is nothing
+    ///   of its to unwind.
+    func prepareForTermination() {
+        // `restore: true` is the default: it invalidates the poll timer first
+        // and only then restores, so no tick can re-hide behind the restore.
+        // Idempotent, and a no-op when we never hid anything.
+        screenShareHider.stop()
+
+        // Hygiene, strictly after the restore. Both are idempotent and both
+        // close the window in which a callback could fire into a half-torn-down
+        // engine between this hook and process exit — the Carbon hot-key
+        // trampoline in particular holds an *unretained* reference. Neither is
+        // load-bearing: process exit would reclaim them anyway.
+        hotKeyCenter.stop()
+        monitor.stop()
     }
 
     // MARK: - Automation funnel (DK-FR-010)
@@ -394,16 +477,104 @@ final class AppState: ObservableObject {
         applyScreenShareHiderState()
     }
 
+    /// The one spelling of "the screen-share poll should be running", shared by
+    /// the launch repair and the start/stop path so the two can never disagree —
+    /// the same anti-drift reason `InstanceGuard.oneShotFlags` is shared rather
+    /// than re-spelled. `repairIfNeeded` may only *adopt* a leftover hide if the
+    /// poll that would later restore it is definitely going to run.
+    private var screenShareHiderShouldRun: Bool {
+        isEnabled && hideDockDuringScreenShare && screenCaptureAvailable
+    }
+
     /// Start or stop the screen-share Dock hider. Runs the poll only while the
     /// feature is on, DockKeeper is enabled, and the private screen-watcher
     /// symbol resolved (ADR-011). Stopping restores the Dock if we had hidden
     /// it, so turning the feature off never leaves the Dock auto-hidden.
     private func applyScreenShareHiderState() {
-        if isEnabled, hideDockDuringScreenShare, screenCaptureAvailable {
+        if screenShareHiderShouldRun {
             screenShareHider.start()
         } else {
             screenShareHider.stop()
         }
+    }
+
+    /// Repair a Dock left auto-hidden by a DockKeeper that was killed rather
+    /// than quit — SIGKILL, Force Quit, a crash, `run-app.sh`'s escalation, or
+    /// the logout kill (DK-FR-013). `prepareForTermination()` is the trappable
+    /// half; this is the half that cannot be trapped and therefore has to be
+    /// persisted. Because loginwindow does not wait for a background process's
+    /// Quit reply (ADR-013), this — not the terminate hook — is the mechanism.
+    ///
+    /// Runs **before** `applyEnabledState()` and is gated on nothing: a Dock
+    /// stuck auto-hidden must be repaired even if the user has since turned the
+    /// feature — or DockKeeper — off, which is exactly what a frustrated user
+    /// does. `ScreenShareHider.repair` handles the unavailable-symbol case, so
+    /// no `CoreDock.isAvailable` gate is needed here.
+    private func repairScreenShareHideIfNeeded() {
+        let action = screenShareHider.repairIfNeeded(featureActive: screenShareHiderShouldRun)
+        switch action {
+        case .none:
+            return
+        case .discard, .adopt:
+            // State only — no PII (DK-PRIV-001 S2), matching the pin/state notes.
+            // `.restore` is deliberately absent here: it fires
+            // `onTransition(.repaired)`, which already writes the note — two
+            // lines for one event otherwise.
+            FileDiagnostics.shared.note("screenshare", "repair-" + String(describing: action))
+        case .restore:
+            break
+        }
+        // Disclosure is decided separately from the note, because `.adopt`'s
+        // user-visible consequence is deferred: it takes ownership now and the
+        // Dock write lands when the share ends. Announcing only `.restore` would
+        // leave ADR-013's A7 ("do not restore silently") — and R-014's
+        // "announced in the menu" mitigation — true on only one of the two
+        // branches that actually mutate a global system preference.
+        switch action {
+        case .restore:
+            screenShareRepairMessage = Self.repairRestoredMessage
+        case .adopt:
+            pendingRepairDisclosure = true
+            screenShareRepairMessage = "DockKeeper is holding your Dock hidden for the screen share "
+                + "in progress, and will put it back when the share ends."
+        case .none, .discard:
+            break
+        }
+    }
+
+    /// The one spelling of the post-repair note, shared by the `.restore` branch
+    /// and by the deferred `.adopt` discharge so the two cannot drift apart.
+    private static let repairRestoredMessage =
+        "Restored your Dock after a screen share ended unexpectedly." 
+
+    /// User-initiated recovery (DK-FR-013 S11). Unconditional by design — see
+    /// `ScreenShareHider.restoreAutoHideByUserRequest()`.
+    func restoreDockAutoHide() {
+        screenShareRepairMessage = screenShareHider.restoreAutoHideByUserRequest()
+            ? nil
+            : "Couldn't change Dock auto-hide on this version of macOS."
+    }
+
+    /// Whether to offer the manual recovery in the menu: only when the Dock is
+    /// *currently* auto-hiding and this feature is the plausible cause. Reading
+    /// the live value keeps the offer honest rather than cached-and-stale.
+    ///
+    /// Gated on the auto-hide symbols, not on `screenCaptureAvailable`: the
+    /// action this offers is a CoreDock auto-hide write, and a macOS that drops
+    /// the SkyLight watcher is exactly when a user poisoned by an earlier one
+    /// still needs the recovery.
+    ///
+    /// Cost, labelled honestly (kickoff rule 19, kickoff rule 5): this is **not**
+    /// only read when the menu opens. A `MenuBarExtra(.menu)` content body is
+    /// re-evaluated on any `AppState` publish, menu open or closed [INFERRED —
+    /// SwiftUI invalidation is not a documented contract], so the frequency is
+    /// set by publishes (recovery-state changes, display events), not by a timer.
+    /// It stays a live read because the alternative — caching with no reliable
+    /// menu-open edge — offers a control that disagrees with the real Dock, and
+    /// the read is one `dlsym`'d C call with no side effect.
+    var canOfferAutoHideRestore: Bool {
+        guard coreDockAutoHideAvailable, hideDockDuringScreenShare else { return false }
+        return screenShareHider.currentAutoHide() == true
     }
 
     /// Refresh published values after an external (CLI) settings edit
