@@ -60,6 +60,7 @@ public final class Settings: @unchecked Sendable {
         static let preserveWindowLayout = "preserveWindowLayout"
         static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
         static let hideDockDuringScreenShare = "hideDockDuringScreenShare"
+        static let screenShareHideRecord = "screenShareHideRecord"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -67,6 +68,12 @@ public final class Settings: @unchecked Sendable {
 
     /// The keys whose external (e.g. CLI) edits should refresh a running app —
     /// observed via KVO by `DockMonitor` (DK-FR-007-S3).
+    ///
+    /// `screenShareHideRecord` is deliberately **absent**. This app writes it on
+    /// every capture hide and every restore; observing it would turn each one
+    /// into a `.settingsChanged` event and a full reconcile, falsifying ADR-011's
+    /// verified "Coordinator interaction" claim that the auto-hide path never
+    /// reaches `DockMonitor`/`RecoveryCoordinator`. There is a test for this.
     static let externallyObservedKeys = [Keys.enabled, Keys.lockEdge, Keys.preferredDisplayFingerprint]
 
     /// Backing store handle for KVO observation by `DockMonitor`.
@@ -191,6 +198,43 @@ public final class Settings: @unchecked Sendable {
     public var hideDockDuringScreenShare: Bool {
         get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
         set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
+    }
+
+    /// Breadcrumb saying "DockKeeper is holding Dock auto-hide ON for a screen
+    /// capture right now" (DK-FR-013, ADR-013). Absent means we hold nothing.
+    ///
+    /// One key holding one JSON blob, exactly like `preferredDisplayFingerprint`
+    /// above: a single `set` is atomic, so the record can never be read
+    /// half-written, and an undecodable value degrades to `nil` — "no record",
+    /// which is the safe answer in every branch of `ScreenShareHider.repair`.
+    /// A struct rather than a bare `Date` so a later field can be added without
+    /// a key migration.
+    ///
+    /// Deliberately **not** in `registrationDomain()`: absence is a real state,
+    /// and a registered default cannot be removed. Deliberately **not** in
+    /// `externallyObservedKeys` — see the note there. No `settingsVersion` bump:
+    /// that hook is for migrations that *reinterpret existing keys*; an optional,
+    /// absent-by-default key is compatible in both directions (an older build
+    /// ignores it; a newer build reading an older domain sees no record).
+    public var screenShareHideRecord: ScreenShareHideRecord? {
+        get {
+            guard let data = defaults.data(forKey: Keys.screenShareHideRecord) else { return nil }
+            return try? JSONDecoder().decode(ScreenShareHideRecord.self, from: data)
+        }
+        set {
+            // The encode is folded into the same guard on purpose. `set(nil,
+            // forKey:)` is `removeObject`, so passing `try?` straight through
+            // would turn an encode failure into a *silent* "no record" while the
+            // caller went on to write the Dock — reconstructing the exact
+            // unrecoverable state the write-ahead ordering exists to prevent.
+            // Unreachable for a `Date`-only struct today, but ADR-013 mints this
+            // as the pattern for all future borrowed state.
+            guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+                defaults.removeObject(forKey: Keys.screenShareHideRecord)
+                return
+            }
+            defaults.set(data, forKey: Keys.screenShareHideRecord)
+        }
     }
 
     /// Schema version hook for future migrations (current: 1).

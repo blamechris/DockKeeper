@@ -42,8 +42,48 @@ struct DockKeeperApp: App {
 /// Minimal AppKit delegate: makes DockKeeper a menu-bar accessory (no Dock
 /// icon of its own) and kicks off the engine once the app is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    /// Converts SIGTERM/SIGINT into the same orderly quit ⌘Q takes, so the
+    /// termination cleanup below is not skipped on those paths. See the type.
+    private let terminationSignals = TerminationSignals()
+
+    /// Install the signal sources as early as a delegate hook allows.
+    /// `willFinishLaunching` rather than `didFinishLaunching` because the
+    /// `@StateObject` autoclosure that builds `AppState` — and therefore the
+    /// first hider tick, which can already hide the Dock and write the record —
+    /// runs before both (measured ~65 ms ahead of `didFinishLaunching`). The
+    /// record covers that gap either way, so this is latency, not correctness.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        terminationSignals.install()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Put back what DockKeeper borrowed from the system before the process
+    /// goes away (DK-FR-013).
+    ///
+    /// Fires for `NSApp.terminate(nil)` — the menu's "Quit DockKeeper" / ⌘Q
+    /// (measured: `terminate` posts `willTerminateNotification` before the run
+    /// loop unwinds) — and, via `TerminationSignals`, for SIGTERM and SIGINT. At
+    /// logout/restart the Quit Apple Event **is sent but not waited for** for
+    /// background (`LSUIElement`) processes, which loginwindow then kills
+    /// (Apple, *System Startup Programming Topics*, "Terminating Processes"), so
+    /// this hook is a *latency optimization*, not the mechanism. Correctness on
+    /// every untrappable path — SIGKILL, Force Quit, crash, the logout kill —
+    /// comes from the persisted record and the launch repair (DK-FR-013,
+    /// ADR-013).
+    ///
+    /// `AppState.shared` is a weak static assigned at the end of
+    /// `AppState.init`. The `@StateObject` autoclosure that builds it is
+    /// evaluated when the scene graph is built — measured to be *before*
+    /// `applicationWillFinishLaunching`, which is the ordering `init()` above
+    /// depends on — so it is non-nil at any terminate that can follow a launch.
+    /// The only nil case is a quit before the scene graph exists, where no
+    /// hider ever ran and there is by definition nothing to restore.
+    func applicationWillTerminate(_ notification: Notification) {
+        AppState.shared?.prepareForTermination()
     }
 
     /// Handle `dockkeeper://` automation URLs (DK-FR-010). Registered via

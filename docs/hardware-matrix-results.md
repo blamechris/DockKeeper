@@ -58,6 +58,10 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 | Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
 | Edge lock survives display events (2-display, app running) | ⏳ | — |
 | Unplug / replug drift presentation | ⏳ | — |
+| **Screen-capture hide: `kill -9` mid-capture → relaunch restores auto-hide** (DK-FR-013 S5, issue #29) | ⏳ | — |
+| **Screen-capture hide: relaunch *during* a live capture adopts, Dock does not flash** (DK-FR-013 S6) | ⏳ | — |
+| **Screen-capture hide: logout with a hide held → auto-hide off after login** (DK-FR-013 S4) | ⏳ | — |
+| **`applicationWillTerminate` / `SIGTERM` restore in the signed bundle** (DK-FR-013 S3) | ⏳ | — |
 | UUID stability across ports/adapters/reboot | ⏳ baseline recorded | — |
 | Sleep/wake with external connected | ⏳ | — |
 | Mirroring / clamshell | ⏳ UNKNOWN behavior (open question #6) | — |

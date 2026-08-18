@@ -72,6 +72,20 @@ private struct AdvancedTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            // DK-FR-013 S11 — the permanent home of the manual recovery.
+            // Unconditional (only gated on CoreDock resolving), because the
+            // users who need it most are the ones whose record was never
+            // written: a build that predates it, a wiped preferences domain, a
+            // power loss. Deliberately not disabled on the toggle.
+            // Labelled to match the menu item exactly: "restore auto-hide" reads
+            // cold as restoring it *to on*, and ADR-013 leans on this control
+            // being plainly labelled to justify making it unconditional.
+            Button("Turn Off Dock Auto-Hide") { state.restoreDockAutoHide() }
+                .disabled(!state.coreDockAutoHideAvailable)
+            Text("Turns macOS Dock auto-hide off. Use this if a screen share ended "
+                 + "unexpectedly and your Dock is still hiding itself.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .onAppear { state.refreshAccessibilityStatus() }

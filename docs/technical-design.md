@@ -254,7 +254,7 @@ States (all PROPOSED except where noted):
 | Current main display | `CGMainDisplayID()` | ✅ |
 | Preferred display | `Settings.preferredDisplayUUID` (fingerprint in v1, §7) | 🟡 UUID only |
 | Separate-Spaces flag | `com.apple.spaces` `spans-displays` read | ✅ |
-| Dock autohide | `CoreDockGetAutoHideEnabled` resolves (CONFIRMED, spike) — read-only awareness; DockKeeper never changes it | ❌ not wired |
+| Dock autohide | `CoreDockGetAutoHideEnabled` resolves (CONFIRMED, spike). Read-only awareness for the recovery engine, which never touches it — but **DK-FR-011 does borrow it**: `ScreenShareHider` turns it on for the duration of a screen capture and off again afterwards, outside the coordinator (ADR-011 "Coordinator interaction"). Provenance across a process boundary is persisted, not held in memory (§11.1, ADR-013) | ✅ (2026-07-23, DK-FR-011); durable record 2026-08-17 |
 | Pending restoration / attempt count / last outcome | RecoveryCoordinator | ❌ (needed for retry/cooldown) |
 | Last pin outcome | `AppState.lastPinMessage` | ✅ |
 | Login item status | `SMAppService.mainApp.status` (system is source of truth) | ✅ |
@@ -465,10 +465,40 @@ Consequences:
 | `restoreDelay` | 0.4 | ✅ | Becomes debounce/ladder base (§8.4) |
 | `recoveryInterval` | 30.0 | ✅ | Poll interval per §8.6 (shipped 2026-07-22) |
 | `diagnosticsFileEnabled` | `false` | ✅ | Opt-in bounded file log (2026-07-23) |
-| `settingsVersion` | 1 | ✅ | Migration hook (2026-07-23) |
+| `settingsVersion` | 1 | ✅ | Migration hook (2026-07-23). **Not bumped** by `screenShareHideRecord`: the hook is for migrations that reinterpret *existing* keys, and an optional absent-by-default key is compatible in both directions |
+| `screenShareHideRecord` | nil | ✅ | JSON-encoded `ScreenShareHideRecord` (`hiddenAt` only) — the durable "DockKeeper is holding Dock auto-hide on right now" breadcrumb (DK-FR-013, ADR-013). **Absent by default and deliberately not registered** (absence is a real state; a registered default cannot be removed) and **deliberately not in `externallyObservedKeys`** (§11.1) |
 | Donation prompt state | — | — | **Deliberately absent.** No automatic donation prompt exists, so no state is needed (kickoff §6.11: default no prompt — we exceed this by having no prompt at all; the "Support Development" menu item is passive) |
 
 Onboarding-completion flag: not needed (no onboarding flow; the app is functional on first launch with zero prompts).
+
+### 11.1 Borrowed system state (DK-FR-013, ADR-013)
+
+`CoreDockSetAutoHideEnabled` writes through to the `com.apple.dock` domain (CONFIRMED — R-011), so DK-FR-011's hide is not a private in-process toggle: it is a **persistent mutation of a global preference owned by another process**, which DockKeeper *borrows* and must give back. The rule this establishes is general, and binds any future feature that borrows a system preference:
+
+> **Any system preference DockKeeper borrows is recorded durably *before* the borrowing write and cleared *after* the restoring write, and restoration never depends on a termination hook.**
+
+**Why not a termination hook.** `AppState.prepareForTermination()` (via `applicationWillTerminate`, plus `TerminationSignals` converting `SIGTERM`/`SIGINT` into an ordinary quit) covers the trappable exits and makes them instant. It is a **latency optimization, not the mechanism**: `SIGKILL`, Force Quit and a crash are untrappable by construction, and for background (`LSUIElement`) processes loginwindow *sends* the Quit Apple Event but does not wait for a reply before killing (INFERRED — Apple, *System Startup Programming Topics*; ADR-013 Evidence). Logout is the highest-frequency real exit path, so a design that depends on the hook is a design that usually loses. `NSSupportsSuddenTermination=false` does **not** buy the wait — it governs the sudden-termination refcount, not loginwindow's patience.
+
+**Ordering, because the two stores cannot be made atomic.** The record lives in `UserDefaults` (via `cfprefsd`) and the borrowed value lives in `com.apple.dock` (via the Dock); there is no transaction spanning them. Ordering plus a free discharge rule replaces atomicity:
+
+| Phase | Order | Killed in between | Cost |
+|---|---|---|---|
+| Hide | **Write-ahead** — record, then `writeAutoHide(true)` | Record present, auto-hide still off | Next launch **discards**, zero Dock writes |
+| Restore | **Write-behind** — `writeAutoHide(false)`, then clear the record only if it succeeded | Record outlives an already-correct Dock | Next launch **discards**, zero Dock writes |
+| Failed hide write | Clear the record again | — | Never claim a hide we failed to make |
+
+The record is therefore always a **superset** of "this auto-hide may be ours", and the false positives cost nothing because a launch that reads auto-hide already *off* discards without writing. The opposite hide order — Dock first, record second — is the one that leaves auto-hide on with no record, i.e. the unrecoverable state this exists to remove. Cost is one defaults write per hide and one per restore, i.e. per *capture session*, not per 3 s tick (DK-NFR-001) — which is also why the record is never re-stamped mid-capture, and therefore why a single capture outliving the 7-day window repairs to `discard` (ADR-013, accepted bound).
+
+**`repair` → `decide` hand-off.** Two total pure functions in `DockKeeperCore`, with a stated boundary rather than one bigger table:
+
+- `ScreenShareHider.repair(record:currentAutoHide:capturing:featureActive:now:window:) -> {none, discard, adopt, restore}` answers a **once-per-launch question about provenance across a process boundary**, and runs once from `AppState.init` before any enable/feature gating. `repairIfNeeded` short-circuits on a missing record **before** evaluating either private port, because Swift's eager argument evaluation would otherwise call `CGSIsScreenWatcherPresent` and `CoreDockGetAutoHideEnabled` on every launch — including for the users who never opted in, contradicting DK-FR-011's opt-in guarantee.
+- `ScreenShareHider.decide(capturing:weHidIt:currentAutoHide:) -> {none, hide, restore}` answers the **steady-state question every 3 s from three live booleans**, and is **unchanged** — its exhaustive 8-row table is the documented ADR-011 contract, and leaving it byte-identical (CONFIRMED by diff) and passing is the standing proof that the contract survived.
+
+Both functions apply the *same* rule about an unreadable auto-hide: `repair` returns `none` and keeps the record, and `evaluate` — the side-effecting caller of `decide` — returns before deciding at all rather than coalescing an unreadable read to `false`. That symmetry is load-bearing, not tidiness: coalescing would let a launch mint a record and hide the Dock while unable to tell the user's own auto-hide from ours (violating the ADR-011 invariant directly), and would overwrite the very record `repair` had just deliberately preserved for a macOS on which the symbol resolves.
+
+The hand-off is well-formed in all four repair outcomes: after `none`/`discard`/`restore` the in-memory flag is false; after `adopt` it is true **and** auto-hide is known on (the repair's own guard proved it). Both are states `decide`'s table already covers. `featureActive` gates `adopt` because adopting a hide that nothing will later restore would leave the Dock hidden with the record renewed — the bug re-armed — and `adopt` exists at all because restoring during a live capture would show the Dock for up to one poll interval in the middle of a screen share.
+
+`screenShareHideRecord` is kept out of `Settings.externallyObservedKeys` on purpose: this app writes it on every hide and every restore, so observing it would turn each one into a `.settingsChanged` event and a full reconcile, falsifying ADR-011's verified "the auto-hide path never reaches `DockMonitor`/`RecoveryCoordinator`" claim. There is a test asserting its absence.
 
 ---
 
@@ -538,6 +568,9 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 | Mirrored displays | `CGDisplayIsInMirrorSet` | UNKNOWN correct behavior — likely decline pin (mirrors share one space); spike | ❌ |
 | Unsupported macOS (< 14) | Package `platforms` gate | Won't build/launch; document in README | ✅ |
 | Duplicate instance (second bundle path, or a rebuilt / upgraded-in-place bundle — LaunchServices dedupes on inode, not path) | `NSRunningApplication.runningApplications(withBundleIdentifier:)` at `App.init()`, after one-shot flags and before the `AppState` autoclosure; ranked by LaunchServices launch date, falling back to the kernel process start time (`sysctl`) so every live peer has one | The junior instance exits `EXIT_SUCCESS` with a stderr notice + one log line; no alert (`LSUIElement` has nothing to show); `--diagnostics` reports `Other instances:`; `run-app.sh` quits the previous `dist/` build before rebuilding | ✅ (2026-08-17, decision unit-tested); manual matrix not yet run — unbundled `swift run` builds are deliberately unguarded, and detection is not atomic (ADR-012) |
+| **Process killed while holding a borrowed Dock auto-hide** (SIGKILL, Force Quit, crash, `run-app.sh` escalation, the logout kill) | Next launch: a persisted `screenShareHideRecord` with `CoreDockGetAutoHideEnabled()` reading true (§11.1) | Within the 7-day attribution window and with no capture running, set auto-hide off, clear the record, and show one menu line; with a capture running and the poll about to start, **adopt** instead and issue no Dock write | ✅ (2026-08-17, pure `repair` + ports unit-tested); the real kill→relaunch cycle is manual ([test strategy](test-strategy.md) §3c) |
+| Borrowed auto-hide record outlives its claim (already off, unreadable, stamped in the future, or older than 7 days) | Same launch reconcile | Discard the record with **zero** Dock writes — except an unreadable `CoreDock`, where the record is **kept** so a macOS that resolves the symbol can still repair | ✅ (2026-08-17, 48-case safety sweep) |
+| Record lost entirely (kernel panic, power loss, wiped defaults domain, downgrade) | Not detectable | Manual floor: "Turn Off Dock Auto-Hide" in the menu while the Dock is auto-hiding, the same item always in Preferences ▸ Advanced (DK-FR-013 S11) | ✅ (2026-08-17); panic/power-loss durability itself is UNKNOWN (ADR-013) |
 | Fullscreen transition races | none (deliberate) | Retry ladder absorbs; no fullscreen tracking in v1 | by design |
 
 ---

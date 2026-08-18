@@ -8,10 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **Turn Off Dock Auto-Hide**, in the menu whenever the Dock is auto-hiding and the feature is on, and permanently in Preferences ▸ Advanced. Use it if your Dock is still hiding itself after a screen share ended badly — it works even for a Dock left that way by an older version, where there is nothing for DockKeeper to remember.
+- Quitting DockKeeper from the menu, and stopping it from a terminal, now restore the Dock before the app exits instead of leaving it hidden.
+- `--diagnostics` reports whether a screen-share Dock hide is currently outstanding.
 - **Single-instance guard.** Launching a second copy of DockKeeper — a second install, or a fresh copy opened while an older one is still running — now exits immediately instead of leaving two copies fighting over the Dock. macOS treats an upgraded or rebuilt app bundle as a brand-new application, so this was reachable just by dragging a new copy over the old one without quitting first. There is no alert: the second launch simply does nothing, and the copy already running stays in charge.
 - `--diagnostics` gained an `Other instances:` line, so a support report shows every live copy and its path — useful because a menu-bar-only app has no Force Quit entry to check.
 - `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` runs two on purpose, for anyone comparing builds side by side.
 - Launch-prep docs: README screenshots and badges, `SECURITY.md` (private vulnerability reporting), `CONTRIBUTING.md`, a PR template, and this changelog.
+
+### Fixed
+
+- **The Dock no longer stays hidden forever if DockKeeper is killed during a screen share.** With "hide the Dock while screen sharing" on, DockKeeper turns on macOS Dock auto-hide for the duration of a capture and turns it off again afterwards. If the app was force-quit, crashed, or was killed when you logged out while a share was running, auto-hide was left on — and because DockKeeper deliberately never touches auto-hide for people who use it themselves, it then assumed the setting was yours and never restored it. The Dock kept hiding, and there was no way to fix it from inside the app. DockKeeper now remembers that it borrowed the setting, and puts it back the next time it starts, telling you it did so. ([#29](https://github.com/blamechris/DockKeeper/issues/29))
 
 ## [0.9.1] — 2026-07-28
 
