@@ -12,8 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **Two people sharing a Mac each get their own DockKeeper.** If you use fast user switching, DockKeeper could mistake another logged-in user's copy for a duplicate of your own and quietly decline to start — and because it lives only in the menu bar, there was nothing to see and no error to report: it simply never appeared. It now recognises another user's copy as theirs, not a duplicate of yours. `DockKeeper --diagnostics` also labels those, so a support report cannot point you at a process belonging to someone else. ([#30](https://github.com/blamechris/DockKeeper/issues/30))
 - **`DockKeeper --diagnostics` could crash instead of printing a report.** A malformed value in DockKeeper's saved settings would take the command down rather than being reported, which is the worst possible moment to lose it — it is the one command we ask people to run when something is wrong. It now says the record looks corrupt and carries on.
-
 - **`--diagnostics` no longer opens with a warning that reads like a fault.** Every support report began with a system line saying an internal settings name *"does not make sense and will not work"* — alarming, and the first thing anyone sends us. Nothing was ever wrong: the app and the command-line tool deliberately share one settings store, and the app was reaching it by a route macOS grumbles about but honours. It now takes the route macOS expects, reads and writes exactly the same settings, and prints nothing extra. ([#34](https://github.com/blamechris/DockKeeper/issues/34))
 
 ## [0.9.2] — 2026-08-18
