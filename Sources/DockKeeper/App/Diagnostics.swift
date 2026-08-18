@@ -72,8 +72,10 @@ enum Diagnostics {
     /// disagree with the guard about who counts as another instance — the same
     /// anti-drift reason `InstanceGuard.oneShotFlags` is shared rather than
     /// re-spelled. Each pid printed here is also the recovery handle: an
-    /// `LSUIElement` agent has no Force Quit row, so `kill <pid>` is the only
-    /// way to clear a wedged instance that is deflecting every new launch.
+    /// `LSUIElement` agent has no Force Quit row, so `kill -9 <pid>` is the only
+    /// way to clear a wedged instance that is deflecting every new launch —
+    /// plain `kill` sends SIGTERM, which `TerminationSignals` ignores and
+    /// re-dispatches through the main queue that is itself wedged.
     @MainActor
     private static func otherInstances() -> String {
         guard let bundleID = Bundle.main.bundleIdentifier else { return "unknown (running unbundled)" }

@@ -16,7 +16,7 @@ Third public beta. Two reliability fixes: one for the opt-in screen-share featur
 
 macOS treats a replaced app bundle as a brand-new application, so opening 0.9.2 while 0.9.1 is still running starts a *second* copy — and 0.9.2's new single-instance guard correctly refuses to be that second copy. It exits immediately and silently: no alert, no error, and because DockKeeper has no Dock icon, nothing at all to see. The copy still in your menu bar is the old one, and it stays that way until you quit it or restart the Mac.
 
-If it has already happened, the fix is the same and takes two seconds: quit DockKeeper from the menu, then open it again. To check which version is actually running, run `/Applications/DockKeeper.app/Contents/MacOS/DockKeeper --diagnostics` and read the `Version:` and `Other instances:` lines — `Other instances: none` means the copy you just launched is the one in charge.
+If it has already happened, the fix is the same and takes two seconds: quit DockKeeper from the menu, then open it again. To check whether an old copy is still resident, run `/Applications/DockKeeper.app/Contents/MacOS/DockKeeper --diagnostics` and read the `Other instances:` line — it names the pid and bundle path of every other live copy. (`Version:` reports the bundle you just ran, not the copy in your menu bar.) `Other instances: none` means no DockKeeper is running at all, so the next copy you open takes charge.
 
 ### Fixed
 

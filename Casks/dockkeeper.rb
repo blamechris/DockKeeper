@@ -16,18 +16,40 @@ cask "dockkeeper" do
   app "DockKeeper.app"
   binary "dockkeeper"
 
-  # Quit the running copy before the bundle is replaced. Without this an upgrade
+  # Quit the running copy before the bundle is replaced. Without this, an upgrade
   # copies the new app over a live one, and the single-instance guard (DK-FR-012)
-  # then makes the new copy stand down to the old one that is still in the menu
-  # bar — the upgrade appears to do nothing. `quit:` sends a real Quit Apple
-  # Event, so the DK-FR-013 auto-hide restore runs on the way out; `signal:` is
-  # the backstop for a copy that does not answer it.
-  uninstall quit:   "com.dockkeeper.app",
-            signal: ["TERM", "com.dockkeeper.app"]
+  # then makes the new copy stand down to the old one still in the menu bar — the
+  # upgrade appears to do nothing.
+  #
+  # Scope, stated plainly: Homebrew dispatches the *installed* cask's uninstall
+  # directives during an upgrade (`cask/upgrade.rb` loads `old_cask` via
+  # `CaskLoader.load_from_installed_caskfile`), and 0.9.0/0.9.1 shipped no
+  # `uninstall` stanza — so this takes effect for upgrades FROM 0.9.2 onward. The
+  # 0.9.1 -> 0.9.2 upgrade is carried by `caveats` and the CHANGELOG instead.
+  #
+  # `quit:` sends a real Quit Apple Event, so the DK-FR-013 auto-hide restore runs
+  # on the way out. `signal:` is the backstop for a copy that does not answer it:
+  # TERM first, which ADR-013 routes through the same clean quit, then KILL for a
+  # copy whose main queue is wedged and can process neither — an uncatchable exit
+  # is covered by the persisted hide record and the launch repair, not from here.
+  # `on_upgrade:` is mandatory, not decoration: Homebrew skips `signal:` on
+  # upgrade and reinstall unless it is named
+  # (`cask/artifact/uninstall.rb`, `UPGRADE_REINSTALL_SKIP_DIRECTIVES`).
+  uninstall quit:       "com.dockkeeper.app",
+            signal:     [
+              ["TERM", "com.dockkeeper.app"],
+              ["KILL", "com.dockkeeper.app"],
+            ],
+            on_upgrade: :signal
 
-  # The preferences domain carries the screen-share hide record (DK-FR-013).
-  # Leaving it behind on `brew uninstall` would strand Dock auto-hide on with the
-  # only app that could repair it removed.
+  # zap only — `brew uninstall --zap` / `brew zap`, never plain `brew uninstall`
+  # (`installer.rb#uninstall` calls `uninstall_artifacts` and never reaches the
+  # zap stanzas). The uninstall stanza above runs first, and `:quit`/`:signal`
+  # are ordered before `:trash`, so a live copy restores Dock auto-hide and
+  # clears the record before this removes it. If DockKeeper is NOT running with a
+  # hide outstanding, this discards the record and a reinstall can no longer
+  # repair the Dock automatically — Preferences ▸ Advanced ▸ Turn Off Dock
+  # Auto-Hide still can, unconditionally. That is what zap means: user data goes.
   zap trash: [
     "~/Library/Logs/DockKeeper",
     "~/Library/Preferences/com.dockkeeper.app.plist",
