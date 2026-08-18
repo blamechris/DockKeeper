@@ -2,23 +2,38 @@
 
 All notable user-facing changes to DockKeeper, newest first.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Both 0.9.x releases are public betas (GitHub pre-releases).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). All 0.9.x releases are public betas (GitHub pre-releases).
 
 ## [Unreleased]
 
-### Added
+## [0.9.2] — 2026-08-18
 
-- **Turn Off Dock Auto-Hide**, in the menu whenever the Dock is auto-hiding and the feature is on, and permanently in Preferences ▸ Advanced. Use it if your Dock is still hiding itself after a screen share ended badly — it works even for a Dock left that way by an older version, where there is nothing for DockKeeper to remember.
-- Quitting DockKeeper from the menu, and stopping it from a terminal, now restore the Dock before the app exits instead of leaving it hidden.
-- `--diagnostics` reports whether a screen-share Dock hide is currently outstanding.
-- **Single-instance guard.** Launching a second copy of DockKeeper — a second install, or a fresh copy opened while an older one is still running — now exits immediately instead of leaving two copies fighting over the Dock. macOS treats an upgraded or rebuilt app bundle as a brand-new application, so this was reachable just by dragging a new copy over the old one without quitting first. There is no alert: the second launch simply does nothing, and the copy already running stays in charge.
-- `--diagnostics` gained an `Other instances:` line, so a support report shows every live copy and its path — useful because a menu-bar-only app has no Force Quit entry to check.
-- `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` runs two on purpose, for anyone comparing builds side by side.
-- Launch-prep docs: README screenshots and badges, `SECURITY.md` (private vulnerability reporting), `CONTRIBUTING.md`, a PR template, and this changelog.
+Third public beta. Two reliability fixes: one for the opt-in screen-share feature, one for running DockKeeper twice by accident.
+
+### Upgrading from 0.9.1 — quit DockKeeper first
+
+**Quit DockKeeper before you install this version.** Click the menu-bar icon, choose *Quit DockKeeper*, then install 0.9.2 and open it.
+
+macOS treats a replaced app bundle as a brand-new application, so opening 0.9.2 while 0.9.1 is still running starts a *second* copy — and 0.9.2's new single-instance guard correctly refuses to be that second copy. It exits immediately and silently: no alert, no error, and because DockKeeper has no Dock icon, nothing at all to see. The copy still in your menu bar is the old one, and it stays that way until you quit it or restart the Mac.
+
+If it has already happened, the fix is the same and takes two seconds: quit DockKeeper from the menu, then open it again. To check which version is actually running, run `/Applications/DockKeeper.app/Contents/MacOS/DockKeeper --diagnostics` and read the `Version:` and `Other instances:` lines — `Other instances: none` means the copy you just launched is the one in charge.
 
 ### Fixed
 
-- **The Dock no longer stays hidden forever if DockKeeper is killed during a screen share.** With "hide the Dock while screen sharing" on, DockKeeper turns on macOS Dock auto-hide for the duration of a capture and turns it off again afterwards. If the app was force-quit, crashed, or was killed when you logged out while a share was running, auto-hide was left on — and because DockKeeper deliberately never touches auto-hide for people who use it themselves, it then assumed the setting was yours and never restored it. The Dock kept hiding, and there was no way to fix it from inside the app. DockKeeper now remembers that it borrowed the setting, and puts it back the next time it starts, telling you it did so. ([#29](https://github.com/blamechris/DockKeeper/issues/29))
+- **Your Dock no longer stays hidden after an interrupted screen share.** With "hide the Dock while screen sharing" on, DockKeeper turns macOS Dock auto-hide on for the length of a capture and off again afterwards. If it was force-quit, crashed, or was killed at logout while a share was running, auto-hide was left on — and DockKeeper, which never touches auto-hide for people who set it themselves, read it as yours and never put it back. It now remembers that it borrowed the setting, restores it at the next launch (within 7 days of the share), and says so in the menu. Quitting DockKeeper normally puts the Dock back on the way out, so most of the time you never see the repair happen. ([#29](https://github.com/blamechris/DockKeeper/issues/29))
+- **A second copy of DockKeeper no longer starts.** Two copies both correcting the Dock is the worst way to run it, and it was easy to reach: dragging a new copy over a running one without quitting first was enough, because macOS treats the replacement as a different app. A second launch now exits before it starts an engine or touches the Dock, and the copy already running stays in charge. There is no alert — nothing appears to happen, which is the point.
+
+### Added
+
+- **Turn Off Dock Auto-Hide** — in the menu while your Dock is auto-hiding and the screen-share feature is on, and always available in Preferences ▸ Advanced. Use it if your Dock is still hiding itself after a screen share ended badly. It works even when there is nothing for DockKeeper to remember: a Dock left that way by an older version, or a preferences file that did not survive.
+- `--diagnostics` gained two lines — `Other instances:` names every other live copy and its path, and `Screen-share:` says whether a Dock hide is currently outstanding. A menu-bar-only app has no Force Quit row to check, so a support report is the only place to look.
+- `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` in the environment stands the single-instance guard down, for running two builds side by side from a terminal.
+- README screenshots and badges, `SECURITY.md` (private vulnerability reporting), and contributor docs.
+
+### Known beta limits
+
+- The automatic Dock restore only fires within **7 days** of the interrupted share. Past that, DockKeeper assumes the setting is yours now and leaves it alone; **Turn Off Dock Auto-Hide** is the recovery, and it has no time limit.
+- If a copy of DockKeeper is running but wedged, new launches now defer to it and appear to do nothing — and a menu-bar-only app has no Force Quit row. `DockKeeper --diagnostics` gives you its pid, or use `pkill -9 -x DockKeeper`.
 
 ## [0.9.1] — 2026-07-28
 
@@ -61,6 +76,7 @@ First public release: a free, open-source, native macOS utility that keeps your 
 - A bottom Dock can't be pinned while *separate Spaces* is on (macOS limitation — DockKeeper explains instead of fighting).
 - Shortcuts-app discovery of the intents lands in v1.1; the `dockkeeper://` URL scheme works today.
 
-[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/blamechris/DockKeeper/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/blamechris/DockKeeper/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/blamechris/DockKeeper/releases/tag/v0.9.0

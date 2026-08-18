@@ -53,6 +53,14 @@ An evidence-labeled, feature-by-feature comparison with the commercial alternati
 brew install --cask blamechris/tap/dockkeeper
 ```
 
+### Upgrading
+
+Quit DockKeeper from its menu-bar icon before installing a new version, then open
+it again afterwards. macOS sees a replaced bundle as a new app, and DockKeeper
+will not run two copies at once — so a new copy opened alongside a running old
+one exits silently, and the old one stays in charge until it is quit or the Mac
+restarts.
+
 **Requirements:** macOS 14+ · Apple Silicon (primary) or Intel (best effort).
 
 ## Features
