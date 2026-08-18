@@ -25,15 +25,12 @@ func printUsage() {
 }
 
 func runStatus() {
-    // Shared with the `DockKeeperStatusIntent` so the two cannot drift.
-    let summary = StatusSummary(
-        isEnabled: settings.isEnabled,
-        lockEdge: settings.lockEdge,
-        currentEdge: controller.currentOrientation(),
-        mechanism: controller.activeMechanismName,
-        coreDockAvailable: CoreDock.isAvailable
-    )
-    print(summary.cliText)
+    // `StatusSummary.live` is shared with the `DockKeeperStatusIntent` so the
+    // two cannot drift. This used to re-spell the same construction by hand,
+    // which is the drift the comment was warning about — adding the pause field
+    // to one copy and not the other would have shipped a CLI that still could
+    // not see a pause (#36).
+    print(StatusSummary.live(settings: settings).cliText)
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())

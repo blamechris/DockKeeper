@@ -238,6 +238,7 @@ final class AppState: ObservableObject {
         // Property observers don't fire from within init, so start explicitly.
         Log.verbose = settings.verboseLogging
         refreshPreferredSelection()
+        resumeStalePauseIfNeeded()        // ADR-014 — a restart is an implicit resume
         repairScreenShareHideIfNeeded()   // DK-FR-013 — before any start/stop gating
         applyEnabledState()
         applyHotkeyState()
@@ -359,6 +360,34 @@ final class AppState: ObservableObject {
         } else {
             pause(for: nil)
         }
+    }
+
+    /// Discard a pause record left behind by a previous process — ADR-014's
+    /// "a restart is an implicit resume".
+    ///
+    /// ADR-013 persists borrowed state and *reconciles* it at launch, because
+    /// the Dock's auto-hide belongs to the user and DockKeeper owes it back.
+    /// Pause is not borrowed; it is DockKeeper's own runtime state, and nothing
+    /// is owed. So the record is discarded rather than honoured, which also
+    /// makes the failure direction safe: no crash can leave DockKeeper silently
+    /// not enforcing forever, which is the exact outcome an untimed
+    /// `dockkeeper://pause` (no timer at all) would otherwise be one SIGKILL
+    /// away from.
+    ///
+    /// The explicit clear is load-bearing, not belt-and-braces. A fresh
+    /// `RecoveryCoordinator` starts unpaused with an empty `persistedPause`
+    /// shadow, so its `syncPauseRecord()` sees "not paused, nothing persisted",
+    /// finds no change, and writes nothing — leaving a stale record on disk
+    /// forever. Nothing else clears it.
+    ///
+    /// A `--diagnostics` process never reaches this: `Diagnostics.runIfRequested()`
+    /// prints and `exit()`s inside `App.init()`, before the `@StateObject`
+    /// autoclosure that builds `AppState`. The support command therefore reports
+    /// the record it found rather than destroying the evidence.
+    private func resumeStalePauseIfNeeded() {
+        guard settings.pauseRecord != nil else { return }
+        settings.pauseRecord = nil
+        FileDiagnostics.shared.note("pause", "stale-record-discarded")
     }
 
     /// Menu note while paused: "Paused" (until resumed) or "Paused until 3:45 PM".

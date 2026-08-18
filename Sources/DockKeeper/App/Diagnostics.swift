@@ -45,8 +45,31 @@ enum Diagnostics {
         Dock edge:       \(DockController().currentOrientation()?.displayName ?? "unknown")
         Displays:        \(DisplayManager.activeDisplays().count)
         Separate Spaces: \(separateSpaces ? "on (pinning unsupported)" : "off (pinning supported)")
+        Paused:          \(pauseStatus())
         Screen-share:    \(screenShareHideStatus())
         """
+    }
+
+    /// Whether corrections are suspended (DK-FR-009) — the support answer to
+    /// "DockKeeper says enabled but does nothing" (#36). `Enabled:` cannot carry
+    /// this: a paused instance is enabled and correctly idle, so a report from
+    /// one is otherwise indistinguishable from a working install.
+    ///
+    /// Ages are **relative**, never wall-clock — DK-PRIV-001 S2, matching
+    /// `Screen-share:` above. The age is also what exposes the one stale case:
+    /// ADR-014 makes a restart an implicit resume, so a record older than the
+    /// running instance means DockKeeper died while paused and this report is
+    /// from a cold process. Cross-check `Other instances:` when it looks odd.
+    private static func pauseStatus() -> String {
+        guard let record = Settings.shared.pauseRecord else { return "no" }
+        let age = Int(Date().timeIntervalSince(record.pausedAt))
+        guard let until = record.pausedUntil else {
+            return "yes (\(age)s ago; until resumed — no timer)"
+        }
+        let remaining = Int(until.timeIntervalSince(Date()))
+        return remaining > 0
+            ? "yes (\(age)s ago; auto-resumes in \(remaining)s)"
+            : "yes (\(age)s ago; auto-resume overdue by \(-remaining)s)"
     }
 
     /// Whether a screen-capture hide record is outstanding — the support answer

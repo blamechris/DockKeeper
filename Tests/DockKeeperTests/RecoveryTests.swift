@@ -251,6 +251,11 @@ private final class Harness {
     var appliedPins: [CGDirectDisplayID] = []
     var pinOutcomes: [PinOutcome] = []
     var states: [RecoveryState] = []
+    /// Every `persistPause` call, in order — `nil` entries are clears. Recording
+    /// the *calls* rather than a final value is deliberate: the no-churn rule is
+    /// a claim about how often the key is written, which a settled value cannot
+    /// show.
+    var persistedPauses: [PauseRecord?] = []
     var now = Date(timeIntervalSinceReferenceDate: 2_000_000)
 
     /// Inputs consumed FIFO; the last one sticks when the queue drains.
@@ -276,7 +281,8 @@ private final class Harness {
             now: { harnessSelf.now },
             schedule: { delay, block in
                 harnessSelf.scheduled.append((delay, block))
-            }
+            },
+            persistPause: { harnessSelf.persistedPauses.append($0) }
         )
         harnessSelf = self
         coordinator.onStateChange = { [weak self] in self?.states.append($0) }
@@ -537,5 +543,236 @@ struct RecoveryCoordinatorPauseTests {
         staleTimer()                       // stranded by the disable generation bump
         #expect(harness.coordinator.state == .disabled)
         #expect(!harness.coordinator.isPaused)
+    }
+}
+
+
+// MARK: - Durable pause record (#36, ADR-014)
+
+/// The record exists so a process that is *not* holding the pause can see it.
+/// These tests pin the two halves that make that safe: it tracks `machine.state`
+/// exactly, and it is written only when that state actually changes.
+@Suite("RecoveryCoordinator pause record")
+@MainActor
+struct RecoveryCoordinatorPauseRecordTests {
+
+    @Test("An untimed pause persists a record with no deadline; resume clears it")
+    func untimedPausePersistsAndClears() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.persistedPauses.removeAll()      // ignore the enable/reconcile run
+
+        harness.coordinator.pause(for: nil)
+        #expect(harness.persistedPauses.count == 1)
+        let record = harness.persistedPauses.last ?? nil
+        #expect(record?.pausedAt == harness.now)
+        #expect(record?.pausedUntil == nil, "no timer — the state worth reporting loudest")
+
+        harness.coordinator.resume()
+        harness.runAllScheduled()
+        #expect(harness.persistedPauses.last == PauseRecord?.none, "resume clears the record")
+    }
+
+    @Test("A timed pause carries its deadline; auto-resume clears the record")
+    func timedPauseCarriesDeadlineAndAutoClears() {
+        let harness = Harness(inputs: [aligned, aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.persistedPauses.removeAll()
+
+        harness.coordinator.pause(for: 900)
+        #expect(harness.persistedPauses.last??.pausedUntil == harness.now.addingTimeInterval(900))
+
+        harness.now = harness.now.addingTimeInterval(900)
+        harness.runAllScheduled()                // the auto-resume timer fires
+        #expect(!harness.coordinator.isPaused)
+        #expect(harness.persistedPauses.last == PauseRecord?.none,
+                "an auto-resume clears the record too — it never goes through resume() from outside")
+    }
+
+    @Test("A second pause supersedes the first record's deadline")
+    func secondPauseUpdatesRecord() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.persistedPauses.removeAll()
+
+        harness.coordinator.pause(for: 900)
+        harness.coordinator.pause(for: 3600)
+        #expect(harness.persistedPauses.last??.pausedUntil == harness.now.addingTimeInterval(3600),
+                "the record follows the surviving pause, not the superseded one")
+    }
+
+    @Test("Disable while paused clears the record")
+    func disableClearsRecord() {
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.coordinator.pause(for: 900)
+        harness.persistedPauses.removeAll()
+
+        harness.coordinator.disable()
+        #expect(harness.persistedPauses.last == PauseRecord?.none,
+                "disabling is not a pause; leaving the record would report a pause nobody can resume")
+    }
+
+    @Test("Reconciles while unpaused never touch the key (DK-NFR-001 quietness)")
+    func noChurnWhileUnpaused() {
+        // `notifyState()` is the funnel, and it also runs on every reconcile.
+        // Without the change guard this would be one `removeObject` per pass.
+        let harness = Harness(inputs: [drifting, aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.coordinator.handle(.wake)
+        harness.runAllScheduled()
+        harness.coordinator.handle(.displayReconfigured)
+        harness.runAllScheduled()
+
+        #expect(harness.persistedPauses.isEmpty,
+                "nothing was ever paused, so nothing should have been written")
+    }
+
+    @Test("Re-pausing to the same record rewrites nothing")
+    func identicalPauseWritesOnce() {
+        // The change guard, exercised from the paused side: two identical pause
+        // requests at the same instant describe the same record, so the second
+        // must not reach the key. (Note `runAllScheduled()` is deliberately not
+        // called here — the harness fires scheduled blocks regardless of its
+        // fake clock, so it would run the auto-resume timer and end the pause.)
+        let harness = Harness(inputs: [aligned])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        harness.persistedPauses.removeAll()
+
+        harness.coordinator.pause(for: nil)
+        harness.coordinator.pause(for: nil)
+
+        #expect(harness.coordinator.isPaused)
+        #expect(harness.persistedPauses.count == 1, "an unchanged record is not re-written")
+    }
+
+    @Test("A coordinator with no persistence wired keeps pause in memory")
+    func persistenceIsOptional() {
+        // The default no-op keeps the pre-ADR-014 behaviour for any caller that
+        // has no defaults domain to write to.
+        let coordinator = RecoveryCoordinator(
+            inputProvider: { _ in aligned },
+            applyEdge: { _ in },
+            applyPin: { _ in .pinned },
+            schedule: { _, _ in }
+        )
+        coordinator.enable()
+        coordinator.pause(for: nil)
+        #expect(coordinator.isPaused)
+    }
+}
+
+@Suite("Settings.pauseRecord")
+struct PauseRecordSettingsTests {
+
+    @Test("The record round-trips through Settings and clears on nil")
+    func recordRoundTrips() {
+        let settings = makeTestSettings("PauseRecord")
+        #expect(settings.pauseRecord == nil)
+
+        let at = Date(timeIntervalSince1970: 1_700_000_000)
+        let until = at.addingTimeInterval(900)
+        settings.pauseRecord = PauseRecord(pausedAt: at, pausedUntil: until)
+        #expect(settings.pauseRecord?.pausedAt == at)
+        #expect(settings.pauseRecord?.pausedUntil == until)
+
+        settings.pauseRecord = nil
+        #expect(settings.pauseRecord == nil)
+    }
+
+    @Test("An untimed record round-trips with a nil deadline")
+    func untimedRecordRoundTrips() {
+        let settings = makeTestSettings("PauseRecord")
+        let at = Date(timeIntervalSince1970: 1_700_000_000)
+        settings.pauseRecord = PauseRecord(pausedAt: at, pausedUntil: nil)
+        #expect(settings.pauseRecord?.pausedUntil == nil)
+    }
+
+    @Test("The record is not externally observed (ADR-014 — resume already reconciles)")
+    func recordIsNotExternallyObserved() {
+        // Observing it would fire a second, redundant reconcile off every
+        // resume, which already runs one of its own by design.
+        #expect(Settings.externallyObservedKeys.contains("pauseRecord") == false)
+    }
+
+    @Test("The record is not a registered default — absence has to stay a real state")
+    func recordIsNotARegisteredDefault() {
+        // A registered default cannot be removed, so registering this key would
+        // make "not paused" unrepresentable.
+        #expect(makeTestSettings("PauseRecord").pauseRecord == nil)
+    }
+
+    @Test("An undecodable value degrades to `not paused`, never to a phantom pause")
+    func corruptValueDegradesToNil() {
+        let defaults = makeTestDefaults("PauseRecord")
+        defaults.set(Data([0x01, 0x02, 0x03]), forKey: "pauseRecord")
+        #expect(Settings(defaults: defaults).pauseRecord == nil)
+    }
+}
+
+@Suite("StatusSummary pause reporting")
+struct StatusSummaryPauseTests {
+
+    private func summary(pause: PauseRecord?) -> StatusSummary {
+        StatusSummary(
+            isEnabled: true,
+            lockEdge: .left,
+            currentEdge: .left,
+            mechanism: "CoreDock",
+            coreDockAvailable: true,
+            pauseRecord: pause
+        )
+    }
+
+    @Test("`status` prints a Paused line whether or not a pause is in force (#36)")
+    func pausedLineAlwaysPresent() {
+        // The bug was that paused and unpaused output were byte-identical. A
+        // line that only appears when paused would not fix a pasted report.
+        let unpaused = summary(pause: nil).cliText
+        let paused = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).cliText
+
+        #expect(unpaused.contains("Paused:     no"))
+        #expect(paused.contains("Paused:     yes"))
+        #expect(unpaused != paused, "the two states must be distinguishable")
+    }
+
+    @Test("An untimed pause says so explicitly — it has no timer at all")
+    func untimedPauseIsCalledOut() {
+        let text = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).cliText
+        #expect(text.contains("until resumed"))
+        #expect(text.contains("no timer"))
+    }
+
+    @Test("A timed pause reports its deadline")
+    func timedPauseReportsDeadline() {
+        let until = Date().addingTimeInterval(900)
+        let text = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: until)).cliText
+        #expect(text.contains("yes (until"))
+        #expect(text.contains(until.formatted(date: .omitted, time: .shortened)))
+    }
+
+    @Test("The Paused line keeps the label column aligned with the rest")
+    func pausedLineIsAligned() {
+        let widths = Set(summary(pause: nil).cliLines.map { line -> Int in
+            guard let colon = line.firstIndex(of: ":") else { return -1 }
+            return line.distance(from: line.startIndex, to: line.index(after: colon))
+                + line[line.index(after: colon)...].prefix { $0 == " " }.count
+        })
+        #expect(widths.count == 1, "every label pads to the same column")
+    }
+
+    @Test("The voice line leads with the pause instead of claiming enabled (#36)")
+    func voiceLineLeadsWithPause() {
+        let paused = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).voiceLine
+        #expect(paused.contains("paused"))
+        #expect(!paused.contains("enabled"), "\"enabled\" alone is the wrong spoken answer while paused")
+
+        #expect(summary(pause: nil).voiceLine.contains("enabled"))
     }
 }

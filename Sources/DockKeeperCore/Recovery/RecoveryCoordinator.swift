@@ -1,6 +1,39 @@
 import Foundation
 import CoreGraphics
 
+/// A durable note that corrections are suspended (DK-FR-009), so a process that
+/// is *not* the one holding the pause — `dockkeeper status`, `--diagnostics` —
+/// can still see it. Pause is otherwise pure in-process state, and a menu-bar-only
+/// app gives support nowhere else to look (#36, ADR-014).
+///
+/// Follows `ScreenShareHideRecord`'s shape for the same reasons (ADR-013): one
+/// key, one JSON blob, so a single `set` is atomic and can never be read
+/// half-written, and an undecodable value degrades to `nil` — "not paused",
+/// which is the safe answer everywhere. A struct rather than a bare `Bool` so
+/// the deadline rides along and a later field needs no key migration.
+///
+/// **This record never outlives the process that wrote it**, by design: ADR-014
+/// makes a restart an implicit resume, so `AppState` clears it at launch. A
+/// record read while DockKeeper is running therefore always describes the
+/// running instance. One read while it is *not* running is possible — a crash
+/// mid-pause leaves the record behind — and the reported age is what exposes
+/// that, exactly as it does for a leftover screen-share hide.
+public struct PauseRecord: Codable, Sendable, Equatable {
+
+    /// When the pause was taken.
+    public let pausedAt: Date
+
+    /// When a timed pause auto-resumes; `nil` for a pause that runs until an
+    /// explicit resume. That `nil` is the state worth reporting loudest — it has
+    /// no timer at all, so nothing but a resume ever ends it.
+    public let pausedUntil: Date?
+
+    public init(pausedAt: Date = Date(), pausedUntil: Date? = nil) {
+        self.pausedAt = pausedAt
+        self.pausedUntil = pausedUntil
+    }
+}
+
 /// The single owner of Dock reconciliation (TDD §4.3, §8.3, kickoff §6.9).
 ///
 /// Consumes `DockEvent`s, debounces bursts with a generation counter (a newer
@@ -32,6 +65,13 @@ public final class RecoveryCoordinator {
     private let now: @MainActor () -> Date
     private let schedule: Scheduler
 
+    /// Writes (or clears) the durable pause record — ADR-014. Injected like
+    /// `applyEdge`/`applyPin` rather than reaching for `Settings`, so the
+    /// coordinator stays drivable from tests with no defaults domain at all.
+    /// Defaults to a no-op: a coordinator nobody wired persistence into simply
+    /// keeps pause in memory, which is the pre-ADR-014 behaviour.
+    private let persistPause: @MainActor (PauseRecord?) -> Void
+
     /// Bumped on every admitted event; stale passes see a mismatch and no-op.
     private var pendingGeneration = 0
 
@@ -43,6 +83,17 @@ public final class RecoveryCoordinator {
     /// paused until an explicit resume. Readable for the menu.
     public private(set) var pausedUntil: Date?
 
+    /// When the current pause was taken; `nil` when not paused. Held so the
+    /// persisted record keeps one stable timestamp instead of re-stamping
+    /// itself on every `notifyState()`.
+    private var pausedAt: Date?
+
+    /// What `persistPause` was last handed, so `syncPauseRecord()` writes only
+    /// on a real change. `notifyState()` also runs on every reconcile, and
+    /// re-writing an unchanged key would spend the DK-NFR-001 quietness budget
+    /// to say nothing new.
+    private var persistedPause: PauseRecord?
+
     /// Whether corrections are currently suspended (DK-FR-009).
     public var isPaused: Bool { machine.state == .paused }
 
@@ -52,9 +103,11 @@ public final class RecoveryCoordinator {
         applyEdge: @escaping @MainActor (DockOrientation) -> Void,
         applyPin: @escaping @MainActor (CGDirectDisplayID) -> PinOutcome,
         now: @escaping @MainActor () -> Date = { Date() },
-        schedule: Scheduler? = nil
+        schedule: Scheduler? = nil,
+        persistPause: @escaping @MainActor (PauseRecord?) -> Void = { _ in }
     ) {
         self.machine = machine
+        self.persistPause = persistPause
         self.inputProvider = inputProvider
         self.applyEdge = applyEdge
         self.applyPin = applyPin
@@ -122,7 +175,8 @@ public final class RecoveryCoordinator {
                     WindowLayoutPreserver.restore(preSnapshot, displaysAfter: DisplayManager.activeDisplays())
                 }
                 return outcome
-            }
+            },
+            persistPause: { settings.pauseRecord = $0 }
         )
     }
 
@@ -140,6 +194,7 @@ public final class RecoveryCoordinator {
         pendingGeneration += 1  // strands any scheduled pass
         pauseGeneration += 1    // strands any pending auto-resume timer
         pausedUntil = nil
+        pausedAt = nil
         machine.noteDisabled()
         notifyState()
     }
@@ -162,8 +217,12 @@ public final class RecoveryCoordinator {
         pauseGeneration += 1
         let generation = pauseGeneration
         machine.notePaused()
+        // One clock read for both stamps, so `pausedUntil - pausedAt` is exactly
+        // the requested duration rather than that minus a scheduling hiccup.
+        let startedAt = now()
+        pausedAt = startedAt
         if let duration {
-            pausedUntil = now().addingTimeInterval(duration)
+            pausedUntil = startedAt.addingTimeInterval(duration)
             schedule(duration) { [weak self] in
                 guard let self, generation == self.pauseGeneration else { return }
                 self.resume()
@@ -181,6 +240,7 @@ public final class RecoveryCoordinator {
         guard machine.state == .paused else { return }
         pauseGeneration += 1    // strand a pending auto-resume timer
         pausedUntil = nil
+        pausedAt = nil
         machine.noteResumed()
         notifyState()
         requestReconcile()
@@ -244,6 +304,24 @@ public final class RecoveryCoordinator {
     }
 
     private func notifyState() {
+        syncPauseRecord()
         onStateChange?(machine.state)
+    }
+
+    /// Keep the durable record in step with `machine.state`.
+    ///
+    /// Deliberately hung off `notifyState()` — the one funnel every state
+    /// change already passes through (`enable`, `disable`, `pause`, `resume`,
+    /// and the reconcile pass) — rather than off the three pause-adjacent call
+    /// sites. The record then cannot disagree with the state it describes, and
+    /// a fourth path out of `.paused` added later inherits the write for free
+    /// instead of silently leaking a stale "paused" into every support report.
+    private func syncPauseRecord() {
+        let desired: PauseRecord? = machine.state == .paused
+            ? PauseRecord(pausedAt: pausedAt ?? now(), pausedUntil: pausedUntil)
+            : nil
+        guard desired != persistedPause else { return }
+        persistedPause = desired
+        persistPause(desired)
     }
 }

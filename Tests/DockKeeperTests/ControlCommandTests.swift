@@ -143,6 +143,7 @@ struct StatusSummaryTests {
             "Enabled:    yes",
             "Lock edge:  Left",
             "Dock is on: Bottom",
+            "Paused:     no",
             "CoreDock:   available",
         ])
     }
@@ -158,7 +159,8 @@ struct StatusSummaryTests {
         )
         #expect(summary.cliLines[0] == "Enabled:    no")
         #expect(summary.cliLines[2] == "Dock is on: unknown")
-        #expect(summary.cliLines[3] == "CoreDock:   unavailable (using defaults fallback)")
+        #expect(summary.cliLines[3] == "Paused:     no")
+        #expect(summary.cliLines[4] == "CoreDock:   unavailable (using defaults fallback)")
     }
 
     @Test("Voice line reflects enabled state and mechanism")
