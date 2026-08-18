@@ -652,10 +652,14 @@ struct RecoveryCoordinatorPauseRecordTests {
         #expect(harness.persistedPauses.count == 1, "an unchanged record is not re-written")
     }
 
-    @Test("A coordinator with no persistence wired keeps pause in memory")
+    @Test("A coordinator with no persistence wired keeps pause in memory only")
     func persistenceIsOptional() {
-        // The default no-op keeps the pre-ADR-014 behaviour for any caller that
-        // has no defaults domain to write to.
+        // The default no-op keeps the pre-ADR-014 behaviour for any caller with
+        // no defaults domain to write to. Asserting `isPaused` alone would pass
+        // even if the default closure wrote somewhere, so this pairs an
+        // untouched real `Settings` with the in-memory state to show both
+        // halves: pause works, and nothing was persisted.
+        let settings = makeTestSettings("PauseRecordOptional")
         let coordinator = RecoveryCoordinator(
             inputProvider: { _ in aligned },
             applyEdge: { _ in },
@@ -664,7 +668,8 @@ struct RecoveryCoordinatorPauseRecordTests {
         )
         coordinator.enable()
         coordinator.pause(for: nil)
-        #expect(coordinator.isPaused)
+        #expect(coordinator.isPaused, "pause still works in memory")
+        #expect(settings.pauseRecord == nil, "the default closure persists nothing")
     }
 }
 
@@ -775,6 +780,50 @@ struct StatusSummaryPauseTests {
 
         #expect(summary(pause: nil).voiceLine.contains("enabled"))
     }
+
+    @Test("The voice line speaks a timed pause's deadline")
+    func voiceLineSpeaksDeadline() {
+        // The untimed branch was covered; this one renders a date and was not.
+        let until = Date().addingTimeInterval(900)
+        let spoken = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: until)).voiceLine
+        #expect(spoken.contains("paused until"))
+        #expect(spoken.contains(until.formatted(date: .omitted, time: .shortened)))
+        #expect(!spoken.contains("enabled"))
+    }
+}
+
+/// The seam that carries a persisted pause into `dockkeeper status` and the
+/// Shortcuts/Siri intent is a single line inside `StatusSummary.live`. Nothing
+/// exercised it, which is how `AppState.statusSummary()` was able to hand-roll a
+/// copy that omitted the field and answer "enabled" while paused.
+@Suite("StatusSummary.live")
+@MainActor
+struct StatusSummaryLiveTests {
+
+    @Test("live() reads the persisted pause record")
+    func liveReadsPauseRecord() {
+        let settings = makeTestSettings("StatusSummaryLive")
+        #expect(StatusSummary.live(settings: settings).pauseRecord == nil)
+
+        let at = Date(timeIntervalSince1970: 1_700_000_000)
+        settings.pauseRecord = PauseRecord(pausedAt: at, pausedUntil: nil)
+
+        let summary = StatusSummary.live(settings: settings)
+        #expect(summary.pauseRecord?.pausedAt == at)
+        #expect(summary.cliText.contains("Paused:     yes"))
+        #expect(summary.voiceLine.contains("paused"))
+    }
+
+    @Test("live() reports no pause once the record is cleared")
+    func liveClearsWithRecord() {
+        let settings = makeTestSettings("StatusSummaryLive")
+        settings.pauseRecord = PauseRecord(pausedAt: Date(), pausedUntil: nil)
+        #expect(StatusSummary.live(settings: settings).pauseRecord != nil)
+
+        settings.pauseRecord = nil
+        #expect(StatusSummary.live(settings: settings).pauseRecord == nil)
+        #expect(StatusSummary.live(settings: settings).cliText.contains("Paused:     no"))
+    }
 }
 
 
@@ -823,12 +872,19 @@ struct DisplayDurationTests {
                 "Double(Int.max) rounds ABOVE Int.max — converting it would trap")
     }
 
-    @Test("A negated result cannot overflow (the overdue branch)")
-    func negationIsSafe() {
-        // `pauseStatus()` prints `-remaining` on the overdue branch; the bound
-        // keeps that well inside Int, unlike -Int.min.
-        let seconds = DisplayDuration.wholeSeconds(-9.0e18)
-        #expect(seconds != nil)
-        #expect(-(seconds ?? 0) == 9_000_000_000_000_000_000)
+    @Test("Every result can be negated without overflowing")
+    func resultsAreSafeToNegate() {
+        // `Diagnostics.pauseStatus()` prints `-remaining` on its overdue branch.
+        // That function lives in the app target, which this bundle does not
+        // link, so this asserts the *property it depends on* rather than
+        // claiming to exercise the branch: the bound keeps every result well
+        // inside Int, so negation can never hit the -Int.min trap.
+        for interval in [-9.0e18, -1.0, 0.0, 1.0, 9.0e18] {
+            guard let seconds = DisplayDuration.wholeSeconds(interval) else {
+                Issue.record("bound should admit \(interval)"); continue
+            }
+            #expect(seconds != Int.min, "a negatable result can never be Int.min")
+            #expect(-(-seconds) == seconds)
+        }
     }
 }

@@ -12,12 +12,18 @@ import CoreGraphics
 /// which is the safe answer everywhere. A struct rather than a bare `Bool` so
 /// the deadline rides along and a later field needs no key migration.
 ///
-/// **This record never outlives the process that wrote it**, by design: ADR-014
-/// makes a restart an implicit resume, so `AppState` clears it at launch. A
-/// record read while DockKeeper is running therefore always describes the
-/// running instance. One read while it is *not* running is possible — a crash
-/// mid-pause leaves the record behind — and the reported age is what exposes
-/// that, exactly as it does for a leftover screen-share hide.
+/// **This record is not meant to outlive the process that wrote it**: ADR-014
+/// makes a restart an implicit resume. Two things enforce that, and only the
+/// second is a guarantee — `AppState.prepareForTermination()` clears it on a
+/// trappable quit, and `AppState.resumeStalePauseIfNeeded()` clears it at the
+/// next launch regardless. A record read while DockKeeper is running therefore
+/// always describes the running instance.
+///
+/// It *can* be read while DockKeeper is not running: an untrappable exit —
+/// SIGKILL, Force Quit, a crash, the logout kill — leaves it behind until the
+/// next launch. (An ordinary ⌘Q used to do this too, which is why the teardown
+/// clear exists.) The reported age is what exposes such a record, exactly as it
+/// does for a leftover screen-share hide.
 public struct PauseRecord: Codable, Sendable, Equatable {
 
     /// When the pause was taken.

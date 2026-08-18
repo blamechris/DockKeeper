@@ -1,7 +1,9 @@
 import Foundation
 
 /// The fields `dockkeeper status` reports, in one place so the CLI and the
-/// `DockKeeperStatusIntent` cannot drift. Pure and `Sendable`; the live read
+/// `DockKeeperStatusIntent` cannot drift — a claim that now holds because both
+/// go through `live(settings:)` rather than re-spelling the construction, and
+/// because no field may be silently omitted (see `init`). Pure and `Sendable`; the live read
 /// happens in `live(settings:)`.
 public struct StatusSummary: Equatable, Sendable {
     public let isEnabled: Bool
@@ -24,7 +26,12 @@ public struct StatusSummary: Equatable, Sendable {
         currentEdge: DockOrientation?,
         mechanism: String,
         coreDockAvailable: Bool,
-        pauseRecord: PauseRecord? = nil
+        // Deliberately **not** defaulted. It was, for source compatibility, and
+        // that default silently kept a stale hand-rolled copy in
+        // `AppState.statusSummary()` compiling — so the Shortcuts/Siri intent
+        // went on reporting "enabled" while paused. A required argument turns
+        // that class of miss into a build error instead of a wrong answer.
+        pauseRecord: PauseRecord?
     ) {
         self.isEnabled = isEnabled
         self.lockEdge = lockEdge
