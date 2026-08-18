@@ -162,6 +162,22 @@ Recommended-order #4 ([parity assessment](parity-assessment.md)), governed by **
 
 ---
 
+## M13 — Single-instance guard (DK-FR-012, ADR-012) ✅ code complete (2026-08-17)
+
+Not a parity item: the inter-process enforcement of an invariant [technical design](technical-design.md) §9 already states as fact for a single process (*"exactly one owner of reconciliation state"*). LaunchServices does not supply it — it dedupes on the bundle's **inode identity**, so a rebuilt, upgraded-in-place, or second-path copy is a brand-new application to it (CONFIRMED twice, ADR-012 Evidence) — and `LSUIElement` removes every affordance a user would use to notice two instances.
+
+- ✅ `InstanceGuard` (**`DockKeeperCore`**, pure) — `decide(selfPID:selfLaunchDate:peers:arguments:environment:) -> {proceed, yield(to:)}` over the lexicographic total order `(hasStartTime, startTime, pid)`. In the core, beside `ControlCommand`, because `Package.swift` links only `DockKeeperCore` into the test target. Shares `oneShotFlags` with `Diagnostics` so the one-shot argv literal cannot drift.
+- ✅ `SingleInstance` (app target, adapter per rule 8) — the `NSRunningApplication` peer read, the kernel start-time substitution, and the `exit(EXIT_SUCCESS)` with a stderr notice. Self pid from `ProcessInfo`, never `NSRunningApplication.current` (which is `pid -1`, `launchDate nil` at `App.init()` for a direct `exec` — measured).
+- ✅ **Kernel start time (`sysctl` `KERN_PROC_PID`) substituted whenever LaunchServices has no launch date.** A directly-`exec`ed bundle binary has `launchDate == nil` for its whole lifetime, in its own view *and* in every peer's, and a dateless rank class cannot be ordered correctly in both directions at once — ranked last it makes such a process lose *as an incumbent*, so it and a later registered launch both run. Removing the class removes the trilemma; the `hasStartTime` component remains only as the residual fallback.
+- ✅ Called from `DockKeeperApp.init()`, strictly after `Diagnostics.runIfRequested()` and strictly before the `@StateObject` autoclosure — by any `AppDelegate` hook a duplicate has already started the coordinator and moved the real Dock.
+- ✅ `Diagnostics` gained an `Other instances:` line (pid + bundle path, read-only) — the only place an `LSUIElement` app can tell the user it is doubled, and the pid is also the recovery handle for a wedged instance.
+- ✅ `Scripts/run-app.sh` quits the previous `dist/` build before rebuilding — the fix for the rebuild-in-place vector, not hygiene. Path-exact pid matching (never `pkill -f`), `SIGKILL` escalation, and a non-zero exit rather than rebuilding under a survivor; it warns when an installed copy is live, because `open` detaches and the deflected process's stderr never reaches the terminal.
+- ✅ **Not shipped:** `LSMultipleInstancesProhibited`, any lockfile, any URL forwarding, any acknowledgement UI (ADR-012 options 2–5, each with its reason).
+
+**Acceptance met (unit level):** 12 `@Test` cases including the sequential-incumbency invariant and a 27-combination sweep asserting **exactly one survivor** over every start-time shape ([InstanceGuardTests.swift](../Tests/DockKeeperTests/InstanceGuardTests.swift)); full suite **127 tests** green; `swift build` clean under Swift 6 strict concurrency. **Honest compromises:** unbundled `swift run` builds are deliberately unguarded (option 3's brick-the-launch risk is worse); detection is not atomic; the guard yields to the most *senior* instance, not the newest version; a pending `dockkeeper://` URL on a deflected launch is dropped (option 4 experimentally refuted). **Not yet run, therefore not CONFIRMED:** the assembled guard against a real double launch — the ten-item matrix in [test-strategy.md](test-strategy.md) §3b (no hardware gate). **Open follow-ons:** (1) run §3b, item 1 first — it gates the shipped guard's fast-user-switching safety, which is INFERRED; (2) `LSMultipleInstancesProhibited` — accept or WONTFIX on the result of item 1, recorded in ADR-012.
+
+---
+
 ## Cross-cutting debt (fold into the touching milestone)
 
 From TDD A.4, tracked here so it isn't lost: ~~observer-removal fix + dead `DistributedNotificationCenter`~~ ✅ · icon ternary + `showMenuBarIcon` (M1) · pseudo-UUID persistence (M2) · ~~external-defaults observation~~ ✅ · `Log.verbose` static folded into diagnostics rework (M1) · ~~`autoRecover` removal per ADR-007~~ ✅ (all ✅ 2026-07-22 with M3/M4).

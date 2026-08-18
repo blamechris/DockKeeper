@@ -11,7 +11,9 @@ enum Diagnostics {
 
     @MainActor
     static func runIfRequested() {
-        guard CommandLine.arguments.contains("--diagnostics") else { return }
+        // The same set the single-instance guard refuses to pre-empt (DK-FR-012),
+        // shared rather than re-spelled so the two cannot drift apart.
+        guard CommandLine.arguments.contains(where: InstanceGuard.oneShotFlags.contains) else { return }
         print(report())
         exit(EXIT_SUCCESS)
     }
@@ -36,6 +38,7 @@ enum Diagnostics {
         Version:         \(bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")
         Bundle ID:       \(bundle.bundleIdentifier ?? "(none — running unbundled)")
         Bundle path:     \(bundle.bundlePath)
+        Other instances: \(otherInstances())
         LSUIElement:     \(bundle.infoDictionary?["LSUIElement"] as? Bool ?? false)
         Launch at Login: \(loginStatus)
         CoreDock API:    \(CoreDock.isAvailable ? "available" : "unavailable")
@@ -43,5 +46,32 @@ enum Diagnostics {
         Displays:        \(DisplayManager.activeDisplays().count)
         Separate Spaces: \(separateSpaces ? "on (pinning unsupported)" : "off (pinning supported)")
         """
+    }
+
+    /// Every *other* live copy, with its path — so a support report answers
+    /// "do you have two installed?" without the user needing to know that
+    /// `LSUIElement` apps hide from the app switcher and from Force Quit.
+    ///
+    /// Strictly read-only, on purpose: the diagnostics flow must never take or
+    /// perturb anything the single-instance guard consults, or the support
+    /// command becomes a way to refuse a legitimate launch.
+    ///
+    /// The peer read itself comes from `SingleInstance`, so the report can never
+    /// disagree with the guard about who counts as another instance — the same
+    /// anti-drift reason `InstanceGuard.oneShotFlags` is shared rather than
+    /// re-spelled. Each pid printed here is also the recovery handle: an
+    /// `LSUIElement` agent has no Force Quit row, so `kill <pid>` is the only
+    /// way to clear a wedged instance that is deflecting every new launch.
+    @MainActor
+    private static func otherInstances() -> String {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return "unknown (running unbundled)" }
+        let others = SingleInstance.otherRunningInstances(
+            bundleID: bundleID,
+            selfPID: ProcessInfo.processInfo.processIdentifier
+        )
+        guard !others.isEmpty else { return "none" }
+        return others
+            .map { "pid \($0.processIdentifier) at \($0.bundleURL?.path ?? "unknown path")" }
+            .joined(separator: ", ")
     }
 }

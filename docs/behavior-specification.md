@@ -32,6 +32,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-009](#dk-fr-009-pause-and-temporary-dock-move) | Pause and temporary Dock move | P2 | v1.1 |
 | [DK-FR-010](#dk-fr-010-apple-shortcuts--url-scheme-automation) | Apple Shortcuts + URL-scheme automation | P2 | v1.1 |
 | [DK-FR-011](#dk-fr-011-hide-the-dock-during-screen-capture) | Hide the Dock during screen capture | P2 | v1.1 |
+| [DK-FR-012](#dk-fr-012-single-instance-guard) | Single-instance guard | P1 | v1.0 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -524,6 +525,118 @@ Then auto-hide is restored to OFF                              [CONFIRMED — co
 **Testability.** The pure `ScreenShareHider.decide(capturing:weHidIt:currentAutoHide:)` is exhaustively unit-tested over all 8 input combinations — including the "user already auto-hides → never touch → never restore" cases, idempotence, and the setting-off short-circuit (registered default false) ([ScreenShareTests.swift](../Tests/DockKeeperTests/ScreenShareTests.swift)). The private-API reads/writes and the detector are **not** called from tests (would move the real Dock / need a real capture) — that is the on-device hardware cell (M6/M12). **UNKNOWN pending on-device verification:** does the watcher flag actually flip on a real capture, its latency, and which apps trip it (QuickTime, Zoom, Teams, Screen Sharing.app) — do **not** treat as CONFIRMED.
 
 **Priority / target.** P2 / v1.1. Justification: pure parity/convenience (matches DockLock Lite's screen-sharing hide); not required to ship a trustworthy v1.0, zero-permission, and independent of v1.0 work. Uses a private API behind graceful degradation (ADR-011), like the CoreDock edge path. **Related risks:** R-004 (private-API fragility — adds the screen-watcher symbol to the per-macOS smoke test).
+
+---
+
+## DK-FR-012: Single-instance guard
+
+**Description.** At most one DockKeeper menu-bar app runs per user session. A launch that finds an older DockKeeper already running exits immediately — before any engine, any Dock write, and any status item exists — leaving the running instance untouched. There is no alert and no window; the reason is written to stderr and to the unified log, and `--diagnostics` names every other live copy. Governed by **[ADR-012](decision-log.md#adr-012-single-instance-guard-in-process-at-appinit-lsmultipleinstancesprohibited-withheld)**.
+
+**Rationale.** LaunchServices does *not* provide this for us: it keys its "already running?" test on the bundle's **inode identity**, not on its path or bundle identifier (CONFIRMED — the launchd job label is literally `application.com.dockkeeper.app.<bundle inode>.<exec inode>`, and a control bundle rebuilt at the same path launched a second process while an unchanged one only reopened). Two duplicate vectors follow (the dev-loop case measured; the end-user upgrade-in-place case INFERRED from the same inode rule): **two bundles at two paths** — a login item registered to `/Applications/DockKeeper.app` alongside a separately launched `dist/DockKeeper.app`. That this *configuration* was present on the owner's machine is CONFIRMED via `sfltool dumpbtm`; that it is what produced the two icons he saw is **UNKNOWN** — unified-log retention does not reach the sighting, and an enabled `pro.docklock.lite` login item is an unrefuted alternative explanation for one of the icons ([ADR-012](decision-log.md#adr-012-single-instance-guard-in-process-at-appinit-lsmultipleinstancesprohibited-withheld), "What is and is not established"). The requirement rests on the mechanism, which both vectors reach regardless. The second vector is **rebuild/upgrade-in-place** (any install that replaces the bundle changes its inode, so opening the new copy while the old one runs starts a second process — the dev loop hits this every iteration, and end users hit it dragging a new copy from the DMG over `/Applications`). Two instances mean two engines writing the Dock, and `LSUIElement` removes every affordance the user would use to notice or fix it: no Dock tile, no ⌘-Tab entry, no Force Quit row — only two identical menu-bar icons, with "Quit DockKeeper" ending one of them.
+
+**Preconditions.** The process is **bundled** (`Bundle.main.bundleIdentifier != nil`). The check is per user session, since `NSRunningApplication` is session-scoped (INFERRED — the fast-user-switching case is the first manual test, [test-strategy.md](test-strategy.md)). No setting gates it and no permission is required. `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` in the environment stands it down entirely.
+
+**Trigger.** Every app launch, from `DockKeeperApp.init()` — after one-shot CLI flags are handled and before the `AppState` autoclosure is evaluated.
+
+**Expected result.**
+
+```text
+S1 — A second copy at a second path stands down
+Given DockKeeper is running from /Applications/DockKeeper.app
+When ~/Projects/DockKeeper/dist/DockKeeper.app is launched
+Then the new process exits before starting its engine or status item
+And exactly one menu-bar icon remains, the original one   [decide() CONFIRMED —
+                                                           unit test; the
+                                                           assembled deflection
+                                                           is UNKNOWN pending
+                                                           manual test 5]
+
+S2 — A rebuilt/upgraded bundle at the SAME path stands down
+Given DockKeeper is running and the bundle is rebuilt or replaced in place
+When the new bundle is opened (a new inode, so LaunchServices launches it)
+Then the new process exits and the running one keeps the Dock
+And Scripts/run-app.sh quits the previous dist/ build first, so the dev loop
+    ends with exactly one process running the newly built binary
+                                                          [decide() CONFIRMED —
+                                                           unit test; the script
+                                                           and the assembled
+                                                           deflection are UNKNOWN
+                                                           pending manual test 3]
+
+S3 — Seniority, not version, decides
+Given an older DockKeeper is running
+When a newer build is launched
+Then the NEWER build exits and the OLDER one survives     [by design — see
+                                                           Failure behavior]
+
+S4 — A direct exec of the inner binary is ordered like any other process
+Given DockKeeper is running from a registered bundle
+When DockKeeper.app/Contents/MacOS/DockKeeper is exec'd directly (the README
+     support flow), which has no LaunchServices launch date for its whole
+     lifetime — in its own view AND in every peer's view
+Then it is still ranked by when it started, because the guard reads the kernel
+     process start time when LaunchServices has no date
+And the later of the two exits, in EITHER order: a direct exec started second
+     yields to the registered instance, and a registered launch started second
+     yields to a direct exec that was already running
+                                                          [decide() CONFIRMED —
+                                                           unit test, both
+                                                           directions; UNKNOWN
+                                                           pending manual tests
+                                                           7 and 7b]
+
+S5 — Support flows are never pre-empted
+When DockKeeper --diagnostics runs while an instance is live
+Then the report still prints, and its "Other instances:" line names the
+     running copy and its bundle path                     [decide() CONFIRMED —
+                                                           unit test of the
+                                                           shared flag set; the
+                                                           printed line is
+                                                           CONFIRMED — code,
+                                                           UNKNOWN end-to-end
+                                                           pending manual test 6]
+
+S6 — The escape hatch is exact opt-in
+When DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1 is set
+Then the launch proceeds regardless of who is running
+And any other value (including "0") leaves the guard active [CONFIRMED — unit test]
+
+S7 — Unbundled builds are outside the guard
+When `swift run DockKeeper` or a bare .build/debug binary runs
+Then it is neither blocked nor detected, and runs alongside the .app
+                                                          [by design — keeps the
+                                                           debugger loop flag-free]
+
+S8 — Simultaneous launches leave exactly one survivor
+Given any group of instances that can see each other
+When each independently decides
+Then exactly one proceeds — never two, and never zero     [total order by
+                                                           construction —
+                                                           ADR-012; CONFIRMED
+                                                           for 3-instance groups
+                                                           by a 27-case sweep
+                                                           over every start-time
+                                                           shape]
+
+S9 — The CLI is unaffected
+When `dockkeeper lock left` (or any CLI command) runs while the app runs
+Then nothing is deflected — dockkeeper-cli is a legitimate separate process and
+     the guard is scoped to the menu-bar app              [CONFIRMED — code]
+```
+
+**Failure behavior.** The deflected launch exits **`EXIT_SUCCESS`**, not a failure code: a login item that correctly deferred to the incumbent must not read as a failed launch. Nothing downstream can tell a deflection from a launch — `open` returns 0 either way — so the deflection is not observable through an exit status. Five honest limits, none of them papered over:
+
+- **A pending `dockkeeper://` URL carried by a deflected launch is DROPPED, silently.** Recovering it is experimentally impossible at this point in startup — Apple Event dispatch is gated on `NSApplication.run()`, so a `kAEGetURL` handler plus a 2.1 s run-loop spin before `NSApplicationMain` caught nothing, twice (ADR-012 option 4). This needs the explicit `open -a <copy>.app dockkeeper://…` form; plain `open dockkeeper://…` and `open -b com.dockkeeper.app` are routed by LaunchServices to the running instance and spawn nothing. The four App Intents share this limit through the same mechanism — all declare `openAppWhenRun: true`, so an intent that opens a copy whose inode differs from the running process is deflected before it can dispatch. Consistent with DK-FR-010's existing stance that a mutating command with no live `AppState` is a safe no-op.
+- **A DockKeeper that is alive but WEDGED still outranks every new launch.** An unresponsive process keeps a valid start time, so launches deflect to it silently, and `LSUIElement` leaves no Dock tile, no ⌘-Tab entry and no Force Quit row to kill it with — the app becomes unstartable from the GUI. Recovery is `pkill -x DockKeeper`, or `DockKeeper --diagnostics` to get the pid from the `Other instances:` line. `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` does **not** help here: it cannot be set for a Finder double-click or a login-item launch. Detecting unresponsiveness at `App.init()` is deliberately not attempted.
+- **The guard yields to the most SENIOR instance, not the newest VERSION.** If v0.9.0 is running and v0.9.1 is launched, v0.9.1 exits and v0.9.0 keeps running. A launch that silently kills the app you were using would be a worse surprise; the answer is one canonical installed bundle, not a smarter guard.
+- **An unbundled build (`swift run DockKeeper`) is neither blocked nor detected.** With no bundle identifier it is invisible to LaunchServices as a peer and skips the check as a caller, so it runs a full engine beside the `.app`. Deliberate, and the reason duplicates are unreachable *via LaunchServices* rather than impossible.
+- **Detection is not atomic.** If a second launch queries LaunchServices before the first has registered, neither sees the other and both proceed. Only a kernel-level lock or a bootstrap name closes that window, and both were rejected for demonstrated brick-the-launch failure modes (ADR-012 option 3).
+
+**User-visible behavior.** No new UI, no alert, no dialog — an `LSUIElement` agent has nothing to show, and a modal at launch would be worse than the silence. The visible effect is the absence of a second menu-bar icon. A user who launches a second copy sees nothing happen; a developer running the app from a terminal sees a stderr notice naming the running pid and its bundle path, and how to override it. `--diagnostics` gains an `Other instances:` line (`none`, or pid + bundle path for each) so a support report answers "do you have two?" without the user needing to know that `LSUIElement` apps hide from the app switcher and from Force Quit.
+
+**Testability.** The whole decision is pure and lives in `DockKeeperCore` (`InstanceGuard.decide`), which the test target links, so it is exhaustively unit-tested: sole instance, self-in-peer-list, newcomer yields, junior ignored, bundle path is never consulted so both duplicate vectors reduce to one decision, pid wrap-around vs start time, a dateless newcomer yields, a dated process beats a dateless one regardless of pid, **a newcomer yields to an already-settled incumbent in either pid order** (the sequential-incumbency invariant the simultaneous sweep does not model), `--diagnostics` never pre-empted, exact-match escape hatch, and a 27-combination sweep asserting **exactly one survivor** across every start-time shape (a two-element test cannot catch a cyclic comparator; three can) — [InstanceGuardTests.swift](../Tests/DockKeeperTests/InstanceGuardTests.swift). The `NSRunningApplication` read, the kernel start-time substitution and the `exit()` are behind `SingleInstance` in the app target and are **not** unit-tested (the last of them ends the process). **Not yet run, and therefore not CONFIRMED:** the assembled guard against a real double launch — the ten-item manual matrix in [test-strategy.md](test-strategy.md) is outstanding, item 1 (a second user account under fast user switching) first, since a wrong answer there would mean the shipped guard *itself* silently denies the second user an instance, and it also gates the `LSMultipleInstancesProhibited` follow-on.
+
+**Priority / target.** P1 / v1.0. Justification: it is the inter-process enforcement of an invariant the design already assumes ([technical design](technical-design.md) §9, "exactly one owner of reconciliation state"), the failure it prevents is user-visible, self-inflicted by a normal upgrade, and unrecoverable through the app's own UI. **Related risks:** none new (no network, no permission, no persisted state; the guard reads process state and exits); see **R-012** (DockLock coexistence — ADR-012 records an orphaned enabled login item for a deleted DockLock Lite, and that entry is the unrefuted alternative explanation for one of the two icons that prompted this requirement).
 
 ---
 

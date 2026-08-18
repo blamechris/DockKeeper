@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **Single-instance guard.** Launching a second copy of DockKeeper — a second install, or a fresh copy opened while an older one is still running — now exits immediately instead of leaving two copies fighting over the Dock. macOS treats an upgraded or rebuilt app bundle as a brand-new application, so this was reachable just by dragging a new copy over the old one without quitting first. There is no alert: the second launch simply does nothing, and the copy already running stays in charge.
+- `--diagnostics` gained an `Other instances:` line, so a support report shows every live copy and its path — useful because a menu-bar-only app has no Force Quit entry to check.
+- `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` runs two on purpose, for anyone comparing builds side by side.
 - Launch-prep docs: README screenshots and badges, `SECURITY.md` (private vulnerability reporting), `CONTRIBUTING.md`, a PR template, and this changelog.
 
 ## [0.9.1] — 2026-07-28
