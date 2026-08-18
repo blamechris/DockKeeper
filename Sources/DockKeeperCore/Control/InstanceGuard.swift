@@ -19,10 +19,46 @@ public struct InstancePeer: Equatable, Sendable {
     /// `os.Logger` (DK-PRIV-001).
     public let bundlePath: String?
 
-    public init(pid: pid_t, launchDate: Date?, bundlePath: String?) {
+    /// The uid owning this process, or `nil` when it could not be read.
+    ///
+    /// This is what makes the guard **session-scoped by construction** instead
+    /// of by assumption. Under fast user switching each logged-in user has their
+    /// own Dock and legitimately wants their own DockKeeper, so another user's
+    /// instance is not a duplicate at all — it is a different app managing a
+    /// different Dock. The adapter reads this from the same
+    /// `sysctl(KERN_PROC_PID)` it already makes for `launchDate`, so it costs
+    /// no extra syscall.
+    public let uid: uid_t?
+
+    public init(pid: pid_t, launchDate: Date?, bundlePath: String?, uid: uid_t? = nil) {
         self.pid = pid
         self.launchDate = launchDate
         self.bundlePath = bundlePath
+        self.uid = uid
+    }
+}
+
+extension InstancePeer {
+
+    /// Whether this peer is contending for the **same** Dock as a process
+    /// running under `selfUID`.
+    ///
+    /// An unknown uid answers **`false`** — "do not yield to it" — and that
+    /// direction is chosen from ADR-012's own cost asymmetry rather than by
+    /// reflex. The guard trades away a *possible* duplicate to avoid a
+    /// *silent* zero-instance launch: DockKeeper is `LSUIElement`, so a process
+    /// that wrongly yields simply never appears, with no window, no Dock
+    /// bounce, no Force Quit row and no error surface. Two instances are
+    /// visible and recoverable; zero are neither. That is the same asymmetry
+    /// that led ADR-012 to withhold `LSMultipleInstancesProhibited`.
+    ///
+    /// In practice the unknown case is nearly unreachable: the uid comes from
+    /// the same `sysctl` as `launchDate`, so a failure that loses the uid also
+    /// loses the date, and a dateless peer already ranks below every dated
+    /// newcomer.
+    func sameSession(as selfUID: uid_t) -> Bool {
+        guard let uid else { return false }
+        return uid == selfUID
     }
 }
 
@@ -64,6 +100,8 @@ public enum InstanceGuard {
     ///   - selfLaunchDate: this process's start time. `nil` only when neither
     ///     LaunchServices nor the kernel could supply one; treated as
     ///     "no identity", which always loses.
+    ///   - selfUID: `getuid()`. A peer is only a duplicate if it shares it —
+    ///     see `InstancePeer.sameSession(as:)`.
     ///   - peers: other live processes claiming our bundle identifier. May or
     ///     may not include us (it does for a LaunchServices launch, it does not
     ///     for a direct `exec`); entries matching `selfPID` are dropped either way.
@@ -93,6 +131,7 @@ public enum InstanceGuard {
     public static func decide(
         selfPID: pid_t,
         selfLaunchDate: Date?,
+        selfUID: uid_t,
         peers: [InstancePeer],
         arguments: [String] = CommandLine.arguments,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -102,14 +141,19 @@ public enum InstanceGuard {
 
         let mine = rank(selfLaunchDate, selfPID)
         let incumbent = peers
-            .filter { $0.pid != selfPID && rank($0.launchDate, $0.pid) < mine }
+            .filter { $0.pid != selfPID && $0.sameSession(as: selfUID) && rank($0.launchDate, $0.pid) < mine }
             .min { rank($0.launchDate, $0.pid) < rank($1.launchDate, $1.pid) }
 
         guard let incumbent else { return .proceed }
         return .yield(to: incumbent)
     }
 
-    /// Lower sorts more senior. Element 0 is 0 when a start time is known and 1
+    /// Lower sorts more senior.
+    ///
+    /// The uid filter deliberately sits in `decide`'s `filter` rather than in
+    /// this ordering: it is an identity question ("is this even my peer?"), not
+    /// a seniority one, and folding a cross-session comparison into the rank
+    /// would break the totality property documented above. Element 0 is 0 when a start time is known and 1
     /// when it is not, so "known" always beats "unknown" regardless of pid; the
     /// date is a placeholder in the unknown case.
     private static func rank(_ launchDate: Date?, _ pid: pid_t) -> (Int, Date, pid_t) {
