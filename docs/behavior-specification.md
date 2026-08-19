@@ -415,7 +415,16 @@ And --diagnostics prints a relative age, never a wall clock      [DK-PRIV-001 S2
 S7 — A restart is an implicit resume
 Given DockKeeper is paused and the process dies (crash, kill, logout)
 When DockKeeper next launches
-Then the pause record is discarded, not honoured                 [ADR-014]
+Then the pause record is discarded, not honoured                 [ADR-014;
+                                                                  CONFIRMED
+                                                                  on-device
+                                                                  2026-08-18,
+                                                                  §3b row 4 —
+                                                                  SIGKILL while
+                                                                  paused, record
+                                                                  survived the
+                                                                  kill, relaunch
+                                                                  removed the key]
 And enforcement resumes normally
 ```
 
