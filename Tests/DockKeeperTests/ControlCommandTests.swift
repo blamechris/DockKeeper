@@ -137,12 +137,13 @@ struct StatusSummaryTests {
             lockEdge: .left,
             currentEdge: .bottom,
             mechanism: "CoreDock",
-            coreDockAvailable: true
+            coreDockAvailable: true, pauseRecord: nil
         )
         #expect(summary.cliLines == [
             "Enabled:    yes",
             "Lock edge:  Left",
             "Dock is on: Bottom",
+            "Paused:     no",
             "CoreDock:   available",
         ])
     }
@@ -154,18 +155,19 @@ struct StatusSummaryTests {
             lockEdge: .bottom,
             currentEdge: nil,
             mechanism: "defaults + restart",
-            coreDockAvailable: false
+            coreDockAvailable: false, pauseRecord: nil
         )
         #expect(summary.cliLines[0] == "Enabled:    no")
         #expect(summary.cliLines[2] == "Dock is on: unknown")
-        #expect(summary.cliLines[3] == "CoreDock:   unavailable (using defaults fallback)")
+        #expect(summary.cliLines[3] == "Paused:     no")
+        #expect(summary.cliLines[4] == "CoreDock:   unavailable (using defaults fallback)")
     }
 
     @Test("Voice line reflects enabled state and mechanism")
     func voiceLine() {
         let enabled = StatusSummary(
             isEnabled: true, lockEdge: .left, currentEdge: .left,
-            mechanism: "CoreDock", coreDockAvailable: true
+            mechanism: "CoreDock", coreDockAvailable: true, pauseRecord: nil
         )
         #expect(enabled.voiceLine.contains("DockKeeper is enabled"))
         #expect(enabled.voiceLine.contains("left"))
@@ -173,7 +175,7 @@ struct StatusSummaryTests {
 
         let disabled = StatusSummary(
             isEnabled: false, lockEdge: .bottom, currentEdge: nil,
-            mechanism: "CoreDock", coreDockAvailable: true
+            mechanism: "CoreDock", coreDockAvailable: true, pauseRecord: nil
         )
         #expect(disabled.voiceLine.contains("DockKeeper is disabled"))
     }

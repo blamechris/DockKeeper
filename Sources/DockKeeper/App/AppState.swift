@@ -238,6 +238,7 @@ final class AppState: ObservableObject {
         // Property observers don't fire from within init, so start explicitly.
         Log.verbose = settings.verboseLogging
         refreshPreferredSelection()
+        resumeStalePauseIfNeeded()        // ADR-014 — a restart is an implicit resume
         repairScreenShareHideIfNeeded()   // DK-FR-013 — before any start/stop gating
         applyEnabledState()
         applyHotkeyState()
@@ -279,9 +280,13 @@ final class AppState: ObservableObject {
     ///   disable here would bring DockKeeper back inert at the next login.
     ///   Note that the ordinary disable path reaches the hider through
     ///   `applyEnabledState()` — do not reuse it here for that reason.
-    /// - `coordinator.disable()` is not called: it persists nothing, and it
-    ///   would publish a state change into a scene graph that is being torn
-    ///   down.
+    /// - `coordinator.disable()` is not called. It **used** to persist nothing;
+    ///   since ADR-014 it writes through `notifyState()` → `syncPauseRecord()`,
+    ///   so that half of the old rationale is retired — but the conclusion
+    ///   stands and the remaining half is now the whole reason: it would publish
+    ///   a state change into a scene graph being torn down. The pause record is
+    ///   cleared directly below instead, which is the same effect without the
+    ///   state-machine transition.
     /// - `WindowLayoutPreserver` holds no state between pins (its snapshot is
     ///   created and consumed inside a single `applyPin`), so there is nothing
     ///   of its to unwind.
@@ -290,6 +295,18 @@ final class AppState: ObservableObject {
         // and only then restores, so no tick can re-hide behind the restore.
         // Idempotent, and a no-op when we never hid anything.
         screenShareHider.stop()
+
+        // Drop the pause record on the way out (ADR-014). This is a **latency
+        // optimization, not the mechanism** — exactly as the auto-hide restore
+        // above is — because an ordinary ⌘Q is trappable and a SIGKILL is not;
+        // `resumeStalePauseIfNeeded()` at the next launch remains the guarantee.
+        //
+        // Without it a quit-while-paused left a record behind, so `dockkeeper
+        // status` reported a pause for the whole interval between quitting and
+        // relaunching. That is not the crash case the record was designed
+        // around: a restart is an implicit resume, so a quit should read as one
+        // immediately rather than only after the next launch clears it.
+        settings.pauseRecord = nil
 
         // Hygiene, strictly after the restore. Both are idempotent and both
         // close the window in which a callback could fire into a half-torn-down
@@ -321,16 +338,22 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Live status for `DockKeeperStatusIntent`, built from the same fields the
-    /// `dockkeeper status` CLI prints.
+    /// Live status for `DockKeeperStatusIntent` — the *same* builder the CLI
+    /// uses, not a re-spelling of it.
+    ///
+    /// This used to hand-roll the construction, and that is exactly how the
+    /// Siri/Shortcuts path missed the pause field: `StatusSummary.init` gained
+    /// `pauseRecord` with a default, so the stale copy kept compiling and kept
+    /// answering "enabled" while paused. `AppState.shared` is non-nil whenever
+    /// the app is running — which is precisely when a pause can be live — so
+    /// the intent always preferred this copy over `StatusSummary.live()` and the
+    /// bug was reachable on every real pause.
+    ///
+    /// `isEnabled` and `lockEdge` are written through to `settings` on every
+    /// mutation, so reading settings here yields the same values the published
+    /// properties hold, with no third source of truth to drift.
     func statusSummary() -> StatusSummary {
-        StatusSummary(
-            isEnabled: isEnabled,
-            lockEdge: lockEdge,
-            currentEdge: controller.currentOrientation(),
-            mechanism: controller.activeMechanismName,
-            coreDockAvailable: CoreDock.isAvailable
-        )
+        StatusSummary.live(settings: settings)
     }
 
     // MARK: - Pause (DK-FR-009)
@@ -359,6 +382,47 @@ final class AppState: ObservableObject {
         } else {
             pause(for: nil)
         }
+    }
+
+    /// Discard a pause record left behind by a previous process — ADR-014's
+    /// "a restart is an implicit resume".
+    ///
+    /// ADR-013 persists borrowed state and *reconciles* it at launch, because
+    /// the Dock's auto-hide belongs to the user and DockKeeper owes it back.
+    /// Pause is not borrowed; it is DockKeeper's own runtime state, and nothing
+    /// is owed. So the record is discarded rather than honoured, which also
+    /// makes the failure direction safe: no crash can leave DockKeeper silently
+    /// not enforcing forever, which is the exact outcome an untimed
+    /// `dockkeeper://pause` (no timer at all) would otherwise be one SIGKILL
+    /// away from.
+    ///
+    /// The explicit clear is load-bearing, not belt-and-braces. A fresh
+    /// `RecoveryCoordinator` starts unpaused with an empty `persistedPause`
+    /// shadow, so its `syncPauseRecord()` sees "not paused, nothing persisted",
+    /// finds no change, and writes nothing — leaving a stale record on disk
+    /// forever. Nothing else clears it.
+    ///
+    /// A `--diagnostics` process never reaches this: `Diagnostics.runIfRequested()`
+    /// prints and `exit()`s inside `App.init()`, before the `@StateObject`
+    /// autoclosure that builds `AppState`. The support command therefore reports
+    /// the record it found rather than destroying the evidence.
+    ///
+    /// One interleaving is accepted rather than designed against, matching how
+    /// ADR-013 treats its equivalent: in the explicitly unsupported
+    /// multi-instance modes (`swift run` unbundled, or
+    /// `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1`) a second instance launching
+    /// clears the *incumbent's live* record here. The incumbent's coordinator
+    /// holds a write-through shadow (`persistedPause`) with no invalidation
+    /// path, so it sees no change and never rewrites: the incumbent stays
+    /// genuinely paused while `status` reports otherwise. The same is true of
+    /// any external writer clearing the key, which is out of contract for a key
+    /// deliberately absent from `externallyObservedKeys`. Both are confined to
+    /// modes DK-FR-012 already documents as unsupported, and the failure is a
+    /// stale *report*, never a wrong enforcement decision.
+    private func resumeStalePauseIfNeeded() {
+        guard settings.pauseRecord != nil else { return }
+        settings.pauseRecord = nil
+        FileDiagnostics.shared.note("pause", "stale-record-discarded")
     }
 
     /// Menu note while paused: "Paused" (until resumed) or "Paused until 3:45 PM".

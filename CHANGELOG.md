@@ -6,7 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Added
+
+- **You can now tell whether DockKeeper is paused without hunting for the menu-bar icon.** `dockkeeper status` gains a `Paused:` line — always present, so a paused install is distinguishable from a working one at a glance — and `DockKeeper --diagnostics` reports it too, which matters because a paused DockKeeper is *correctly* doing nothing and a support report from one used to look identical to a healthy install. Asking Siri or Shortcuts for the status now says the app is paused instead of just "enabled". Pausing does not survive a restart: relaunching DockKeeper resumes it. ([#36](https://github.com/blamechris/DockKeeper/issues/36))
+
 ### Fixed
+
+- **`DockKeeper --diagnostics` could crash instead of printing a report.** A malformed value in DockKeeper's saved settings would take the command down rather than being reported, which is the worst possible moment to lose it — it is the one command we ask people to run when something is wrong. It now says the record looks corrupt and carries on.
 
 - **`--diagnostics` no longer opens with a warning that reads like a fault.** Every support report began with a system line saying an internal settings name *"does not make sense and will not work"* — alarming, and the first thing anyone sends us. Nothing was ever wrong: the app and the command-line tool deliberately share one settings store, and the app was reaching it by a route macOS grumbles about but honours. It now takes the route macOS expects, reads and writes exactly the same settings, and prints nothing extra. ([#34](https://github.com/blamechris/DockKeeper/issues/34))
 

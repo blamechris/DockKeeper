@@ -94,6 +94,7 @@ public final class Settings: @unchecked Sendable {
         static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
         static let hideDockDuringScreenShare = "hideDockDuringScreenShare"
         static let screenShareHideRecord = "screenShareHideRecord"
+        static let pauseRecord = "pauseRecord"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -107,6 +108,16 @@ public final class Settings: @unchecked Sendable {
     /// into a `.settingsChanged` event and a full reconcile, falsifying ADR-011's
     /// verified "Coordinator interaction" claim that the auto-hide path never
     /// reaches `DockMonitor`/`RecoveryCoordinator`. There is a test for this.
+    ///
+    /// `pauseRecord` is **absent for a related but distinct reason** (ADR-014).
+    /// It is written far less often than the hide record, so churn is not the
+    /// argument; the argument is `resume()`. Resume clears the record *and*
+    /// already runs a full reconcile of its own by design — observing the key
+    /// would fire a second, redundant reconcile off the same resume. (The pause
+    /// side is harmless either way: `RecoveryMachine.shouldProcess` refuses
+    /// every event while `.paused`, so the write during a pause could not be
+    /// acted on.) Letting an external writer *drive* pause by writing this key
+    /// is a separate feature, and would need that double reconcile solved first.
     static let externallyObservedKeys = [Keys.enabled, Keys.lockEdge, Keys.preferredDisplayFingerprint]
 
     /// Backing store handle for KVO observation by `DockMonitor`.
@@ -267,6 +278,32 @@ public final class Settings: @unchecked Sendable {
                 return
             }
             defaults.set(data, forKey: Keys.screenShareHideRecord)
+        }
+    }
+
+    /// A durable note that corrections are paused (DK-FR-009), so a cold process
+    /// — `dockkeeper status`, `--diagnostics` — can report a pause it is not
+    /// hosting. See `PauseRecord` and ADR-014.
+    ///
+    /// Same contract as `screenShareHideRecord` above, for the same reasons:
+    /// deliberately **not** in `registrationDomain()` (absence is a real state,
+    /// and a registered default cannot be removed), deliberately **not** in
+    /// `externallyObservedKeys` (see the note there), and **no `settingsVersion`
+    /// bump** (an optional, absent-by-default key reads compatibly in both
+    /// directions). The encode is folded into the guard for the same reason as
+    /// well — `set(nil, forKey:)` is `removeObject`, so a bare `try?` would turn
+    /// an encode failure into a silent "not paused".
+    public var pauseRecord: PauseRecord? {
+        get {
+            guard let data = defaults.data(forKey: Keys.pauseRecord) else { return nil }
+            return try? JSONDecoder().decode(PauseRecord.self, from: data)
+        }
+        set {
+            guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+                defaults.removeObject(forKey: Keys.pauseRecord)
+                return
+            }
+            defaults.set(data, forKey: Keys.pauseRecord)
         }
     }
 

@@ -404,13 +404,26 @@ Given a timed pause is in effect
 When the user pauses again (any duration)
 Then the first pause's auto-resume timer is stranded
 And the new duration governs
+
+S6 — A pause is observable from a process that is not holding it
+Given DockKeeper is paused
+When `dockkeeper status` or `DockKeeper --diagnostics` runs
+Then the report says so, distinctly from Enabled                [ADR-014]
+And `status` prints a Paused: line whether or not a pause is on
+And --diagnostics prints a relative age, never a wall clock      [DK-PRIV-001 S2]
+
+S7 — A restart is an implicit resume
+Given DockKeeper is paused and the process dies (crash, kill, logout)
+When DockKeeper next launches
+Then the pause record is discarded, not honoured                 [ADR-014]
+And enforcement resumes normally
 ```
 
 **Failure behavior.** Hotkey registration failure (e.g. the combo is already claimed by another app) is logged and the feature stays off — no trap, no crash (CONFIRMED — `HotKeyCenter.start` returns on non-`noErr`). Resume always routes through the normal reconcile path, so post-resume drift inherits the `DK-FR-003` retry ladder and oscillation guard.
 
-**User-visible behavior.** Menu shows the three pause items (hidden while disabled); while paused it shows "Paused" / "Paused until <time>" and "Resume Now". The menu-bar icon switches to `pause.rectangle` (CONFIRMED — `RecoveryState.menuSymbolName`). Advanced-tab toggle "Global pause hotkey (⌃⌥⌘D)" with a caption naming the combo; off by default. No hotkey customization in v1.1 (future work).
+**User-visible behavior.** Menu shows the three pause items (hidden while disabled); while paused it shows "Paused" / "Paused until <time>" and "Resume Now". The menu-bar icon switches to `pause.rectangle` (CONFIRMED — `RecoveryState.menuSymbolName`). The menu is no longer the *only* observer (ADR-014, [#36](https://github.com/blamechris/DockKeeper/issues/36)): `dockkeeper status` prints a `Paused:` line always, `DockKeeper --diagnostics` prints one with a relative age, and the Siri/Shortcuts voice line leads with the pause rather than reporting "enabled" — which is true but the wrong answer while DockKeeper is deliberately correcting nothing. Advanced-tab toggle "Global pause hotkey (⌃⌥⌘D)" with a caption naming the combo; off by default. No hotkey customization in v1.1 (future work).
 
-**Testability.** Pure `RecoveryMachine` pause/resume transitions (incl. from-disabled rejection) and coordinator orchestration (strand-on-pause, ignore-events, auto-resume via fake scheduler, manual-resume strands stale timer, second-pause supersedes) are unit-tested with the existing simulated clock/scheduler harness ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift), S1–S5). The Carbon hot-key wrapper and menu wiring are manual (system-level registration is out of unit scope).
+**Testability.** Pure `RecoveryMachine` pause/resume transitions (incl. from-disabled rejection) and coordinator orchestration (strand-on-pause, ignore-events, auto-resume via fake scheduler, manual-resume strands stale timer, second-pause supersedes) are unit-tested with the existing simulated clock/scheduler harness ([RecoveryTests.swift](../Tests/DockKeeperTests/RecoveryTests.swift), S1–S5). S6's record half is unit-tested there too (`RecoveryCoordinator pause record`, `Settings.pauseRecord`, `StatusSummary pause reporting`): the record follows `machine.state` through every transition, writes once per change, and writes nothing across reconciles while unpaused. The **cross-process** half — a process reading a pause it does not host — is CONFIRMED by measurement (ADR-014 Evidence) rather than by unit test, because no unit test can establish it. S7 is INFERRED until §3b row 4 is run: the launch clear is a single guarded write in `AppState.init`, which the unit suite does not reach. The Carbon hot-key wrapper and menu wiring are manual (system-level registration is out of unit scope).
 
 **Priority / target.** P2 / v1.1. Justification: pure parity/convenience — not required to ship a trustworthy v1.0 (rule 20 favours it but does not gate on it), and it depends on no v1.0 work. Landed ahead of target as the cheapest parity win (zero permissions, reserved machinery). **Related risks:** R-005 (resume re-enters the reconcile machinery; the machine clears its oscillation budget on pause so a fresh fight is bounded again after resume).
 
