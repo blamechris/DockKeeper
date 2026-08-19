@@ -621,7 +621,16 @@ S7 — Unbundled builds are outside the guard
 When `swift run DockKeeper` or a bare .build/debug binary runs
 Then it is neither blocked nor detected, and runs alongside the .app
                                                           [by design — keeps the
-                                                           debugger loop flag-free]
+                                                           debugger loop flag-free;
+                                                           CONFIRMED on-device
+                                                           2026-08-18, §3b row 9 —
+                                                           both halves, the second
+                                                           observed from a third
+                                                           process during the
+                                                           overlap. One cause:
+                                                           an unbundled build
+                                                           registers with a NULL
+                                                           bundle identifier]
 
 S8 — Simultaneous launches leave exactly one survivor
 Given any group of instances that can see each other
