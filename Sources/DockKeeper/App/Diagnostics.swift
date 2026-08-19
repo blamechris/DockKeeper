@@ -105,10 +105,20 @@ enum Diagnostics {
     /// perturb anything the single-instance guard consults, or the support
     /// command becomes a way to refuse a legitimate launch.
     ///
-    /// The peer read itself comes from `SingleInstance`, so the report can never
-    /// disagree with the guard about who counts as another instance — the same
-    /// anti-drift reason `InstanceGuard.oneShotFlags` is shared rather than
-    /// re-spelled. Each pid printed here is also the recovery handle: an
+    /// The peer read itself comes from `SingleInstance`, so the report and the
+    /// guard can never disagree about **what is running** — the same anti-drift
+    /// reason `InstanceGuard.oneShotFlags` is shared rather than re-spelled.
+    ///
+    /// They do deliberately differ about what counts as a *duplicate*. Since the
+    /// guard became session-scoped it ignores instances owned by another uid
+    /// (fast user switching: a different user's Dock, not a duplicate), while
+    /// this report still lists them — support wants to know a second user is
+    /// running one. Those entries are marked `(another user)` precisely so the
+    /// report cannot mislead in the other direction: without the marker, support
+    /// would read a foreign pid as the recovery handle below and tell the user
+    /// to kill a process they can neither see nor signal.
+    ///
+    /// Each pid printed here is also the recovery handle: an
     /// `LSUIElement` agent has no Force Quit row, so `kill -9 <pid>` is the only
     /// way to clear a wedged instance that is deflecting every new launch —
     /// plain `kill` sends SIGTERM, which `TerminationSignals` ignores and
@@ -121,8 +131,14 @@ enum Diagnostics {
             selfPID: ProcessInfo.processInfo.processIdentifier
         )
         guard !others.isEmpty else { return "none" }
+        let me = getuid()
         return others
-            .map { "pid \($0.processIdentifier) at \($0.bundleURL?.path ?? "unknown path")" }
+            .map { app -> String in
+                let path = app.bundleURL?.path ?? "unknown path"
+                let uid = SingleInstance.processInfo(of: app.processIdentifier)?.uid
+                let foreign = (uid != nil && uid != me) ? " (another user)" : ""
+                return "pid \(app.processIdentifier) at \(path)\(foreign)"
+            }
             .joined(separator: ", ")
     }
 }

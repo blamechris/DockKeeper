@@ -34,17 +34,20 @@ enum SingleInstance {
         let selfPID = ProcessInfo.processInfo.processIdentifier
 
         let peers = otherRunningInstances(bundleID: bundleID, selfPID: selfPID)
-            .map {
-                InstancePeer(
-                    pid: $0.processIdentifier,
-                    launchDate: startTime(of: $0.processIdentifier) ?? $0.launchDate,
-                    bundlePath: $0.bundleURL?.path
+            .map { app -> InstancePeer in
+                let info = processInfo(of: app.processIdentifier)
+                return InstancePeer(
+                    pid: app.processIdentifier,
+                    launchDate: info?.startTime ?? app.launchDate,
+                    bundlePath: app.bundleURL?.path,
+                    uid: info?.uid
                 )
             }
 
         guard case .yield(let incumbent) = InstanceGuard.decide(
             selfPID: selfPID,
-            selfLaunchDate: startTime(of: selfPID) ?? NSRunningApplication.current.launchDate,
+            selfLaunchDate: processInfo(of: selfPID)?.startTime ?? NSRunningApplication.current.launchDate,
+            selfUID: getuid(),
             peers: peers
         ) else { return }
 
@@ -81,7 +84,8 @@ enum SingleInstance {
             .filter { $0.processIdentifier > 0 && $0.processIdentifier != selfPID && !$0.isTerminated }
     }
 
-    /// Kernel process start time — the one identity **every** live process has.
+    /// Kernel process start time **and owning uid** — the one identity every
+    /// live process has, and the one that says whose Dock it is contending for.
     ///
     /// This is load-bearing, not a nicety. `NSRunningApplication.launchDate` is
     /// `nil` for the whole lifetime of a directly-`exec`ed bundle binary
@@ -96,12 +100,21 @@ enum SingleInstance {
     ///
     /// `InstanceGuard`'s identity-known rank component survives as the fallback
     /// for the residual case where `sysctl` fails too.
-    private static func startTime(of pid: pid_t) -> Date? {
+    ///
+    /// The **uid comes out of the same call**, which is why session scoping is
+    /// free here: `kinfo_proc` already carries `kp_eproc.e_ucred.cr_uid`
+    /// (measured — self reports 501 on this machine, launchd reports 0), so no
+    /// second syscall and no new API is needed to tell another user's DockKeeper
+    /// from a genuine duplicate. Both fields therefore share one lookup and one
+    /// failure mode: if `sysctl` fails, neither is known, and `InstancePeer`
+    /// answers `sameSession(as:)` with `false` for exactly that reason.
+    static func processInfo(of pid: pid_t) -> (startTime: Date, uid: uid_t)? {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
         guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
         let started = info.kp_proc.p_starttime
-        return Date(timeIntervalSince1970: Double(started.tv_sec) + Double(started.tv_usec) / 1_000_000)
+        let date = Date(timeIntervalSince1970: Double(started.tv_sec) + Double(started.tv_usec) / 1_000_000)
+        return (date, info.kp_eproc.e_ucred.cr_uid)
     }
 }
