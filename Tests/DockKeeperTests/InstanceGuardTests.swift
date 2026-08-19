@@ -129,7 +129,7 @@ struct InstanceGuardTests {
                 == .yield(to: incumbent))
     }
 
-    /// The property the whole design rests on, over EVERY identity shape:
+    /// The property the whole design rests on, over every start-time shape, within one session:
     /// exactly one survivor — never two, and never zero. Two-element tests
     /// cannot catch a cyclic comparator; three can. A predicate that compares
     /// some pairs by date and others by pid is cyclic as soon as one date is
@@ -159,12 +159,13 @@ struct InstanceGuardTests {
 /// legitimately wants their own DockKeeper, so another user's instance is not a
 /// duplicate — it is a different app managing a different Dock.
 ///
-/// These exist because the alternative was trusting undefined behaviour: Apple
-/// DTS states that with multiple GUI login sessions it is "undefined which one
-/// you'd get" from the LaunchServices-backed peer query. Rather than measure
-/// that on one machine and call it settled, the guard filters by uid and the
-/// property becomes true by construction — testable here, with no second
-/// account and no logout.
+/// These exist because the alternative was trusting behaviour Apple does not
+/// define across multiple GUI login sessions. The careful reading of that
+/// evidence — including what it does and does not say about an app inside a GUI
+/// session — lives in the ADR-012 amendment (`docs/decision-log.md`) and is
+/// deliberately not restated here, so the two cannot drift. The point for these
+/// tests: the guard filters by uid, so the property is true by construction and
+/// testable with no second account and no logout.
 @Suite("InstanceGuard session scoping")
 struct InstanceGuardSessionTests {
 
@@ -231,6 +232,28 @@ struct InstanceGuardSessionTests {
     func rootPeerIsForeign() {
         let asRoot = InstancePeer(pid: 100, launchDate: older, bundlePath: nil, uid: 0)
         #expect(decide(selfPID: 200, selfLaunchDate: newer, peers: [asRoot]) == .proceed)
+    }
+
+    @Test("With two qualifying peers, the bail names the most senior — not just any")
+    func namesTheMostSeniorPeer() {
+        // Mutation-motivated: swapping `.min` for `.max` in `decide` passed the
+        // entire suite, because every other yielding case has exactly one
+        // qualifying peer and the 27-case sweep only counts `.proceed` results.
+        // The wrong peer is not a wrong decision — it still yields — but the
+        // stderr notice would name the wrong pid and bundle path and send the
+        // user to quit the copy that should have survived.
+        //
+        // Reachable via the escape hatch that same notice advertises: with
+        // DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1 two same-session instances are
+        // live, so a third launch genuinely sees two seniors.
+        let eldest = InstancePeer(pid: 300, launchDate: Date(timeIntervalSince1970: 1_000),
+                                  bundlePath: "/Applications/DockKeeper.app", uid: TestUID.me)
+        let middle = InstancePeer(pid: 100, launchDate: Date(timeIntervalSince1970: 1_500),
+                                  bundlePath: "/dist/DockKeeper.app", uid: TestUID.me)
+        // `eldest` deliberately carries the HIGHER pid, so a rule that fell back
+        // to pid order would pick `middle` and this would fail.
+        #expect(decide(selfPID: 200, selfLaunchDate: newer, peers: [middle, eldest])
+                == .yield(to: eldest))
     }
 
     @Test("Session filtering never rescues a junior — ordering still governs")

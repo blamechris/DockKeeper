@@ -52,10 +52,23 @@ extension InstancePeer {
     /// visible and recoverable; zero are neither. That is the same asymmetry
     /// that led ADR-012 to withhold `LSMultipleInstancesProhibited`.
     ///
-    /// In practice the unknown case is nearly unreachable: the uid comes from
-    /// the same `sysctl` as `launchDate`, so a failure that loses the uid also
-    /// loses the date, and a dateless peer already ranks below every dated
-    /// newcomer.
+    /// The unknown case is nearly unreachable, though **not** for the reason it
+    /// first appears. It is tempting to argue that the uid and the start time
+    /// share one `sysctl`, so losing one loses the other and the peer ranks last
+    /// anyway — that is wrong twice over, and was written here before being
+    /// measured. `SingleInstance` falls back to the LaunchServices date
+    /// (`info?.startTime ?? app.launchDate`), so a failed lookup still yields a
+    /// *dated* peer; and the rank cannot rescue anything, because this predicate
+    /// already excluded the peer.
+    ///
+    /// The true reason: `sysctl(KERN_PROC_PID)` succeeds unprivileged for any
+    /// **live** pid whatever its owner (measured — 868/868 live processes on the
+    /// dev machine, 335 of them foreign-uid, zero failures; the app is not
+    /// sandboxed, closing the other route). So `uid == nil` means the pid is
+    /// already gone — a peer that died between `otherRunningInstances`'
+    /// `!isTerminated` check and this lookup. Declining to yield to a corpse is
+    /// therefore actively correct, not merely tolerable: it hardens the very
+    /// race that check only partly covers.
     func sameSession(as selfUID: uid_t) -> Bool {
         guard let uid else { return false }
         return uid == selfUID
