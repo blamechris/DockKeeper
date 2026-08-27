@@ -296,7 +296,14 @@ public final class RecoveryCoordinator {
         // Terminal pin decisions (separate Spaces, ambiguous identity, …)
         // never produce an effect, but their explanation must still reach the
         // UI; a clean `.noPreference`/`.alreadyOnTarget` clears stale notes.
-        if includesPinning, case .terminal(let outcome) = input.pinDecision {
+        //
+        // `displaysReady` gates this for the same reason the machine refuses to
+        // act on a mid-transition topology: a decision computed against an empty
+        // display list is an artifact, not a decision — it collapses to
+        // `.noPreference`, which would clear a live explanation and then restore
+        // it a pass later. On wake and replug, the bursty paths, that made the
+        // menu note blink and defeated the transition de-duplication downstream.
+        if includesPinning, input.displaysReady, case .terminal(let outcome) = input.pinDecision {
             onPinOutcome?(outcome)
         }
 

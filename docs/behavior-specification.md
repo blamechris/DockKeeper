@@ -95,7 +95,7 @@ Then the selectable edges are exactly bottom, left, right   [CONFIRMED — exist
 
 **Rationale.** There is no API — public or private within accepted risk — to place the Dock on a display directly; relocating the main display is the only public route. CONFIRMED (spike).
 
-**Preconditions.** Enabled; a preferred display is stored (fingerprint per ADR-004 — implemented 2026-07-23, with write-once migration from the v0.1 bare UUID); at least two displays connected; "Displays have separate Spaces" is OFF **or** the lock edge is left/right (ADR-009 — left/right Docks home to the main display even in separate-Spaces mode, hardware-confirmed).
+**Preconditions.** Enabled; a preferred display is stored (fingerprint per ADR-004 — implemented 2026-07-23, with write-once migration from the v0.1 bare UUID); at least two displays connected; "Displays have separate Spaces" is OFF **or** the lock edge is left/right (ADR-009 — left/right Docks home to the main display even in separate-Spaces mode, hardware-confirmed). The one scenario below that does *not* require a stored preference is S2c, which is an advisory rather than a pin.
 
 **Trigger.** Reconcile pass (event, poll, enable, or the user picking a display).
 
@@ -124,6 +124,17 @@ When a reconcile pass runs
 Then the pin applies exactly as in S1 (left/right Docks home to the main
     display in this mode) — and no menu bar moves, since every display
     keeps its own                [ADR-009 — CONFIRMED on hardware 2026-07-23]
+
+S2c — Separate Spaces ON, BOTTOM Dock, and NO preferred display stored
+Given "Displays have separate Spaces" is ON and the lock edge is bottom
+And at least two displays are connected
+And no preferred display has been chosen
+When a reconcile pass runs
+Then DockKeeper reports bottomDockFollowsPointer and explains that macOS
+    hands a bottom Dock to whichever display the pointer summons it to,
+    offering the same two remedies as S2
+And the message reaches the menu — S2's explanation is unreachable here,
+    because the decision short-circuits on "no preference" first     [#44]
 
 S3 — Preferred display absent
 Given the preferred display is not connected

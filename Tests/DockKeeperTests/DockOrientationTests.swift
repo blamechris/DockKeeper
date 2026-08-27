@@ -92,6 +92,34 @@ struct DisplayPinnerTests {
         #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .none, dockEdge: .bottom) == .terminal(.noPreference))
     }
 
+    @Test("No preference + bottom + separate Spaces + 2 displays explains the roaming Dock (#44)")
+    func bottomDockFollowsPointerAdvisory() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .none, dockEdge: .bottom) == .terminal(.bottomDockFollowsPointer))
+        // It has to reach the menu; a nil message is the bug this fixes.
+        #expect(PinOutcome.bottomDockFollowsPointer.userMessage != nil)
+    }
+
+    @Test("The roaming-Dock advisory is narrow: only bottom, only separate Spaces, only multi-display (#44)")
+    func bottomDockAdvisoryDoesNotOverreach() {
+        let multiOn = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
+        let multiOff = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: false)
+        let singleOn = snapshot([display("A", id: 1)], main: 1, separateSpaces: true)
+        // A left/right Dock does not roam, so there is nothing to warn about.
+        #expect(MainDisplayPinner.decide(snapshot: multiOn, resolution: .none, dockEdge: .left) == .terminal(.noPreference))
+        #expect(MainDisplayPinner.decide(snapshot: multiOn, resolution: .none, dockEdge: .right) == .terminal(.noPreference))
+        // Separate Spaces off: a bottom Dock stays put.
+        #expect(MainDisplayPinner.decide(snapshot: multiOff, resolution: .none, dockEdge: .bottom) == .terminal(.noPreference))
+        // One display: nothing to roam between.
+        #expect(MainDisplayPinner.decide(snapshot: singleOn, resolution: .none, dockEdge: .bottom) == .terminal(.noPreference))
+    }
+
+    @Test("A stored preference still takes the decline path, not the advisory (#44)")
+    func storedPreferenceStillDeclines() {
+        let snap = snapshot([display("A", id: 1), display("B", id: 2)], main: 1, separateSpaces: true)
+        #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .bottom) == .terminal(.unsupportedSeparateSpaces))
+    }
+
     @Test("Single display cannot be pinned, whatever the resolution says")
     func singleDisplay() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
