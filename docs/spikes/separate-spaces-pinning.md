@@ -183,8 +183,15 @@ func dockHostIndex() -> Int? { rows().first(where: { $0.hostsDock })?.index }
 
 /// Second, independent signal. Signature verified by careful call, 2026-07-23.
 func coreDockRect() -> CGRect? {
-    guard let h = dlopen("/System/Library/PrivateFrameworks/CoreDock.framework/CoreDock",
-                         RTLD_LAZY), let sym = dlsym(h, "CoreDockGetRect") else { return nil }
+    // Resolve exactly as `CoreDock.swift` does. There is no
+    // CoreDock.framework on disk — the symbols live in the shared dyld cache,
+    // reached via ApplicationServices + RTLD_DEFAULT. The first draft of this
+    // probe guessed a PrivateFrameworks path, silently returned nil, and threw
+    // away the corroborating signal on the one run that mattered.
+    _ = dlopen("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices",
+               RTLD_LAZY)
+    guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CoreDockGetRect")
+    else { return nil }
     typealias Fn = @convention(c) (UnsafeMutablePointer<CGRect>) -> Void
     var r = CGRect.zero
     unsafeBitCast(sym, to: Fn.self)(&r)
@@ -325,6 +332,43 @@ stage-1 failure and a reason stage 2 might differ).
   feature to require Accessibility, and it would put DockKeeper at parity
   with DockLock rather than ahead of it.
 
+## Warp-only result — 2026-08-27, side-by-side rig — **NEGATIVE**
+
+**Rig.** Dev MacBook Pro built-in Retina (1728×1117) + **DELL G3223Q**
+(3840×2160, landscape), macOS 26.5 Apple Silicon, separate Spaces ON, Dock at
+bottom, not auto-hidden. Native arrangement is Dell **flush above** the laptop
+(CG origin `(-919, -2160)`) — the blocked geometry. Temporarily rearranged
+side-by-side (`arrange sidebyside`: built-in main at `(0,0)`, Dell at
+`(1728,0)`) so both bottom edges are free; `ssprobe` then reported
+`TOPOLOGY: qualifies`.
+
+| Probe | Result |
+|---|---|
+| Stage 1 — single warp to the Dell's bottom-centre | ✗ no summon |
+| Stage 2 — repeated warps along the edge | ✗ no summon |
+| Both stages, **5 consecutive runs** | ✗ no summon, 5/5 |
+| **Control: does the warp actually land?** | ✓ **yes** — asked `(3648, 2159)`, cursor read back `(3648, 2159)` |
+| Corroborating host detector `CoreDockGetRect` | ✓ `(354, 1039, 1019, 78)` — on the laptop, agreeing with the `visibleFrame` inset test |
+
+**CONFIRMED: `CGWarpMouseCursorPosition` alone does not summon the Dock**, on a
+qualifying free-bottom-edge topology, with the warp independently verified to
+place the cursor exactly on the target display's bottom row. The control
+matters — without it this would be indistinguishable from a warp that never
+happened, which is the trap the first two sessions fell into for a different
+reason.
+
+**What this does NOT establish, and the gap is decisive.** Whether a *real*
+pointer can summon the Dock on **this rig** was never observed. The original
+report that motivated G1 came from a different machine (a work MBP,
+laptop-left/external-right). If a human hand cannot summon here either, then
+this rig cannot test the mechanism at all and the negative above says nothing
+about `CGEventPost` — it says only that this Mac does not do pointer-summon.
+That observation is a single mouse movement and it gates the next rung.
+
+**Next rung is not yet justified.** `CGEventPost` needs an Accessibility grant
+(`AXIsProcessTrusted()` = false here). Spending a TCC grant is premature until
+the hand test says the mechanism exists on this hardware.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
@@ -336,7 +380,15 @@ stage-1 failure and a reason stage 2 might differ).
       external-right, so both bottom edges are free. No rearrangement needed,
       and the observation is on a natural arrangement rather than a contrived
       one.
-- [ ] **Run `ssprobe` (above) on that rig, both directions, 5× per stage.**
+- [x] ~~**Run `ssprobe` on that rig, 5× per stage.**~~ — **done 2026-08-27,
+      NEGATIVE** (results above). Warp-only does not summon; warp landing
+      verified by control.
+- [ ] **Hand test (blocking):** on the side-by-side rig, physically move the
+      mouse to the Dell's bottom edge. Does the Dock migrate? This decides
+      whether the rig can test the mechanism at all, and therefore whether the
+      `CGEventPost` rung is worth a TCC grant.
+- [ ] ~~Superseded phrasing kept for the record:~~ run both directions, 5× per
+      stage.
       Decides whether the summon is zero-permission (warp) or Accessibility-
       gated (`CGEventPost`) — the single highest-value unknown in this spike,
       because it decides whether G1 beats DockLock or merely matches it.
