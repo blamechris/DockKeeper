@@ -1,6 +1,6 @@
 # Spike: Pinning the Dock in separate-Spaces mode (parity workstream)
 
-**Date started:** 2026-07-23 · **Status:** Core question RESOLVED same day (→ ADR-009 shipped); bottom-mode track remains open · **Drives:** ADR-008/009, implementation-plan M8
+**Date started:** 2026-07-23 · **Status:** Core question RESOLVED same day (→ ADR-009 shipped); bottom-mode (G1) track open — probe written 2026-08-27, awaiting a run on a free-bottom-edge rig · **Drives:** ADR-008/009, implementation-plan M8
 
 ## Resolution (2026-07-23, hardware-confirmed)
 
@@ -112,17 +112,190 @@ only topologies where the preferred display has a **free bottom edge**
 (detectable from pure geometry), with honest copy otherwise ("that display's
 bottom edge borders another screen — use a left/right Dock to pin there").
 
+## Free-bottom-edge summon probe (G1) — queued, not yet run
+
+**Topology unblock (2026-08-27).** The 2026-07-23 sessions ran on the stacked
+portrait rig, where the Dell's bottom edge is shared and *no* summon can
+succeed — so they could not distinguish "the mechanism doesn't work" from "this
+arrangement forbids it". An owner rig is now available with the laptop
+(primary) **left** and the external monitor **right**: side-by-side, so **both
+displays have a free bottom edge**. That is the precondition this probe needs,
+and it is an entirely ordinary arrangement, so a result here generalizes.
+
+**The question, precisely.** Candidate 1 (pointer re-summon) splits into a
+cheap variant and an expensive one, and the difference decides DockKeeper's
+permission story for the whole feature:
+
+| Variant | API | Permission | If it works |
+|---|---|---|---|
+| **Warp-only** | `CGWarpMouseCursorPosition` | **none** | G1 ships zero-permission — *better* than DockLock, which requires Accessibility |
+| Synthesized events | `CGEventPost` | Accessibility (TCC) | G1 matches DockLock; needs an opt-in permission decision in ADR-009 |
+
+The probe tries the free one first and escalates only within the free tier
+(single warp → repeated nudges). It never posts a synthetic event, so it can
+be run with no permission grant and no TCC prompt.
+
+**What it does not touch.** No Dock preference is written, no `killall`, no
+display reconfiguration. The only mutation is the pointer position, saved
+before and restored after.
+
+```swift
+// ssprobe.swift — swiftc -O ssprobe.swift -o ssprobe
+// Read-only except for a transient pointer warp, which is restored on exit.
+import AppKit
+import CoreGraphics
+
+// --- Detection (spike §(a), corroborated by CoreDockGetRect) --------------
+
+struct ScreenRow {
+    let index: Int, name: String
+    let frame: CGRect, bottomInset: CGFloat
+    var hostsDock: Bool { bottomInset > 4 }   // ~78pt observed on the host, 0 elsewhere
+}
+
+func rows() -> [ScreenRow] {
+    NSScreen.screens.enumerated().map { i, s in
+        ScreenRow(index: i, name: s.localizedName, frame: s.frame,
+                  bottomInset: s.visibleFrame.minY - s.frame.minY)
+    }
+}
+func dockHostIndex() -> Int? { rows().first(where: { $0.hostsDock })?.index }
+
+/// Second, independent signal. Signature verified by careful call, 2026-07-23.
+func coreDockRect() -> CGRect? {
+    guard let h = dlopen("/System/Library/PrivateFrameworks/CoreDock.framework/CoreDock",
+                         RTLD_LAZY), let sym = dlsym(h, "CoreDockGetRect") else { return nil }
+    typealias Fn = @convention(c) (UnsafeMutablePointer<CGRect>) -> Void
+    var r = CGRect.zero
+    unsafeBitCast(sym, to: Fn.self)(&r)
+    return r
+}
+
+// --- Cocoa (origin bottom-left, +Y up) → CG global (top-left, +Y down) ----
+// NSScreen.screens[0] is the primary display, whose Cocoa origin is (0,0).
+
+let flipHeight = NSScreen.screens[0].frame.maxY
+func toCG(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: flipHeight - p.y) }
+
+// --- Probe ---------------------------------------------------------------
+
+// Establish a window-server connection and let AppKit refresh `NSScreen`
+// between reads — without this the post-summon re-read can return cached
+// geometry and manufacture a false negative, which is the one failure mode
+// this probe must not have.
+_ = NSApplication.shared
+
+guard NSScreen.screens.count > 1 else {
+    print("REFUSE: needs >= 2 displays; found \(NSScreen.screens.count)"); exit(2)
+}
+guard CommandLine.arguments.count == 2, let target = Int(CommandLine.arguments[1]),
+      NSScreen.screens.indices.contains(target) else {
+    print("usage: ssprobe <target-screen-index>")
+    for r in rows() {
+        print("  [\(r.index)] \(r.name)  frame=\(r.frame)  bottomInset=\(r.bottomInset)"
+            + (r.hostsDock ? "  <- Dock host" : ""))
+    }
+    exit(2)
+}
+
+let before = dockHostIndex()
+print("Dock host before: \(before.map(String.init) ?? "none detected")")
+print("CoreDockGetRect:  \(coreDockRect().map(String.init(describing:)) ?? "unavailable")")
+guard before != target else {
+    print("REFUSE: the Dock is already on screen \(target); nothing to summon"); exit(2)
+}
+
+// `exit()` does NOT unwind `defer`, so the restore is explicit on every path.
+let restore = CGEvent(source: nil)?.location
+func finish(_ code: Int32, _ message: String) -> Never {
+    if let restore { CGWarpMouseCursorPosition(restore) }
+    print(message)
+    exit(code)
+}
+
+let f = NSScreen.screens[target].frame
+// Bottom-centre of the target, one row inside it.
+let bottom = toCG(CGPoint(x: f.midX, y: f.minY))
+let edge = CGPoint(x: bottom.x, y: bottom.y - 1)
+
+func settled(_ seconds: Double) -> Int? {
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+        if let h = dockHostIndex(), h != before { return h }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    return dockHostIndex()
+}
+
+// Stage 1 — a single warp. The cheapest thing that could possibly work.
+CGWarpMouseCursorPosition(edge)
+if let h = settled(2.0), h == target {
+    finish(0, "RESULT: stage 1 (single warp) SUMMONED the Dock to \(target) — zero-permission path viable")
+}
+
+// Stage 2 — repeated warps along the edge. Still no synthetic events; this
+// tests whether the summon needs apparent *motion* rather than mere position.
+for i in 0..<40 {
+    CGWarpMouseCursorPosition(CGPoint(x: edge.x + CGFloat(i % 2 == 0 ? -3 : 3), y: edge.y))
+    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+}
+if let h = settled(2.0), h == target {
+    finish(0, "RESULT: stage 2 (repeated warps) SUMMONED the Dock to \(target) — zero-permission path viable")
+}
+
+finish(1, """
+        RESULT: warp-only did NOT summon (host still \(dockHostIndex().map(String.init) ?? "none")).
+                Next: synthesized-event variant (CGEventPost) — needs an Accessibility grant.
+        """)
+```
+
+**Run recipe** (from a two-display side-by-side rig, Dock at bottom, separate
+Spaces ON, Dock **not** auto-hidden — auto-hide zeroes the inset and breaks
+detection):
+
+```sh
+swiftc -O ssprobe.swift -o ssprobe
+./ssprobe                 # lists screens and marks the current Dock host
+./ssprobe 1               # attempt to summon to screen index 1
+```
+
+Repeat each stage at least 5× in both directions (laptop → external, external →
+laptop) before recording a verdict: a single negative could be a suppression
+artifact (`CGWarpMouseCursorPosition` suppresses local mouse deltas for a
+short interval after the warp, which is itself a candidate explanation for a
+stage-1 failure and a reason stage 2 might differ).
+
+**How to read the outcome.**
+
+- **Stage 1 or 2 succeeds** → G1 is viable *and* zero-permission. Write it up,
+  then ADR-009 gains a mechanism section and `SeparateSpacesPinner` lands
+  behind the existing `DisplayPinner` protocol. Still bottom-only, still
+  needs the free-bottom-edge geometry check and honest copy otherwise.
+- **Both fail** → the summon needs synthetic events. That is a *product
+  permission decision*, not a spike outcome: it would make G1 the second
+  feature to require Accessibility, and it would put DockKeeper at parity
+  with DockLock rather than ahead of it.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
       **failed on this topology** (shared edge; see field observations).
 - [x] ~~killall-relocation candidate~~ — falsified (table above).
 - [x] ~~`CoreDockGetRect` read-only call~~ — verified; usable as a detector.
-- [ ] **Side-by-side test**: temporarily rearrange Dell beside laptop
-      (programmatic, reversible), retry bottom summon on the freed edge —
-      also decides whether free-bottom-edge topologies are G1-viable at all.
-- [ ] Warp-only vs synthesized-event summon experiment on a free bottom edge
-      (the latter needs a one-time dev-machine Accessibility grant).
+- [x] ~~**Side-by-side test**: temporarily rearrange Dell beside laptop~~ —
+      **superseded 2026-08-27**: an owner rig already has laptop-left /
+      external-right, so both bottom edges are free. No rearrangement needed,
+      and the observation is on a natural arrangement rather than a contrived
+      one.
+- [ ] **Run `ssprobe` (above) on that rig, both directions, 5× per stage.**
+      Decides whether the summon is zero-permission (warp) or Accessibility-
+      gated (`CGEventPost`) — the single highest-value unknown in this spike,
+      because it decides whether G1 beats DockLock or merely matches it.
+      Probe compiles clean and refuses safely on a 1-display machine (verified
+      2026-08-27); the summon path itself is **unrun**.
+- [ ] Only if warp-only fails: synthesized-event variant (needs a one-time
+      dev-machine Accessibility grant; a *product* permission decision belongs
+      to ADR-009, not to this spike).
 - [ ] SkyLight/HIServices export enumeration for dock-display symbols beyond
       the guessed names (resolve-only).
 - [ ] Careful `CoreDockGetRect` read-only call (probe script only).
