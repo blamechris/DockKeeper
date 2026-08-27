@@ -159,11 +159,15 @@ struct ScreenRow {
 /// instead of dwelling, and the summon cannot fire. Confirmed 2026-07-23 on the
 /// stacked portrait rig: not even a real hand could summon there. This is the
 /// pure-geometry precondition G1 has to check before it promises anything.
-func bottomEdgeFree(_ f: CGRect, among all: [CGRect]) -> Bool {
-    !all.contains { other in
-        other != f
-            && abs(other.maxY - f.minY) < 1          // flush beneath
-            && min(other.maxX, f.maxX) - max(other.minX, f.minX) > 0   // x overlap
+/// Identified by index, not by frame: mirrored displays share a frame, and an
+/// identity test that cannot tell them apart is the wrong primitive for a
+/// check the feature will rely on.
+func bottomEdgeFree(_ i: Int, among all: [CGRect]) -> Bool {
+    let f = all[i]
+    return !all.indices.contains { j in
+        j != i
+            && abs(all[j].maxY - f.minY) < 1          // flush beneath
+            && min(all[j].maxX, f.maxX) - max(all[j].minX, f.minX) > 0   // x overlap
     }
 }
 
@@ -172,7 +176,7 @@ func rows() -> [ScreenRow] {
     return NSScreen.screens.enumerated().map { i, s in
         ScreenRow(index: i, name: s.localizedName, frame: s.frame,
                   bottomInset: s.visibleFrame.minY - s.frame.minY,
-                  bottomEdgeFree: bottomEdgeFree(s.frame, among: frames))
+                  bottomEdgeFree: bottomEdgeFree(i, among: frames))
     }
 }
 func dockHostIndex() -> Int? { rows().first(where: { $0.hostsDock })?.index }
