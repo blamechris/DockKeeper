@@ -179,6 +179,12 @@ func toCG(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: flipHeight - p.y) }
 
 // --- Probe ---------------------------------------------------------------
 
+// Establish a window-server connection and let AppKit refresh `NSScreen`
+// between reads — without this the post-summon re-read can return cached
+// geometry and manufacture a false negative, which is the one failure mode
+// this probe must not have.
+_ = NSApplication.shared
+
 guard NSScreen.screens.count > 1 else {
     print("REFUSE: needs >= 2 displays; found \(NSScreen.screens.count)"); exit(2)
 }
@@ -199,8 +205,13 @@ guard before != target else {
     print("REFUSE: the Dock is already on screen \(target); nothing to summon"); exit(2)
 }
 
+// `exit()` does NOT unwind `defer`, so the restore is explicit on every path.
 let restore = CGEvent(source: nil)?.location
-defer { if let restore { CGWarpMouseCursorPosition(restore) } }
+func finish(_ code: Int32, _ message: String) -> Never {
+    if let restore { CGWarpMouseCursorPosition(restore) }
+    print(message)
+    exit(code)
+}
 
 let f = NSScreen.screens[target].frame
 // Bottom-centre of the target, one row inside it.
@@ -219,8 +230,7 @@ func settled(_ seconds: Double) -> Int? {
 // Stage 1 — a single warp. The cheapest thing that could possibly work.
 CGWarpMouseCursorPosition(edge)
 if let h = settled(2.0), h == target {
-    print("RESULT: stage 1 (single warp) SUMMONED the Dock to \(target) — zero-permission path viable")
-    exit(0)
+    finish(0, "RESULT: stage 1 (single warp) SUMMONED the Dock to \(target) — zero-permission path viable")
 }
 
 // Stage 2 — repeated warps along the edge. Still no synthetic events; this
@@ -230,13 +240,13 @@ for i in 0..<40 {
     RunLoop.current.run(until: Date().addingTimeInterval(0.02))
 }
 if let h = settled(2.0), h == target {
-    print("RESULT: stage 2 (repeated warps) SUMMONED the Dock to \(target) — zero-permission path viable")
-    exit(0)
+    finish(0, "RESULT: stage 2 (repeated warps) SUMMONED the Dock to \(target) — zero-permission path viable")
 }
 
-print("RESULT: warp-only did NOT summon (host still \(dockHostIndex().map(String.init) ?? "none")).")
-print("        Next: synthesized-event variant (CGEventPost) — needs an Accessibility grant.")
-exit(1)
+finish(1, """
+        RESULT: warp-only did NOT summon (host still \(dockHostIndex().map(String.init) ?? "none")).
+                Next: synthesized-event variant (CGEventPost) — needs an Accessibility grant.
+        """)
 ```
 
 **Run recipe** (from a two-display side-by-side rig, Dock at bottom, separate
