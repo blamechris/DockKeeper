@@ -150,13 +150,33 @@ import CoreGraphics
 struct ScreenRow {
     let index: Int, name: String
     let frame: CGRect, bottomInset: CGFloat
+    let bottomEdgeFree: Bool
     var hostsDock: Bool { bottomInset > 4 }   // ~78pt observed on the host, 0 elsewhere
 }
 
+/// A display's bottom edge is *blocked* when another display sits flush
+/// beneath it with overlapping x — the pointer then crosses into that display
+/// instead of dwelling, and the summon cannot fire. Confirmed 2026-07-23 on the
+/// stacked portrait rig: not even a real hand could summon there. This is the
+/// pure-geometry precondition G1 has to check before it promises anything.
+/// Identified by index, not by frame: mirrored displays share a frame, and an
+/// identity test that cannot tell them apart is the wrong primitive for a
+/// check the feature will rely on.
+func bottomEdgeFree(_ i: Int, among all: [CGRect]) -> Bool {
+    let f = all[i]
+    return !all.indices.contains { j in
+        j != i
+            && abs(all[j].maxY - f.minY) < 1          // flush beneath
+            && min(all[j].maxX, f.maxX) - max(all[j].minX, f.minX) > 0   // x overlap
+    }
+}
+
 func rows() -> [ScreenRow] {
-    NSScreen.screens.enumerated().map { i, s in
+    let frames = NSScreen.screens.map(\.frame)
+    return NSScreen.screens.enumerated().map { i, s in
         ScreenRow(index: i, name: s.localizedName, frame: s.frame,
-                  bottomInset: s.visibleFrame.minY - s.frame.minY)
+                  bottomInset: s.visibleFrame.minY - s.frame.minY,
+                  bottomEdgeFree: bottomEdgeFree(i, among: frames))
     }
 }
 func dockHostIndex() -> Int? { rows().first(where: { $0.hostsDock })?.index }
@@ -193,8 +213,13 @@ guard CommandLine.arguments.count == 2, let target = Int(CommandLine.arguments[1
     print("usage: ssprobe <target-screen-index>")
     for r in rows() {
         print("  [\(r.index)] \(r.name)  frame=\(r.frame)  bottomInset=\(r.bottomInset)"
+            + (r.bottomEdgeFree ? "  bottom-edge:FREE" : "  bottom-edge:BLOCKED")
             + (r.hostsDock ? "  <- Dock host" : ""))
     }
+    print(rows().allSatisfy(\.bottomEdgeFree)
+        ? "TOPOLOGY: qualifies — every display has a free bottom edge."
+        : "TOPOLOGY: at least one display's bottom edge is blocked; a summon cannot "
+          + "fire there. Rearrange side-by-side before drawing any conclusion.")
     exit(2)
 }
 
@@ -203,6 +228,13 @@ print("Dock host before: \(before.map(String.init) ?? "none detected")")
 print("CoreDockGetRect:  \(coreDockRect().map(String.init(describing:)) ?? "unavailable")")
 guard before != target else {
     print("REFUSE: the Dock is already on screen \(target); nothing to summon"); exit(2)
+}
+// Without this the probe can only produce an uninterpretable negative — which
+// is exactly what the two 2026-07-23 sessions produced.
+guard rows()[target].bottomEdgeFree else {
+    print("REFUSE: screen \(target)'s bottom edge is blocked by a display flush "
+        + "beneath it. No summon can fire there, so a negative would say nothing "
+        + "about the mechanism. Rearrange side-by-side and re-run."); exit(2)
 }
 
 // `exit()` does NOT unwind `defer`, so the restore is explicit on every path.
@@ -248,6 +280,23 @@ finish(1, """
                 Next: synthesized-event variant (CGEventPost) — needs an Accessibility grant.
         """)
 ```
+
+**Geometry check confirmed against hardware (2026-08-27).** Run on the dev rig
+with a DELL G3223Q attached, the detector classified the arrangement
+unprompted:
+
+```
+[0] Built-in Retina Display  frame=(0.0, 0.0, 1728.0, 1117.0)      bottomInset=78.0  bottom-edge:FREE     <- Dock host
+[1] DELL G3223Q              frame=(-919.0, 1117.0, 3840.0, 2160.0) bottomInset=0.0   bottom-edge:BLOCKED
+TOPOLOGY: at least one display's bottom edge is blocked; a summon cannot fire there.
+```
+
+The Dell's `minY` (1117) is exactly the laptop's height, i.e. flush above —
+the same blocking geometry as the July S2719DGF rig, on a different monitor.
+CONFIRMED: the pure-geometry test identifies the blocked case on real
+hardware, and the probe refuses rather than producing the uninterpretable
+negative both 2026-07-23 sessions produced. The detector is therefore usable
+as G1's precondition check, not just as probe scaffolding.
 
 **Run recipe** (from a two-display side-by-side rig, Dock at bottom, separate
 Spaces ON, Dock **not** auto-hidden — auto-hide zeroes the inset and breaks
