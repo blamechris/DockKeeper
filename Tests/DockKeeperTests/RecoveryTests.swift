@@ -407,6 +407,21 @@ struct RecoveryCoordinatorTests {
         #expect(harness.appliedPins.isEmpty)
     }
 
+    @Test("A pin decision computed on a not-ready topology is not published (#44)")
+    func terminalPinOutcomeSuppressedWhenDisplaysNotReady() {
+        // Mid-wake the display list is momentarily empty, so `decide` collapses
+        // to `.noPreference`. Publishing that would clear a live explanation and
+        // restore it a pass later — a blinking menu note, and a reset of the
+        // transition de-duplication in AppState.
+        var notReady = aligned
+        notReady.displaysReady = false
+        notReady.pinDecision = .terminal(.noPreference)
+        let harness = Harness(inputs: [notReady])
+        harness.coordinator.enable()
+        harness.runAllScheduled()
+        #expect(harness.pinOutcomes.isEmpty)
+    }
+
     @Test("Disable strands in-flight passes; no residual corrections (DK-FR-004 S1)")
     func disableStrandsPasses() {
         let harness = Harness(inputs: [drifting])
