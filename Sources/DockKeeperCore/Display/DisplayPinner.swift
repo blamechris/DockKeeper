@@ -33,6 +33,7 @@ public enum PinOutcome: Sendable, Equatable {
     case displayNotConnected        // Preferred display isn't currently attached.
     case ambiguousIdentity          // Two candidates are indistinguishable — never guess (TDD §7.2).
     case unsupportedSeparateSpaces  // "Displays have separate Spaces" is on (Decision 2A).
+    case bottomDockFollowsPointer   // Bottom Dock roams by pointer; no preference set (ADR-009).
     case noPreference               // No preferred display configured.
     case failed(Int32)              // CoreGraphics reconfigure error (CGError raw value).
 
@@ -48,6 +49,12 @@ public enum PinOutcome: Sendable, Equatable {
         case .ambiguousIdentity:
             return "Two connected displays look identical, so DockKeeper won't "
                 + "guess. Please pick your preferred display again."
+        case .bottomDockFollowsPointer:
+            return "With \u{201C}Displays have separate Spaces\u{201D} on, macOS hands a "
+                + "bottom Dock to whichever display your pointer summons it to. To keep it "
+                + "on one display, lock to the left or right edge and choose a preferred "
+                + "display \u{2014} or turn the setting off (System Settings \u{203A} "
+                + "Desktop & Dock). Edge locking is unaffected."
         case .unsupportedSeparateSpaces:
             return "A bottom Dock can't be pinned while \u{201C}Displays have separate "
                 + "Spaces\u{201D} is on. Move the Dock to the left or right edge to pin "
@@ -124,7 +131,8 @@ public struct MainDisplayPinner: DisplayPinner {
 
     /// Placement decision for an already-resolved preference. Outcome
     /// precedence: no preference → single display → identity outcomes →
-    /// separate-Spaces gate → already-on-target.
+    /// separate-Spaces gate → already-on-target. The no-preference arm carries
+    /// one advisory exception, described where it is returned.
     ///
     /// Separate-Spaces gate (ADR-009, hardware-confirmed 2026-07-23): with the
     /// setting ON, a **bottom** Dock is per-display/pointer-summoned and does
@@ -137,7 +145,18 @@ public struct MainDisplayPinner: DisplayPinner {
         resolution: PreferredDisplayResolution,
         dockEdge: DockOrientation
     ) -> Decision {
-        if case .none = resolution { return .terminal(.noPreference) }
+        if case .none = resolution {
+            // A bottom Dock in separate-Spaces mode is pointer-summoned, so it
+            // roams between displays whether or not a preference is stored. The
+            // user who has not stored one is exactly the user who has never been
+            // told that — they never reach the `.resolved` gate below, so
+            // before #44 they got silence and read it as "the app does nothing".
+            // Guarded on multi-display because with one screen nothing roams.
+            if snapshot.displays.count > 1, snapshot.separateSpacesEnabled, dockEdge == .bottom {
+                return .terminal(.bottomDockFollowsPointer)
+            }
+            return .terminal(.noPreference)
+        }
         guard snapshot.displays.count > 1 else { return .terminal(.singleDisplay) }
         switch resolution {
         case .none:

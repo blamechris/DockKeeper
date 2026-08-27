@@ -74,6 +74,9 @@ final class AppState: ObservableObject {
 
     /// Last pin result, surfaced to the UI (e.g. "separate Spaces is on").
     @Published private(set) var lastPinMessage: String?
+    /// Previous pin outcome, so the diagnostics log records transitions
+    /// rather than one line per reconcile pass (#44).
+    private var lastPinOutcome: PinOutcome?
 
     /// Recovery-state note (degraded / preferred display missing / error);
     /// `nil` when everything is healthy.
@@ -229,10 +232,18 @@ final class AppState: ObservableObject {
             }
         }
         coordinator.onPinOutcome = { [weak self] outcome in
-            if outcome != .noPreference, outcome != .alreadyOnTarget {
+            guard let self else { return }
+            // Terminal outcomes re-fire on every reconcile pass, so note
+            // transitions, not repetitions — a constant line appended per pass
+            // rotates real history out of a bounded log. `.pinned` is exempt:
+            // it is the one outcome that mutated the display arrangement, and
+            // each occurrence is a distinct event worth its own line.
+            let isRepeat = outcome == self.lastPinOutcome && outcome != .pinned
+            if !isRepeat, outcome != .noPreference, outcome != .alreadyOnTarget {
                 FileDiagnostics.shared.note("pin", String(describing: outcome))
             }
-            self?.lastPinMessage = outcome.userMessage
+            self.lastPinOutcome = outcome
+            self.lastPinMessage = outcome.userMessage
         }
 
         // Property observers don't fire from within init, so start explicitly.

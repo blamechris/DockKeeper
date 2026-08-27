@@ -31,6 +31,19 @@ enum Diagnostics {
         }
 
         let separateSpaces = MainDisplayPinner.readSeparateSpacesEnabled()
+        // ADR-009: with the setting ON macOS treats edges asymmetrically — a
+        // bottom Dock is pointer-summoned and cannot be pinned, a left/right
+        // Dock homes to the main display and pins normally. Report the verdict
+        // for *this* machine's lock edge rather than a blanket claim (#45).
+        let lockEdge = Settings.shared.lockEdge
+        let pinningVerdict: String
+        if separateSpaces {
+            pinningVerdict = lockEdge == .bottom
+                ? "on \u{2014} bottom Dock does not pin (left/right would; ADR-009)"
+                : "on \u{2014} \(lockEdge.displayName.lowercased()) Dock pins (ADR-009)"
+        } else {
+            pinningVerdict = "off \u{2014} any edge pins"
+        }
 
         return """
         DockKeeper diagnostics
@@ -44,7 +57,7 @@ enum Diagnostics {
         CoreDock API:    \(CoreDock.isAvailable ? "available" : "unavailable")
         Dock edge:       \(DockController().currentOrientation()?.displayName ?? "unknown")
         Displays:        \(DisplayManager.activeDisplays().count)
-        Separate Spaces: \(separateSpaces ? "on (pinning unsupported)" : "off (pinning supported)")
+        Separate Spaces: \(pinningVerdict)
         Paused:          \(pauseStatus())
         Screen-share:    \(screenShareHideStatus())
         """
