@@ -79,7 +79,11 @@ struct MenuBarContent: View {
         if let message = state.statusMessage ?? state.screenShareRepairMessage
             ?? state.lastPinMessage ?? state.loginItemMessage {
             Divider()
-            Text(message)
+            // One Text per line: a menu item is single-line and middle-truncates,
+            // which ate the actionable half of the separate-Spaces copy (#57).
+            ForEach(message.split(separator: "\n").map(String.init), id: \.self) { line in
+                Text(line)
+            }
             if state.loginItemMessage != nil {
                 Button("Open Login Items…") { state.openLoginItemsSettings() }
             }

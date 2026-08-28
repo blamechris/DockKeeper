@@ -120,6 +120,27 @@ struct DisplayPinnerTests {
         #expect(MainDisplayPinner.decide(snapshot: snap, resolution: .resolved(2, repaired: nil), dockEdge: .bottom) == .terminal(.unsupportedSeparateSpaces))
     }
 
+    @Test("Menu copy fits a single-line menu item, and keeps both remedies (#57)")
+    func messagesFitMenuItems() {
+        // A macOS menu item renders one line and middle-truncates the rest, so
+        // an over-long line silently loses its middle — which is how the
+        // left/right-edge remedy disappeared from the shipped build.
+        for outcome: PinOutcome in [.unsupportedSeparateSpaces, .bottomDockFollowsPointer,
+                                    .ambiguousIdentity, .displayNotConnected, .singleDisplay] {
+            for line in outcome.userMessageLines {
+                #expect(line.count <= 110, "too long to render: \(line)")
+            }
+        }
+        // The cheap remedy must survive in both separate-Spaces messages: it is
+        // the one that works today without a logout.
+        for outcome: PinOutcome in [.unsupportedSeparateSpaces, .bottomDockFollowsPointer] {
+            let lines = outcome.userMessageLines
+            #expect(lines.count > 1, "must be split across lines")
+            #expect(lines.contains { $0.contains("Left or Right") },
+                    "the left/right remedy must be present: \(lines)")
+        }
+    }
+
     @Test("Single display cannot be pinned, whatever the resolution says")
     func singleDisplay() {
         let snap = snapshot([display("A", id: 1)], main: 1, separateSpaces: false)
