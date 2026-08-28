@@ -584,6 +584,69 @@ mechanism at any permission level, was **premature**: it was true of the
 *summon* family, and this is a different family entirely. A setter that takes a
 rect is exactly the shape the feature needs, and it needs no Accessibility.
 
+## `SLSSetDockRectWithOrientation` characterized — 2026-08-27 — **records, does not relocate**
+
+**Signatures, from disassembly rather than guesswork.** The framework exists
+only in the dyld shared cache, so `otool` cannot read it; dumping the bytes at
+the `dlsym` address into a Mach-O wrapper makes it disassemblable:
+
+```sh
+# bytes at the resolved address -> .byte directives -> assemble -> disassemble
+clang -c -arch arm64 sym.s -o sym.o && "$(xcrun -f llvm-objdump)" -d --triple=arm64 sym.o
+```
+
+The setter's prologue settles the argument count that two rounds of guessing
+could not:
+
+```
+mov  x19, x2            ; saves a THIRD integer argument
+mov  x20, x1            ; saves a SECOND integer argument
+mov  v8..v11, v0..v3    ; saves FOUR doubles — the CGRect, passed by value
+bl   <...>              ; call consuming x0
+fcvt s0..s3, d11..d8    ; rect doubles -> floats for the inner API
+mov  x1, x20 / x2, x19  ; both integers passed on
+```
+
+```c
+int SLSSetDockRectWithOrientation(int cid, CGRect rect, int a, int b);
+int SLSGetDockRectWithOrientation(int cid, CGRect *rect, int *a, int *b);
+```
+
+**CONFIRMED** by identity write: writing back exactly what the getter returned
+is a true no-op (`rc=0`, rect and both integers unchanged). The two earlier
+failures are explained — the pointer variant mismatched the HFA convention and
+corrupted the rect; the 3-argument by-value variant left `x2` holding garbage.
+
+The getter's out-parameters are *not* `(rect, orientation)`: with all four
+arguments supplied it returns `a=5`, `b=2`, and `2` is
+`DockOrientation.bottom`. So `b` is the orientation and `a` is something else —
+UNKNOWN, plausibly the "reason" of the sibling `SLSSetDockRectWithReason`.
+
+**The G1 test — NEGATIVE, and instructively so.** Setting a rect positioned on
+the non-main display:
+
+| Step | Result |
+|---|---|
+| `set(cid, (463.5, -78, 1075, 78), …)` targeting the Dell | `rc=0` — **accepted** |
+| Read back | **exactly the target rect** — the value persists |
+| Dock's actual window (sensor C) | **unchanged**, still `(0,0,1728,1117)` on the laptop |
+| Restore | clean; original rect returned, no `killall` needed |
+
+**So this API records where the Dock *is*, and does not command where it
+goes.** The read-back proving the value persisted while the window never moved
+is the whole finding: it is almost certainly the call the **Dock itself** makes
+to tell the window server its geometry — a reporting channel, not a control
+one. Writing to it desynchronizes the server's belief from reality rather than
+moving anything.
+
+That also retires the hope raised when the symbol was first found: a setter
+whose name contains "SetDockRect" is not, on this evidence, a way to place the
+Dock on a display.
+
+**Still untried:** `SLSSetDockRectWithReason` (the `a` parameter may be exactly
+the "reason" that distinguishes a report from a command) and
+`SLSSetDockCursorOverride`.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
@@ -608,13 +671,15 @@ rect is exactly the shape the feature needs, and it needs no Accessibility.
 - [x] ~~**Candidate 3 — SkyLight export enumeration**~~ — **done 2026-08-27,
       POSITIVE**: `SLSSetDockRectWithOrientation` exists. Getter signature
       confirmed; setter partially determined (rect by value).
-- [ ] **Determine the full `SLSSetDockRectWithOrientation` signature** — read
-      the prologue (`otool`/disassembly) rather than guessing further variants;
-      each wrong guess breaks the live Dock.
-- [ ] **Cross-display test** (needs the second monitor): set a Dock rect whose
-      origin lies on the non-main display, separate Spaces ON, edge bottom.
-      This is the actual G1 question.
-- [ ] Probe `SLSSetDockRectWithReason` and `SLSSetDockCursorOverride`.
+- [x] ~~**Determine the full signature**~~ — **done**, by disassembly:
+      `(int cid, CGRect rect, int a, int b)`, identity write confirmed a no-op.
+- [x] ~~**Cross-display test**~~ — **done, NEGATIVE**: the rect is accepted and
+      persists, but the Dock's window does not follow. The API reports the
+      Dock's geometry; it does not command it.
+- [ ] Probe `SLSSetDockRectWithReason` — the unknown `a` parameter may be the
+      "reason" that separates a report from a command. Last cheap lead.
+- [ ] Probe `SLSSetDockCursorOverride`.
+- [ ] Identify the unknown `a` out-parameter (observed `5`).
 - [ ] If it works: a new ADR is required — this is private-API use beyond
       ADR-003's `CoreDock` grant, and AGENTS.md rule 7 applies.
 - [ ] Re-examine what DockLock's Accessibility grant is actually *for*. The
