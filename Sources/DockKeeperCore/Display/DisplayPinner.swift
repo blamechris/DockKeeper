@@ -38,6 +38,18 @@ public enum PinOutcome: Sendable, Equatable {
     case failed(Int32)              // CoreGraphics reconfigure error (CGError raw value).
 
     /// Short, user-facing explanation for the menu / preferences.
+    ///
+    /// Newlines are **load-bearing**: a macOS menu item renders one line and
+    /// middle-truncates the rest, so a long sentence silently loses its middle.
+    /// The separate-Spaces copy lost exactly the cheaper of its two remedies
+    /// that way — users saw "…is on....turn the setting off", never learning
+    /// that a left/right edge works today (#57). `MenuBarContent` renders one
+    /// `Text` per line; consumers that want a flat string use `userMessage`,
+    /// which joins them with spaces.
+    public var userMessageLines: [String] {
+        (userMessage ?? "").split(separator: "\n").map(String.init)
+    }
+
     public var userMessage: String? {
         switch self {
         case .pinned, .alreadyOnTarget, .noPreference:
@@ -50,16 +62,17 @@ public enum PinOutcome: Sendable, Equatable {
             return "Two connected displays look identical, so DockKeeper won't "
                 + "guess. Please pick your preferred display again."
         case .bottomDockFollowsPointer:
-            return "With \u{201C}Displays have separate Spaces\u{201D} on, macOS hands a "
-                + "bottom Dock to whichever display your pointer summons it to. To keep it "
-                + "on one display, lock to the left or right edge and choose a preferred "
-                + "display \u{2014} or turn the setting off (System Settings \u{203A} "
-                + "Desktop & Dock). Edge locking is unaffected."
+            return "macOS gives a bottom Dock to whichever display you summon it on.\n"
+                + "To keep it on one display: use a Left or Right edge, and pick a "
+                + "preferred display.\n"
+                + "Or turn off \u{201C}Displays have separate Spaces\u{201D} in System "
+                + "Settings \u{203A} Desktop & Dock."
         case .unsupportedSeparateSpaces:
-            return "A bottom Dock can't be pinned while \u{201C}Displays have separate "
-                + "Spaces\u{201D} is on. Move the Dock to the left or right edge to pin "
-                + "in this mode, or turn the setting off (System Settings \u{203A} "
-                + "Desktop & Dock). Edge locking still works."
+            return "A bottom Dock can\u{2019}t be pinned while \u{201C}Displays have "
+                + "separate Spaces\u{201D} is on.\n"
+                + "To pin in this mode: use a Left or Right edge.\n"
+                + "Or turn that setting off in System Settings \u{203A} Desktop & Dock. "
+                + "Edge locking still works."
         case .failed:
             return "Couldn't move the Dock to your preferred display."
         }
