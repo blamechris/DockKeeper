@@ -521,6 +521,69 @@ export enumeration) is the only untried lead left.
 would put DockKeeper "at parity with DockLock, Accessibility-gated" — was
 premature. There is no working mechanism to ship at any permission level.
 
+## Candidate 3 — SkyLight export enumeration — **A SETTER EXISTS** (2026-08-27)
+
+**This reopens G1.** The 2026-07-23 sweep concluded "there is no obvious
+'set Dock display' call" — but it *guessed* symbol names
+(`CoreDockSetDisplayID`, `CGSSetDockDisplay`, …) and tested whether those
+resolved. Nobody enumerated SkyLight's actual export table. Doing so takes one
+command:
+
+```sh
+dyld_info -exports /System/Library/PrivateFrameworks/SkyLight.framework/SkyLight \
+  | awk '{print $2}' | grep -i dock
+```
+
+Five symbols, all resolving at runtime via `RTLD_DEFAULT`:
+
+| Symbol | Note |
+|---|---|
+| `SLSGetDockRectWithOrientation` | signature **CONFIRMED**, below |
+| **`SLSSetDockRectWithOrientation`** | **a setter taking a rect** — a rect encodes a position, hence a display |
+| `SLSGetDockRectWithReason` | untested |
+| `SLSSetDockRectWithReason` | untested |
+| `SLSSetDockCursorOverride` | untested; the name is suggestive given the summon work above |
+
+**Getter signature CONFIRMED** by differential probe (one variant per process,
+crash-contained):
+
+```c
+int SLSGetDockRectWithOrientation(int cid, CGRect *outRect, int *outOrientation);
+```
+
+Returns `0` and `rect=(326, 1039, 1075, 78)` — byte-identical to
+`CoreDockGetRect` — with `orientation=2`, matching this repo's
+`DockOrientation.bottom = 2`. The wrong variant `(CGRect*, int*)` returns
+`0x10000003` and zeros, so the connection-ID first argument is confirmed.
+
+**Setter signature PARTIAL.** Two identity-write probes (write back exactly what
+the getter returned; a correct signature is a no-op):
+
+| Variant | Result |
+|---|---|
+| `(int cid, CGRect *rect, int orientation)` | ✗ **corrupted** the rect to `(326, 1075, 0, 0)` — zero-sized |
+| `(int cid, CGRect rect, int orientation)` | ~ **rect survived byte-identical**, but orientation came back `96` instead of `2` |
+
+So the rect is passed **by value**, and the trailing argument is *not* simply
+the orientation — there is a further parameter or a different encoding still to
+determine. The disciplined next step is reading the function prologue rather
+than continuing to guess variants.
+
+**Incident, recorded.** The pointer variant left the Dock with a zero-sized
+rect and `bottomInset` at 0 — the Dock was broken until `killall Dock` restored
+it fully (`rect` and `orientation` both back, `defaults read com.apple.dock
+orientation` → `bottom`). Recovery is reliable and cheap, but a wrong signature
+against a private setter *does* break the live Dock, so every future probe must
+self-heal rather than rely on the operator noticing. The by-value probe was
+written that way and recovered automatically.
+
+**What this does and does not mean.** It does **not** yet pin the Dock to a
+display — the cross-display test needs a second monitor (unplugged at time of
+writing). It does mean the conclusion recorded earlier today, that G1 has no
+mechanism at any permission level, was **premature**: it was true of the
+*summon* family, and this is a different family entirely. A setter that takes a
+rect is exactly the shape the feature needs, and it needs no Accessibility.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
@@ -542,9 +605,18 @@ premature. There is no working mechanism to ship at any permission level.
 - [x] ~~**`CGEventPost` rung**~~ — **done 2026-08-27, NEGATIVE** under a real
       Accessibility grant, across four source/tap combinations, with actuator
       control. AX direct-set also ruled out (all geometry read-only).
-- [ ] **Candidate 3 — SkyLight/HIServices export enumeration** (resolve-only):
-      the last untried lead. Dump export tables for dock-display symbols beyond
-      the guessed names rather than continuing to guess.
+- [x] ~~**Candidate 3 — SkyLight export enumeration**~~ — **done 2026-08-27,
+      POSITIVE**: `SLSSetDockRectWithOrientation` exists. Getter signature
+      confirmed; setter partially determined (rect by value).
+- [ ] **Determine the full `SLSSetDockRectWithOrientation` signature** — read
+      the prologue (`otool`/disassembly) rather than guessing further variants;
+      each wrong guess breaks the live Dock.
+- [ ] **Cross-display test** (needs the second monitor): set a Dock rect whose
+      origin lies on the non-main display, separate Spaces ON, edge bottom.
+      This is the actual G1 question.
+- [ ] Probe `SLSSetDockRectWithReason` and `SLSSetDockCursorOverride`.
+- [ ] If it works: a new ADR is required — this is private-API use beyond
+      ADR-003's `CoreDock` grant, and AGENTS.md rule 7 applies.
 - [ ] Re-examine what DockLock's Accessibility grant is actually *for*. The
       summon hypothesis is now doubtful; their permission may serve hotkeys or
       window inspection rather than Dock relocation.
