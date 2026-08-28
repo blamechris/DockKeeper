@@ -26,7 +26,15 @@ eventually be covered ([product-investigation §3](../product-investigation.md))
 
 ## Findings so far (2026-07-23, on the 2-display rig, separate Spaces ON)
 
-### (a) Detection — CONFIRMED with public API, zero permissions
+### (a) Detection — ⚠️ **RETRACTED 2026-08-27** (was: CONFIRMED with public API, zero permissions)
+
+> **This section's claim is narrower than it reads.** The `visibleFrame`
+> bottom-inset test is correct on a **cold read**, but it did not update once
+> within a long-lived process across a session in which the Dock migrated five
+> times. `CoreDockGetRect` behaves the same way. Since DockKeeper is a
+> long-running app, "correct at launch" is not the property the feature needs.
+> See **"Sensor validation"** below for the measurements and for the sensor
+> that does update live. The original text is kept for the record.
 
 `NSScreen.visibleFrame` excludes the menu bar *and* the Dock. Observed:
 
@@ -179,7 +187,23 @@ func rows() -> [ScreenRow] {
                   bottomEdgeFree: bottomEdgeFree(i, among: frames))
     }
 }
-func dockHostIndex() -> Int? { rows().first(where: { $0.hostsDock })?.index }
+/// Authoritative host detection — sensor C, the only one that tracks migration
+/// (see "Sensor validation"). `hostsDock` above is the *inset* test and is kept
+/// only to show, in the listing, that it disagrees.
+func dockHostIndex() -> Int? {
+    guard let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                             kCGNullWindowID) as? [[String: Any]] else { return nil }
+    guard let win = l.filter({ ($0[kCGWindowOwnerName as String] as? String) == "Dock" })
+        .compactMap({ $0[kCGWindowBounds as String] as? [String: CGFloat] })
+        .map({ CGRect(x: $0["X"] ?? 0, y: $0["Y"] ?? 0,
+                      width: $0["Width"] ?? 0, height: $0["Height"] ?? 0) })
+        .max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
+    var n: UInt32 = 0; CGGetActiveDisplayList(0, nil, &n)
+    var ids = [CGDirectDisplayID](repeating: 0, count: Int(n)); CGGetActiveDisplayList(n, &ids, &n)
+    for (i, id) in ids.enumerated()
+        where CGDisplayBounds(id).intersects(win) && CGDisplayBounds(id).width == win.width { return i }
+    return nil
+}
 
 /// Second, independent signal. Signature verified by careful call, 2026-07-23.
 func coreDockRect() -> CGRect? {
@@ -332,7 +356,76 @@ stage-1 failure and a reason stage 2 might differ).
   feature to require Accessibility, and it would put DockKeeper at parity
   with DockLock rather than ahead of it.
 
-## Warp-only result — 2026-08-27, side-by-side rig — **NEGATIVE**
+## Sensor validation — 2026-08-27 — **two of three detectors were blind**
+
+The G1 track spent a day producing negatives from instruments nobody had ever
+shown could register a positive. Correcting that came first, and it changed the
+foundation of the feature.
+
+**Method.** Side-by-side rig (built-in `#0` main at `(0,0)`, DELL G3223Q `#1`
+at `(1728,0)`), separate Spaces ON, Dock at bottom. The owner moved the Dock by
+hand, repeatedly, while three independent sensors and the cursor were logged at
+50 ms. Ground truth was the owner's own eyes — and, at the end, the Dock
+verifiably sitting on the Dell.
+
+| Sensor | API | Permission | Live update in-process? | Correct on a cold read? |
+|---|---|---|---|---|
+| **A** `CoreDockGetRect` | private (dyld cache) | none | ✗ byte-identical `(354, 1039, 1019, 78)` throughout | ✓ fresh read returned `(3138, 2082, 1019, 78)` — on the Dell |
+| **B** `NSScreen.visibleFrame` bottom inset | public | none | ✗ reported `#0` throughout | ✓ fresh read reported `#1` — on the Dell |
+| **C** `CGWindowListCopyWindowInfo`, `ownerName == "Dock"`, largest window's bounds | **public** | **none** | ✓ **tracks every migration** | ✓ |
+
+Extract — cursor reaches the Dell's bottom edge at 7.8 s, C migrates at 9.3 s,
+A and B never move:
+
+```
+   7.8s  cursor=#1@BOTTOM  A=(354,1039,1019,78)  B=#0  C=(0,0,1728,1117)
+   9.3s  cursor=#1@BOTTOM  A=(354,1039,1019,78)  B=#0  C=(1728,0,3840,2160)+(0,0,1728,1117)
+   9.5s  cursor=#1@BOTTOM  A=(354,1039,1019,78)  B=#0  C=(1728,0,3840,2160)
+  20.4s  cursor=#0@BOTTOM  A=(354,1039,1019,78)  B=#0  C=(1728,0,3840,2160)
+  21.3s  cursor=#0@BOTTOM  A=(354,1039,1019,78)  B=#0  C=(0,0,1728,1117)
+```
+
+**CONFIRMED findings.**
+
+1. **A and B go stale inside a running process.** Both were correct when the
+   process started and neither moved again, across five migrations. Both were
+   correct again when re-read from a *fresh* process. "Correct at launch" is
+   not the property a long-running menu-bar app needs, so neither is safe as
+   the G1 sensor as used here.
+2. **C tracks migration live** — public, permission-free, validated against
+   hand-driven migration and against independent ground truth (the owner's
+   eyes, and the Dock verifiably resting on the Dell at the end). It reported
+   `host: 1` when asked cold in that state.
+3. **Summon latency ≈ 1.5 s** from cursor-at-edge to migration, with both Dock
+   windows briefly present during the crossfade (9.3 s row). Any settle-and-poll
+   loop must allow for it; the original probe's 2 s window was marginal.
+4. **A real pointer summons reliably on this rig** — the mechanism exists here
+   and this hardware can host the experiment.
+
+**Deliberately still UNKNOWN — do not close this by assumption.** Whether A and
+B update live inside a *properly running* `NSApplication` (DockKeeper itself,
+with a real event loop) was **not** tested; these probes are bare CLIs whose
+`RunLoop.current.run` may simply never deliver
+`didChangeScreenParametersNotification`. The spike's own section (a) already
+flagged that the notification "INFERRED fires on Dock migration — verify next",
+and it is still unverified. So the honest statement is: **sensor C needs no
+notification and is therefore the safe choice**, not that A and B are
+unusable in principle.
+
+**Process failure worth naming.** The first warp result was published as
+CONFIRMED on the strength of a control proving the *cursor* landed where it was
+asked. That control was real but insufficient: it validated the actuator and
+never the sensor. A negative from an uncalibrated instrument is not evidence,
+and it was merged as though it were.
+
+A second, near-identical failure was caught before it shipped. The first draft
+of *this* section declared A and B simply "BLIND" — on evidence that only ever
+showed them stale *within a process*. A cold read of both, taken before
+committing, showed both correct. The retraction would itself have needed
+retracting. Same root cause both times: concluding from an instrument whose
+behavior had not been characterized.
+
+## Warp-only result — RE-RUN 2026-08-27 on sensor C — **NEGATIVE (now evidence)**
 
 **Rig.** Dev MacBook Pro built-in Retina (1728×1117) + **DELL G3223Q**
 (3840×2160, landscape), macOS 26.5 Apple Silicon, separate Spaces ON, Dock at
@@ -350,24 +443,32 @@ side-by-side (`arrange sidebyside`: built-in main at `(0,0)`, Dell at
 | **Control: does the warp actually land?** | ✓ **yes** — asked `(3648, 2159)`, cursor read back `(3648, 2159)` |
 | Corroborating host detector `CoreDockGetRect` | ✓ `(354, 1039, 1019, 78)` — on the laptop, agreeing with the `visibleFrame` inset test |
 
+**Re-run on sensor C (Dell → built-in, 6 s window, 5 consecutive runs): no
+summon, 5/5.** The conclusion is unchanged, but for the first time it rests on
+an instrument shown to register a positive. Sensor C reported `host: 1` before
+each attempt and after it, while the same sensor had just tracked five
+hand-driven migrations.
+
 **CONFIRMED: `CGWarpMouseCursorPosition` alone does not summon the Dock**, on a
 qualifying free-bottom-edge topology, with the warp independently verified to
-place the cursor exactly on the target display's bottom row. The control
+place the cursor exactly on the target display's bottom row **and the sensor
+independently verified to detect migration when it happens**. The control
 matters — without it this would be indistinguishable from a warp that never
 happened, which is the trap the first two sessions fell into for a different
 reason.
 
-**What this does NOT establish, and the gap is decisive.** Whether a *real*
-pointer can summon the Dock on **this rig** was never observed. The original
-report that motivated G1 came from a different machine (a work MBP,
-laptop-left/external-right). If a human hand cannot summon here either, then
-this rig cannot test the mechanism at all and the negative above says nothing
-about `CGEventPost` — it says only that this Mac does not do pointer-summon.
-That observation is a single mouse movement and it gates the next rung.
+**The gap that blocked this is now closed.** A real pointer *does* summon
+reliably on this rig (sensor-validation section above), so the hardware can host
+the experiment and the mechanism demonstrably exists here. The difference
+between a hand and a warp is therefore real, not an artifact of the rig.
 
-**Next rung is not yet justified.** `CGEventPost` needs an Accessibility grant
-(`AXIsProcessTrusted()` = false here). Spending a TCC grant is premature until
-the hand test says the mechanism exists on this hardware.
+**Next rung is now justified — and it costs a permission.** The remaining
+candidate is `CGEventPost`, which needs Accessibility (`AXIsProcessTrusted()`
+= false here; not granted, and not to be granted casually). If synthesized
+events summon where a warp does not, G1 becomes an **Accessibility-gated**
+feature — DockKeeper at parity with DockLock on this axis rather than ahead of
+it, exactly as their permission requirement always implied. That is a product
+decision for ADR-009, not a spike outcome.
 
 ## Next steps
 
@@ -383,12 +484,23 @@ the hand test says the mechanism exists on this hardware.
 - [x] ~~**Run `ssprobe` on that rig, 5× per stage.**~~ — **done 2026-08-27,
       NEGATIVE** (results above). Warp-only does not summon; warp landing
       verified by control.
-- [ ] **Hand test (blocking):** on the side-by-side rig, physically move the
-      mouse to the Dell's bottom edge. Does the Dock migrate? This decides
-      whether the rig can test the mechanism at all, and therefore whether the
-      `CGEventPost` rung is worth a TCC grant.
-- [ ] ~~Superseded phrasing kept for the record:~~ run both directions, 5× per
-      stage.
+- [x] ~~**Hand test (blocking)**~~ — **done 2026-08-27, POSITIVE.** A real
+      pointer summons reliably on this rig. It also exposed that two of three
+      sensors were blind; see "Sensor validation".
+- [x] ~~Re-run warp-only on a validated sensor~~ — done, **still NEGATIVE 5/5**.
+- [ ] **`CGEventPost` rung** — synthesized mouse-move events at the target's
+      bottom edge, measured on sensor C. Needs a deliberate Accessibility grant
+      on the dev machine. If it summons, G1 is viable but Accessibility-gated →
+      ADR-009 permission decision.
+- [ ] **Propagate the sensor correction**: any design note that assumes the
+      `visibleFrame` inset identifies the Dock's display *in a long-running
+      process* must move to sensor C, or prove the notification path.
+- [ ] **Verify the notification path** (the spike's oldest open question):
+      does `didChangeScreenParametersNotification` actually fire on Dock
+      migration inside a real `NSApplication`? If yes, B becomes viable and the
+      choice is a design preference; if no, C is mandatory.
+- [ ] Re-test `killall`-relocation on sensor C — it was falsified 2026-07-23
+      using a blind detector, so that falsification is not safe either.
       Decides whether the summon is zero-permission (warp) or Accessibility-
       gated (`CGEventPost`) — the single highest-value unknown in this spike,
       because it decides whether G1 beats DockLock or merely matches it.
