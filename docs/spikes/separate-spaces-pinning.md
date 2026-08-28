@@ -470,6 +470,57 @@ feature — DockKeeper at parity with DockLock on this axis rather than ahead of
 it, exactly as their permission requirement always implied. That is a product
 decision for ADR-009, not a spike outcome.
 
+## `CGEventPost` rung — 2026-08-27, Accessibility GRANTED — **NEGATIVE**
+
+Run from a purpose-built, ad-hoc-signed bundle (`dev.blamechris.dockkeeper.g1probe`)
+so the TCC grant attached to one throwaway binary rather than to a terminal.
+`AXIsProcessTrusted() == true` verified in-process for every run below. Rig and
+sensor as in the previous section; measurement on **sensor C** throughout.
+
+| Attempt | Result |
+|---|---|
+| `CGEventPost` mouseMoved, absolute position at the target's bottom-centre | ✗ no summon (repeated) |
+| Same, with an approach glide and sustained `mouseEventDeltaY` pressure while clamped at the edge | ✗ no summon, 3× each direction |
+| `hidSystemState` → `cgSessionEventTap` | ✗ |
+| `combinedSessionState` → `cghidEventTap` | ✗ |
+| `combinedSessionState` → `cgSessionEventTap` | ✗ |
+| `privateState` → `cghidEventTap` | ✗ |
+| **Control: do posted events move the cursor?** | ✓ **yes** — posted to `(3648, 2159)`, cursor read back `(3648, 2159)` |
+| Direct AX manipulation: `AXPosition` / `AXSize` / `AXFrame` / `AXOrientation` on the Dock's `AXList` | ✗ **all `settable == false`** |
+| Real hand, same rig, same position | ✓ summons reliably |
+
+**CONFIRMED: synthesized events do not summon the Dock**, with Accessibility
+granted, across four source/tap combinations, with and without motion deltas,
+and with the actuator independently verified to move the cursor to the target.
+The Dock's AX tree exposes geometry read-only, so there is no direct-set route
+either.
+
+**One anomalous positive, and why it is not evidence.** The first
+`CGEventPost` run reported a summon after 3.13 s. It never reproduced — every
+subsequent controlled attempt failed. Two candidate confounds were tested:
+rearranging the displays alone does **not** move the Dock (watched 10 s, no
+migration), which rules that out; the remaining and most likely explanation is
+that the owner was still moving the mouse by hand at that moment, and the probe
+attributed a hand-driven migration to its own events. A result that cannot be
+reproduced under control is not a result.
+
+**Consequence for G1.** Candidate 1 (pointer re-summon) is now **falsified for
+every mechanism reachable from a normal app**, permission or no permission:
+warp ✗, synthesized events ✗ (4 tap/source combos), AX direct-set ✗
+(read-only), `killall` relocation ✗ (2026-07-23, though recorded on a stale
+detector and still worth re-running). A real hand works, so macOS is
+distinguishing genuine HID input from anything a userspace app can post.
+
+This does **not** prove DockLock's mechanism is impossible — it proves it is not
+any of the above. What Accessibility buys them therefore remains **UNKNOWN**,
+and the working hypothesis that they summon via synthesized events is now
+**doubtful** rather than "almost certainly". Candidate 3 (SkyLight/HIServices
+export enumeration) is the only untried lead left.
+
+**Corrected expectation.** Earlier framing in this spike — that a positive here
+would put DockKeeper "at parity with DockLock, Accessibility-gated" — was
+premature. There is no working mechanism to ship at any permission level.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
@@ -488,10 +539,15 @@ decision for ADR-009, not a spike outcome.
       pointer summons reliably on this rig. It also exposed that two of three
       sensors were blind; see "Sensor validation".
 - [x] ~~Re-run warp-only on a validated sensor~~ — done, **still NEGATIVE 5/5**.
-- [ ] **`CGEventPost` rung** — synthesized mouse-move events at the target's
-      bottom edge, measured on sensor C. Needs a deliberate Accessibility grant
-      on the dev machine. If it summons, G1 is viable but Accessibility-gated →
-      ADR-009 permission decision.
+- [x] ~~**`CGEventPost` rung**~~ — **done 2026-08-27, NEGATIVE** under a real
+      Accessibility grant, across four source/tap combinations, with actuator
+      control. AX direct-set also ruled out (all geometry read-only).
+- [ ] **Candidate 3 — SkyLight/HIServices export enumeration** (resolve-only):
+      the last untried lead. Dump export tables for dock-display symbols beyond
+      the guessed names rather than continuing to guess.
+- [ ] Re-examine what DockLock's Accessibility grant is actually *for*. The
+      summon hypothesis is now doubtful; their permission may serve hotkeys or
+      window inspection rather than Dock relocation.
 - [ ] **Propagate the sensor correction**: any design note that assumes the
       `visibleFrame` inset identifies the Dock's display *in a long-running
       process* must move to sensor C, or prove the notification path.
