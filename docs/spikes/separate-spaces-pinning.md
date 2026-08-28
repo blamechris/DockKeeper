@@ -647,6 +647,48 @@ Dock on a display.
 the "reason" that distinguishes a report from a command) and
 `SLSSetDockCursorOverride`.
 
+## G1 CLOSED — not viable — 2026-08-27
+
+`SLSSetDockRectWithReason(int cid, CGRect rect, int reason)` (signature from the
+prologue: saves `x1` only, plus `v0`–`v3`) was swept across `reason` 0–8 with a
+rect on the non-main display. Every call returned `0`; the Dock's window never
+moved. `SLSSetDockCursorOverride(int cid, int)` takes **no geometry at all**, so
+by construction it cannot place the Dock on a display. State restored cleanly
+without a `killall`.
+
+**Every candidate family is now falsified on this hardware, with evidence:**
+
+| Family | Verdict | Evidence |
+|---|---|---|
+| Pointer summon — `CGWarpMouseCursorPosition` | ✗ | 5/5 negative on a validated sensor, warp landing verified |
+| Pointer summon — `CGEventPost` | ✗ | negative under a real Accessibility grant, 4 source/tap combinations, ± motion deltas, actuator verified |
+| Accessibility direct manipulation | ✗ | Dock's `AXList` exposes `AXPosition`/`AXSize`/`AXFrame`/`AXOrientation` **read-only** |
+| `killall` relocation | ✗ | 2026-07-23 (on a stale detector — but the rect-setter result below makes a re-run pointless) |
+| SkyLight `SLSSetDockRectWithOrientation` | ✗ | rect **accepted and persisted**, Dock window never followed |
+| SkyLight `SLSSetDockRectWithReason` | ✗ | reasons 0–8, all `rc=0`, no movement |
+| `SLSSetDockCursorOverride` | n/a | no geometry parameter |
+| **Real human pointer** | ✓ | summons reliably, same rig, same pixel |
+
+**The shape of the answer.** A real hand works and nothing a userspace process
+can do reproduces it. The rect-setter result is the most informative: the window
+server accepts and stores a Dock rect on another display while the Dock keeps
+drawing where it was. Placement is the **Dock process's** decision, and these
+APIs describe it rather than direct it. Nothing reachable from outside that
+process moved it.
+
+**What this does not claim.** Not that it is impossible — only that it is not
+reachable by any mechanism this spike could find, and that the long-standing
+"DockLock almost certainly synthesizes a pointer summon" hypothesis is
+**unsupported**: synthesized events were tried directly, with the permission
+they require, and did not work. What their Accessibility grant buys remains
+UNKNOWN.
+
+**Recommendation: stop.** Reopen only on new evidence — a disassembly of the
+Dock's own placement logic, or a concrete demonstration on current macOS. The
+honest user-facing position is that separate-Spaces bottom-Dock pinning is not
+supported, with the two real remedies (left/right edge, or turn the setting
+off) stated plainly.
+
 ## Next steps
 
 - [x] ~~Interactive: owner summons the Dock to the Dell (bottom edge)~~ —
@@ -676,10 +718,10 @@ the "reason" that distinguishes a report from a command) and
 - [x] ~~**Cross-display test**~~ — **done, NEGATIVE**: the rect is accepted and
       persists, but the Dock's window does not follow. The API reports the
       Dock's geometry; it does not command it.
-- [ ] Probe `SLSSetDockRectWithReason` — the unknown `a` parameter may be the
-      "reason" that separates a report from a command. Last cheap lead.
-- [ ] Probe `SLSSetDockCursorOverride`.
-- [ ] Identify the unknown `a` out-parameter (observed `5`).
+- [x] ~~Probe `SLSSetDockRectWithReason`~~ — **done, NEGATIVE** (reasons 0–8).
+- [x] ~~Probe `SLSSetDockCursorOverride`~~ — **n/a**, takes no geometry.
+- [ ] *(Only on new evidence)* identify the unknown `a` out-parameter
+      (observed `5`), and disassemble the Dock's own placement logic.
 - [ ] If it works: a new ADR is required — this is private-API use beyond
       ADR-003's `CoreDock` grant, and AGENTS.md rule 7 applies.
 - [ ] Re-examine what DockLock's Accessibility grant is actually *for*. The

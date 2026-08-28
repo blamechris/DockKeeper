@@ -82,6 +82,15 @@ restarts.
 > menu bar and left/right Docks pin cleanly — a bottom Dock can't be pinned in
 > that mode, and DockKeeper says so instead of fighting the OS.
 >
+> **Bottom-Dock pinning with separate Spaces on is not possible**, and this is
+> now a settled result rather than a pending feature. Every mechanism was tested
+> on real hardware — pointer summon (with and without Accessibility), direct
+> Accessibility manipulation, and the private window-server Dock APIs — and none
+> relocates the Dock, while a real hand does it every time. Placement is the
+> Dock's own decision and nothing outside that process overrides it. Use a
+> left/right edge, or turn the setting off. The evidence is in
+> [the spike](docs/spikes/separate-spaces-pinning.md).
+>
 > **This change is permanent, and turning DockKeeper off does not undo it.**
 > Pinning writes the display arrangement the same way System Settings does, so
 > your chosen display stays the main one after you disable or uninstall
@@ -93,7 +102,6 @@ restarts.
 
 ### Planned
 
-- Bottom-Dock pinning in separate-Spaces mode (mechanism research ongoing)
 - Follow mouse / active window / active app
 - Raycast extension; Shortcuts app discovery (the intents exist; the metadata packaging lands in v1.1 — the URL scheme works today)
 
