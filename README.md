@@ -82,13 +82,12 @@ restarts.
 > menu bar and left/right Docks pin cleanly — a bottom Dock can't be pinned in
 > that mode, and DockKeeper says so instead of fighting the OS.
 >
-> **Bottom-Dock pinning with separate Spaces on is not possible**, and this is
-> now a settled result rather than a pending feature. Every mechanism was tested
-> on real hardware — pointer summon (with and without Accessibility), direct
-> Accessibility manipulation, and the private window-server Dock APIs — and none
-> relocates the Dock, while a real hand does it every time. Placement is the
-> Dock's own decision and nothing outside that process overrides it. Use a
-> left/right edge, or turn the setting off. The evidence is in
+> **A bottom Dock cannot be *moved back* once macOS hands it to another
+> display** — that is settled, and every relocation mechanism was tested on real
+> hardware. But it can be **prevented from leaving**, by guarding the pointer
+> gesture that triggers the hop; that mechanism is confirmed and is being
+> designed now (opt-in, needs Accessibility, bottom edge only). Until it ships,
+> use a left/right edge or turn the setting off. Evidence in
 > [the spike](docs/spikes/separate-spaces-pinning.md).
 >
 > **This change is permanent, and turning DockKeeper off does not undo it.**
@@ -102,6 +101,7 @@ restarts.
 
 ### Planned
 
+- Bottom-Dock pinning in separate-Spaces mode, by guarding the summon gesture (opt-in, Accessibility, bottom edge only, free-bottom-edge layouts only)
 - Follow mouse / active window / active app
 - Raycast extension; Shortcuts app discovery (the intents exist; the metadata packaging lands in v1.1 — the URL scheme works today)
 
