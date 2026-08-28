@@ -647,7 +647,13 @@ Dock on a display.
 the "reason" that distinguishes a report from a command) and
 `SLSSetDockCursorOverride`.
 
-## G1 CLOSED — not viable — 2026-08-27
+## G1 CLOSED — not viable — 2026-08-27 — ⚠️ **SUPERSEDED same day, see "G1 REOPENED" below**
+
+> This section's scope was wrong. What it establishes is real and stands: **no
+> userspace mechanism can move the Dock back once it has moved.** What it
+> wrongly concluded is that the *feature* is therefore impossible — which only
+> follows if the feature must work by relocation. It does not; see below.
+
 
 `SLSSetDockRectWithReason(int cid, CGRect rect, int reason)` (signature from the
 prologue: saves `x1` only, plus `v0`–`v3`) was swept across `reason` 0–8 with a
@@ -688,6 +694,66 @@ Dock's own placement logic, or a concrete demonstration on current macOS. The
 honest user-facing position is that separate-Spaces bottom-Dock pinning is not
 supported, with the two real remedies (left/right edge, or turn the setting
 off) stated plainly.
+
+## G1 REOPENED — prevention, not relocation — 2026-08-27
+
+**The whole spike asked the wrong question.** Every candidate above tries to
+*cause* a summon or *undo* one. But "lock" does not mean relocate-after-the-fact;
+it means **prevent**. Prevention is a different mechanism — a `CGEventTap` — and
+it is what Accessibility is actually for.
+
+Owner challenge that surfaced this: DockLock Lite ships this feature to real
+users, so "not viable" could not be right. It was not.
+
+**Every DockLock constraint fits prevention, and none of them fit summoning:**
+
+| Their constraint | Under "block the summon" |
+|---|---|
+| Requires **Accessibility** | `CGEventTapCreate` needs it. Event *synthesis* was never the point |
+| **Bottom Dock only** | Only a bottom Dock is pointer-summoned; left/right cannot be, so there is nothing to guard |
+| Requires **≥2 displays** | Nothing to block with one |
+| Requires separate Spaces **ON** | The only mode where the summon exists |
+| Ships `warn_incompatible_display` | On stacked layouts the bottom edge is the **crossing boundary**; clamping it would trap the cursor. Genuinely incompatible |
+| Pref key `lock_position = 1` | *Hold in place* — not *restore* |
+
+`warn_incompatible_display` was read backwards for a month: taken as evidence
+they summon and fail on shared edges, when it fits far better as evidence they
+*suppress*, and suppression is intolerable on an edge users must walk through.
+
+**Measured, with a control:**
+
+```
+clamping bottom edge of (1728, 0, 3840, 2160), guard band 3pt
+aimed at y=2159;  WITH tap    cursor y=2157   clamps=10
+aimed at y=2159;  WITHOUT tap cursor y=2159            <- control
+RESULT: PREVENTION WORKS
+```
+
+Instrument validated first, separately: the tap saw 20/20 synthetic moves
+(`INSTRUMENT OK`), so a zero-count is distinguishable from a broken tap — the
+failure mode that wasted two runs earlier.
+
+**CONFIRMED:** a `CGEventTap` installs, receives events, and holds the cursor
+off the trigger row of a non-preferred display, while the control shows the
+cursor reaches that row with the tap disabled.
+
+**INFERRED (strong, not yet observed):** therefore a real pointer cannot
+complete the summon. Every hand-driven migration logged today was preceded by
+`cursor=#1@BOTTOM` ~1.5 s earlier, so removing access to that row should remove
+the trigger. **Still to observe:** a human attempting the summon and failing
+while the tap is live.
+
+**Design consequences.**
+
+- Bottom-edge only, ≥2 displays, separate Spaces on — the same envelope DockLock
+  ships, for the same reasons.
+- **Must refuse on shared bottom edges.** The geometry check from the
+  free-bottom-edge work already identifies them; here it is not an optimization
+  but a safety gate, since clamping a crossing boundary traps the pointer.
+- Accessibility, opt-in, and revocable — a new ADR is required.
+- The correct DockKeeper framing is *"stop the Dock leaving this display"*, not
+  *"put the Dock back"*. The latter is impossible; every relocation candidate
+  above is genuinely falsified and that work stands.
 
 ## Next steps
 
