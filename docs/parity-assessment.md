@@ -19,7 +19,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 
 | Capability | DockLock (edition) | DockKeeper today | Verdict |
 |---|---|---|---|
-| Pin Dock to display — separate Spaces ON, **bottom** Dock | ✓ core (Lite) | ✓ opt-in guard (DK-FR-014, ADR-015) — on-device confirmation open | **G1 closed pending on-device confirmation** 2026-08-29 |
+| Pin Dock to display — separate Spaces ON, **bottom** Dock | ✓ core (Lite) | ✓ opt-in guard (DK-FR-014, ADR-015), confirmed on-device with a control | **G1 closed** 2026-09-02 (shipped 2026-08-29, confirmed on hardware 2026-09-02) |
 | Pin Dock to display — separate Spaces ON, **left/right** Dock | ✗ (bottom-only) | ✓ ADR-009, hardware-confirmed | **DockKeeper leads** |
 | Pin Dock — separate Spaces **OFF** | ✗ (requires the setting ON); "Pro" claims it, unreleased | ✓ (mechanism confirmed; final observation pending logout cell) | **DockKeeper leads** |
 | Any-edge Dock (bottom/left/right) lock | ✗ (bottom-only; "Pro" claims any-edge, unreleased) | ✓ shipped | **DockKeeper leads** |

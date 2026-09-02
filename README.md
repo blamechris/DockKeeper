@@ -96,9 +96,10 @@ restarts.
 > them. If you would rather not use it, a left/right edge or turning the macOS
 > setting off both still work. Evidence in
 > [the spike](docs/spikes/separate-spaces-pinning.md) and
-> [ADR-015](docs/decision-log.md). The clamp itself is measured with a control;
-> that a real hand therefore cannot complete the summon has not yet been
-> observed on a two-display rig — see the CHANGELOG's *Known beta limits*.
+> [ADR-015](docs/decision-log.md). Both halves are measured with a control: the
+> clamp holds the pointer, and a real pointer cannot summon the Dock across
+> while it is on. What is *not* measured is what it costs in CPU over a long
+> session — see the CHANGELOG's *Known beta limits*.
 >
 > **This change is permanent, and turning DockKeeper off does not undo it.**
 > Pinning writes the display arrangement the same way System Settings does, so

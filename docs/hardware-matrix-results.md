@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) added 2026-09-02 |
+| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) and session 3 (DK-FR-014 guard, **G1 confirmed**) added 2026-09-02 |
 | **Rig** | MacBook Pro built-in Retina (1728×1117) + Dell S2719DGF on external, **portrait** (1440×2560, rotation 90°), macOS 26.5 Apple Silicon |
 | **Inputs** | [Test strategy §3](test-strategy.md) matrix, risk R-002/R-003 |
 
@@ -77,6 +77,65 @@ found nothing alarming, not a measurement that discharges DK-NFR-001.
 was connected. The tap is the first per-event cost in the app (R-015), so the number above is a
 *floor*, not a result for the shipped 0.9.3 feature set. [Test strategy §3d](test-strategy.md) row 2
 carries that cell.
+
+## Session 3 — 2026-09-02 (DK-FR-014 bottom-Dock guard, two-display rig)
+
+**ADR-015's open obligation is discharged.** The claim that a real pointer cannot complete the
+summon while the guard is armed was INFERRED from 2026-08-27 until this session. It is now
+**CONFIRMED with a control on real hardware.**
+
+**Rig.** MacBook Pro built-in Retina `(0, 0, 1728, 1117)` — **MAIN and preferred** — plus **DELL
+G3223Q** `(1728, -982, 3840, 2160)`, side-by-side, **both bottom edges free**. Separate Spaces ON,
+Dock bottom, not auto-hidden. Guarded display: the G3223Q (the non-preferred one), `clampY = 1175`.
+macOS 26.5, Apple Silicon. Build: `0.9.3-dev` from `8f722d0`, **Developer ID signed** (see the
+tooling note below).
+
+| # | Case | Result | Evidence |
+|---|---|---|---|
+| 1 | **A real hand cannot summon the Dock** to the guarded display | **CONFIRMED ✅** | Owner pushed the pointer at the G3223Q's bottom edge with the tap armed: Dock did **not** move. With the tap released: the same push **did** move it. Tap state read from the unified log on both runs, not assumed. |
+| 1s | Synthetic clamp, with control | **CONFIRMED ✅** | Aim `(3500, 1177)`: armed → **10/10 held at y=1175** (`maxY − 3`); released → **10/10 reached 1177**. |
+| 4 | macOS disables a slow tap | **No occurrences** | Zero `tap re-enabled after …` lines across the whole session, including a 45 s burst at ~80 events/s. The callback is not slow enough to be disabled. |
+| 2 | Idle cost with the guard armed | **INCONCLUSIVE** | See below. |
+
+**Memory with the guard armed: 18 MB** `phys_footprint` (16 MB without it), still inside the
+**< 30 MB preferred** budget.
+
+### Why row 2 is still inconclusive, and one instrument that lied
+
+Three numbers were taken and they do not cohere — idle measured *higher* than active use, which is
+incoherent and means background activity dominated the samples on a machine in use:
+
+| Condition | Measured |
+|---|---|
+| Real vigorous mouse use, guard armed | 2.0 % of one core |
+| Pointer still, guard armed | 3.0 % of one core |
+| v0.9.2, no guard, quiet | 0.22 – 0.60 % of one core |
+
+**Do not quote any of these as the DK-NFR-001 result.** The 24 h soak remains the gate (R-015).
+
+**The instrument that lied, recorded so nobody rebuilds it.** Driving synthetic motion with
+`CGEvent(...).post(tap: .cghidEventTap)` at ~80 events/s measured **52 % of one core — an
+artifact.** Posting at the HID tap forces the whole HID stack to process every synthetic event,
+work that a real mouse does not incur the same way; the same activity performed by hand cost
+**2 %**. A synthetic event stream is a valid instrument for *whether* the clamp fires and a
+**wrong** one for *what it costs*.
+
+### Tooling note: an AX-gated feature cannot be tested from the default dev loop
+
+The first two attempts measured nothing because the tap never armed, and `--diagnostics` reported
+`guarding 1 display(s)` throughout. Two causes, both filed:
+
+- `Scripts/build-app.sh` ad-hoc signs by default, and it `rm -rf`s the bundle each build, so every
+  rebuild is a **new code identity** and the Accessibility grant goes stale while System Settings
+  still shows a row switched on. Rebuilding with `SIGNING_IDENTITY` set to the Developer ID fixed
+  it immediately. **Any on-device AX test must use a real signing identity.**
+- `--diagnostics` invoked from a terminal inherits the *terminal's* Accessibility grant through TCC
+  responsible-process attribution, so it reported the permission as present while the GUI app
+  reported *"Waiting for Accessibility permission"* ([#77](https://github.com/blamechris/DockKeeper/issues/77)).
+
+The only trustworthy signal was the unified log, because `start()` logs on all three paths.
+[#78](https://github.com/blamechris/DockKeeper/issues/78) proposes the live-state readout that
+would have answered this in one command.
 
 ## Matrix cells
 

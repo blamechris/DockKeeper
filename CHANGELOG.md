@@ -30,7 +30,7 @@ Fourth public beta. The headline is a new opt-in feature: a bottom Dock can fina
 
 ### Known beta limits
 
-- **The bottom-Dock guard has not been confirmed against a real pointer.** That the clamp holds the cursor is measured, with a control. That a real hand therefore cannot summon the Dock across is a reasonable inference and nothing more — it needs a two-display rig with both bottom edges free, which we do not have yet. The feature is off by default, and its toggle is the off-switch if it misbehaves.
+- **The bottom-Dock guard's cost has not been measured.** It works: with it on, a real pointer cannot summon the Dock to a guarded display — confirmed on a two-display Mac, with the guard off as a control. What is not yet known is what it costs you. It watches pointer movement continuously while it is on, and that has never been measured over a long session. If your Mac feels warmer or slower with it on, turn it off and please tell us — the toggle is the off-switch and takes effect immediately.
 - The bottom hot corners on guarded displays stop working while the guard is on. That is the mechanism, not a fault.
 - The hardware matrix and the 24-hour idle soak are still outstanding; **v1.0.0 follows once both complete.**
 
