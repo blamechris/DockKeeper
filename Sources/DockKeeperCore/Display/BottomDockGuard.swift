@@ -100,6 +100,11 @@ public enum BottomDockGuard {
         public let preferredDisplayID: CGDirectDisplayID?
         public let dockEdge: DockOrientation
         public let separateSpacesEnabled: Bool
+        /// `Settings.isEnabled` — DockKeeper's master switch. Carried
+        /// separately from `featureEnabled` so a refusal can name which of the
+        /// two is off, and required rather than defaulted for the reason #65
+        /// established: an omitted guard input must not be silently supplied.
+        public let appEnabled: Bool
         /// `Settings.lockBottomDockToDisplay` — opt-in, default false.
         public let featureEnabled: Bool
         /// `AXIsProcessTrusted()`. Without it `CGEventTapCreate` yields a tap
@@ -111,6 +116,7 @@ public enum BottomDockGuard {
             preferredDisplayID: CGDirectDisplayID?,
             dockEdge: DockOrientation,
             separateSpacesEnabled: Bool,
+            appEnabled: Bool,
             featureEnabled: Bool,
             accessibilityTrusted: Bool
         ) {
@@ -118,6 +124,7 @@ public enum BottomDockGuard {
             self.preferredDisplayID = preferredDisplayID
             self.dockEdge = dockEdge
             self.separateSpacesEnabled = separateSpacesEnabled
+            self.appEnabled = appEnabled
             self.featureEnabled = featureEnabled
             self.accessibilityTrusted = accessibilityTrusted
         }
@@ -171,6 +178,11 @@ public enum BottomDockGuard {
     /// every case is reportable — `--diagnostics` prints it, so "nothing is
     /// happening" is never silent.
     public enum IdleReason: Sendable, Equatable {
+        /// DockKeeper itself is off, so nothing runs. Kept distinct from
+        /// `featureDisabled` because the two switches sit in the same window:
+        /// a report that conflated them pointed support at the toggle the user
+        /// had *not* touched (#63).
+        case appDisabled
         /// `lockBottomDockToDisplay` is off. The default.
         case featureDisabled
         /// Only a bottom Dock is pointer-summoned; left/right home to the main
@@ -218,6 +230,7 @@ public enum BottomDockGuard {
     /// user is always about the arrangement rather than about a setting they
     /// have already turned off.
     public static func decide(_ snapshot: Snapshot) -> Decision {
+        guard snapshot.appEnabled else { return .idle(.appDisabled) }
         guard snapshot.featureEnabled else { return .idle(.featureDisabled) }
         guard snapshot.dockEdge == .bottom else { return .idle(.edgeNotBottom) }
         guard snapshot.separateSpacesEnabled else { return .idle(.separateSpacesOff) }
@@ -296,8 +309,10 @@ extension BottomDockGuard.IdleReason {
     /// on and nothing happens", so each case names the specific unmet condition.
     public var explanation: String {
         switch self {
+        case .appDisabled:
+            return "off — DockKeeper is disabled"
         case .featureDisabled:
-            return "off"
+            return "off — not enabled in Preferences"
         case .edgeNotBottom:
             return "idle — only a bottom Dock is pointer-summoned"
         case .separateSpacesOff:

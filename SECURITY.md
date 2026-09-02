@@ -20,7 +20,7 @@ DockKeeper is pre-1.0. Only the **latest release** receives security fixes.
 ## Security posture (what you're auditing)
 
 - **No network code.** The binaries contain no networking symbols, raw socket syscalls, or linked networking frameworks — enforced by a CI gate on every build ([ci.yml](.github/workflows/ci.yml)), and verifiable on your own downloaded copy per [PRIVACY.md](PRIVACY.md). The only outbound action in the product is the user-initiated "Support Development" link.
-- **No required permissions.** The single optional permission is Accessibility, used only by the opt-in *Keep windows in place* feature ([PRIVACY.md](PRIVACY.md) describes exactly what it reads).
+- **No required permissions.** The single optional permission is Accessibility, used by two opt-in features — *Keep windows in place* (window geometry) and *Keep a bottom Dock on my preferred display* (an event tap over pointer coordinates). [PRIVACY.md](PRIVACY.md) describes exactly what each one reads.
 - **One ratified private-API exception.** Dock repositioning uses the private `CoreDock` API under ADR-003 ([docs/decision-log.md](docs/decision-log.md)), resolved at runtime with `dlsym` and degrading to `defaults`/`killall`.
 
 ## Known, accepted surface: the `dockkeeper://` URL scheme

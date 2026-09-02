@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Living record — session 1 complete |
+| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) added 2026-09-02 |
 | **Rig** | MacBook Pro built-in Retina (1728×1117) + Dell S2719DGF on external, **portrait** (1440×2560, rotation 90°), macOS 26.5 Apple Silicon |
 | **Inputs** | [Test strategy §3](test-strategy.md) matrix, risk R-002/R-003 |
 
@@ -38,6 +38,45 @@ Conclusions: the public-API pin transaction **works on real multi-monitor hardwa
 ### Separate Spaces gate — CONFIRMED ON (macOS default)
 
 `com.apple.spaces spans-displays` unset → separate Spaces ON. DockKeeper declines pinning in this mode by design (Decision 2A). **The definitive Dock-follow test requires:** System Settings ▸ Desktop & Dock → turn **off** "Displays have separate Spaces" → log out and back in.
+
+## Session 2 — 2026-09-02 (DK-NFR-001 idle spot check, single display)
+
+**First DK-NFR-001 measurement of any kind.** The budget has been UNKNOWN since v0.9.0 and is
+recorded in three documents; this closes the memory half of it and leaves CPU open.
+
+**Instrument.** Cumulative CPU-time delta over a wall interval, not `ps -o %cpu` — the latter
+reports an average since process start, which for a long-lived menu-bar app is dominated by its
+launch burst. Subject: `/Applications/DockKeeper.app` **v0.9.2**, pid 5419, ~13 h uptime, one
+display connected, guard **not** armed.
+
+| Metric | Target | Measured | Verdict |
+|---|---|---|---|
+| Memory (`phys_footprint`) | < 30 MB preferred; < 50 MB acceptable | **16 MB**, peak 17 MB | **CONFIRMED ✅ meets the *preferred* target** |
+| Memory growth | flat | +16 KB over 300 s | CONFIRMED ✅ no leak signal |
+| Idle CPU | ~0% under stable conditions | 0.60 % of one core (quiet); 0.80 % under load; **0.22 % lifetime average** | **INCONCLUSIVE** — see below |
+
+**Which memory metric, and why it matters.** The budget is stated in
+[behavior-specification](behavior-specification.md) DK-NFR-001, [technical-design](technical-design.md) §14
+and [risk-register](risk-register.md) R-009, and **none of the three names a metric**. The same process
+measures **16 MB** by `phys_footprint` and **64 MB** by RSS — pass or fail depending on an unstated
+choice. `phys_footprint` is the normative one here: it is what Activity Monitor's *Memory* column
+reports, and DK-NFR-001's own failure description is "Activity Monitor presence". RSS counts shared
+framework pages that every SwiftUI/AppKit process maps and does not pay for. Recorded so nobody
+re-derives the wrong conclusion from `ps` and reports a false budget miss — R-009's "commonly 25–50 MB"
+is an RSS-shaped figure and is not comparable to the 16 MB above.
+
+**Why CPU is inconclusive rather than a pass or a miss.** Both 300 s windows landed above the 13-hour
+lifetime average (0.22 %), so neither is confidently "idle": the first was taken while sixteen review
+agents saturated the machine, and the second is quieter but still a five-minute sample on a working
+laptop. 0.6 % of one core is *small* — well under a tenth of a percent of total CPU on this machine —
+but it is not the "~0%" the requirement asks for, and a spot check cannot settle it. **The 24 h idle
+soak in [test strategy §4](test-strategy.md) remains the gate**, unchanged. This is a sanity check that
+found nothing alarming, not a measurement that discharges DK-NFR-001.
+
+**Not covered: the guard.** DK-FR-014's event tap was never armed — it needs two displays and only one
+was connected. The tap is the first per-event cost in the app (R-015), so the number above is a
+*floor*, not a result for the shipped 0.9.3 feature set. [Test strategy §3d](test-strategy.md) row 2
+carries that cell.
 
 ## Matrix cells
 

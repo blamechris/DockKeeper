@@ -62,9 +62,11 @@ cask "dockkeeper" do
     DockKeeper is free and open source (MIT), with no telemetry and no network
     use. Launch at Login is approved in System Settings › Login Items.
 
-    If DockKeeper is already running when you upgrade, quit it from its menu-bar
-    icon and open it again — a replaced app bundle is a new application to macOS,
-    and DockKeeper's single-instance guard makes the new copy stand down while the
+    Upgrading from 0.9.2 or later with Homebrew quits the running copy for you
+    (the `uninstall quit:` stanza above). If you install by dragging the app out
+    of the DMG instead, quit DockKeeper from its menu-bar icon first and open it
+    again afterwards — a replaced app bundle is a new application to macOS, and
+    DockKeeper's single-instance guard makes the new copy stand down while the
     old one is still live.
 
     Uninstalling does not remove DockKeeper's Login Items entry. Check

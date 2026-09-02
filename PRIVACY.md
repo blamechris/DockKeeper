@@ -23,16 +23,27 @@ DockKeeper is built on a simple rule: **nothing ever leaves your Mac.**
   user defaults on your Mac; the identity of your preferred display is stored
   as hardware identifiers (UUID, vendor/model/serial, display name) for
   matching only.
-- **No permissions by default; exactly one optional ask.** Out of the box
-  DockKeeper requests no Accessibility, screen recording, or other
-  privacy-gated permission. The single exception is **Keep windows in place**
-  (Preferences ▸ Displays), which is off by default and asks for Accessibility
-  only when *you* turn it on. With it granted, DockKeeper reads window
-  positions, sizes, and owning process IDs so it can move windows back after a
-  pin — never window titles, contents, or keystrokes. Turn the setting off, or
-  revoke the permission in System Settings, and the feature silently does
-  nothing. Launch at Login uses the standard macOS Login Items mechanism,
-  which you approve in System Settings.
+- **No permissions by default; two optional asks.** Out of the box DockKeeper
+  requests no Accessibility, screen recording, or other privacy-gated
+  permission. Two features are exceptions. Both are off by default, both ask
+  for Accessibility only when *you* turn them on, and turning the setting off
+  or revoking the permission in System Settings makes each one silently do
+  nothing.
+  - **Keep windows in place** (Preferences ▸ Advanced). With it granted,
+    DockKeeper reads window positions, sizes, and owning process IDs so it can
+    move windows back after a pin — never window titles, contents, or
+    keystrokes.
+  - **Keep a bottom Dock on my preferred display** (Preferences ▸ Advanced).
+    With it granted, DockKeeper installs a system-wide event tap that watches
+    pointer movement and, on your *other* displays only, nudges the pointer a
+    few points clear of the bottom edge so macOS is never asked to move the
+    Dock there. It reads and adjusts pointer coordinates and nothing else — no
+    keystrokes, no clicks, no window titles, no contents. The tap exists only
+    while the feature is armed, is discarded when DockKeeper quits by any
+    route, and stores nothing.
+
+  Launch at Login uses the standard macOS Login Items mechanism, which you
+  approve in System Settings.
 
 This statement describes the app as built. Don't take the "no network" claim on
 trust — check it yourself on the copy you downloaded:

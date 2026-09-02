@@ -32,7 +32,7 @@ Preferences persistence against isolated `UserDefaults` suites (pattern exists i
 
 ### 3. Manual system tests (hardware matrix)
 
-**Blocked on a 2-monitor rig — the M6 gate and top project risk (R-002).** Adapted from kickoff §7; Accessibility rows dropped (no permission in v1 — TDD §10).
+**Blocked on 2-monitor cells — the M6 gate and top project risk (R-002).** The rig exists (MacBook Pro + DELL G3223Q); what is unscheduled is the deliberate side-by-side rearrange that several cells need, since the native arrangement is stacked. Adapted from kickoff §7. Accessibility rows were dropped when no permission existed; two opt-in features now request one (ADR-010 window restore, ADR-015 bottom-Dock guard), and §3d covers the latter.
 
 | Dimension | Cases |
 |---|---|
@@ -134,6 +134,25 @@ Two cautions for whoever runs the rest of this matrix, both learned the hard way
 | 10 | **Cross-user / fast user switching** with a hide held in one session | Sessions do not interfere | Argued from per-user `UserDefaults` and per-user `com.apple.dock`, **not measured**. Pairs with §3b item 1 |
 
 Each row records: pass/fail, macOS version, how the process was ended, and whether the record was present, discarded, or acted on afterwards (`--diagnostics` ▸ `Screen-share:` is the read-only view).
+
+### 3d. Manual bottom-Dock guard tests (DK-FR-014 / ADR-015) — **needs a two-display rig**
+
+**Hold a bottom Dock by blocking the summon.** The decision, geometry gate and clamp are unit-tested and the clamp itself is CONFIRMED with a control (ADR-015 Evidence: ten clamps held the cursor at y = 2157 when aimed at y = 2159; the same aim with the tap disabled reached y = 2159, on a validated instrument). What no automated test reaches is the app-target `CGEventTap` adapter and the human-scale question the feature exists to answer. **Every row is UNKNOWN until run** and none may be quoted as CONFIRMED.
+
+Rig: two displays, both bottom edges free (side-by-side, not stacked), *Displays have separate Spaces* ON, edge lock = bottom, a preferred display chosen, Accessibility granted, toggle on.
+
+| # | Case | Expected | Why it ranks here |
+|---|---|---|---|
+| 1 | **A real hand cannot summon the Dock** to the non-preferred display — push the pointer at that display's bottom edge as a user would | The pointer stops a few points short and the Dock does not migrate | The one claim the feature is *for*, and the only INFERRED half of ADR-015. Everything else is already CONFIRMED or unit-tested |
+| 2 | **Idle cost with the guard armed** — DK-NFR-001 spot check, pointer moving normally | Idle CPU stays within the DK-NFR-001 budget | The first continuous-cost mechanism in the app (R-015): every pointer move crosses the tap callback on the main run loop. Never measured |
+| 3 | **Revoke Accessibility while armed** | The pointer is released immediately; the caption asks for the permission; nothing is trapped | Fail-open is the safety property; a closed failure is a trapped cursor |
+| 4 | **System disables the tap** (exceed the event-tap timeout under load) | The tap re-enables or stays released — never a stuck clamp | The one degradation path with no in-process trigger; #61 tracks the re-enable being unbounded |
+| 5 | **Stacked arrangement refusal** — a display flush beneath another | That display is left unguarded and the pointer crosses between screens normally | The safety refusal. A false negative here traps the cursor at the boundary |
+| 6 | **Mirrored displays** | The guard stands down; no band on the visible screen | Same pixels, so a band on the "other" display lands on the one being looked at |
+| 7 | **Bottom hot corners on a guarded display** | Confirmed unreachable, matching the caption | The stated Known cost. Verifying it is what makes the disclosure honest rather than assumed |
+| 8 | **`kill -9` while armed** | Pointer moves normally immediately; nothing persists | An event tap is process-owned; unlike ADR-013 there is no record and no launch repair. Cheap to run and it proves that claim |
+
+Each row records: pass/fail, macOS version, the display arrangement, and whether Accessibility was granted at the time.
 
 ### 4. Reliability tests
 

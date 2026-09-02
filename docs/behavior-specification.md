@@ -34,6 +34,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-011](#dk-fr-011-hide-the-dock-during-screen-capture) | Hide the Dock during screen capture | P2 | v1.1 |
 | [DK-FR-012](#dk-fr-012-single-instance-guard) | Single-instance guard | P1 | v1.0 |
 | [DK-FR-013](#dk-fr-013-restore-borrowed-dock-auto-hide-across-process-death) | Restore borrowed Dock auto-hide across process death | P1 | v1.1 |
+| [DK-FR-014](#dk-fr-014-hold-a-bottom-dock-on-the-preferred-display-separate-spaces-mode) | Hold a bottom Dock on the preferred display (separate-Spaces mode) | P2 | v1.1 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -397,6 +398,10 @@ Given DockKeeper is paused
 When wake / display / poll events arrive
 Then they are ignored (shouldProcess gates on Paused)        [CONFIRMED gate]
 And the Dock may be moved freely via normal macOS
+  — except a bottom Dock on a display guarded by DK-FR-014,
+    which stays held: pause suspends corrections, and prevention
+    has no correction to resume. See DK-FR-014 "not released
+    while paused".
 
 S3 — Timed pause auto-resumes and re-enforces
 Given the user paused for 15 minutes or 1 hour
@@ -819,6 +824,8 @@ Then Dock auto-hide is turned OFF and any record is cleared, regardless of
 
 **It never moves the Dock.** Relocation is not available to any userspace process and this requirement does not promise it. See ADR-015 Evidence for the falsified candidates.
 
+**Priority / target.** P2 / v1.1. Justification: it closes the last DockLock capability gap (G1), but it is opt-in, permission-gated, and its end-to-end effect is unconfirmed — so it earns a place in the product without gating v1.0, exactly as ADR-008 scoped it. **Related risks:** **R-015** (the tap is continuous-cost and its end-to-end effect unobserved) and **R-008** (Accessibility behavior changes across macOS releases, reopened by this requirement).
+
 ```
 S1 — Off by default
 Given a fresh install
@@ -897,7 +904,7 @@ Then DockKeeper re-enables it and counts the event             [INFERRED — the
 
 **The guard is not released while DockKeeper is paused**, and that is deliberate rather than an oversight: pause suspends *corrections*, and this feature has no correction to re-enforce afterwards — releasing it would be the one pause in the product that resume cannot undo, because relocation is impossible (ADR-015). DK-FR-009 S2's "the Dock may be moved freely" therefore does not hold for a bottom Dock on a guarded display while this feature is on. Precedent: DK-FR-011 likewise keeps mutating the Dock while paused.
 
-**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 41 cases across five suites), **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`): inverting the `beneath` comparison in `bottomEdgeIsFree` to Cocoa orientation — **7**; replacing `if bottomEdgeIsFree(index, among: frames)` with `if true` — **5**; returning `frame.minX` instead of `point.x` from `ClampZone.clamping` — **2**; dropping the `point.y < frame.maxY` bound from `ClampZone.contains` — **1**; removing the mirror refusal — **2**; widening `flushTolerance` from 1 to 2 — **1**. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — and its end-to-end behavior against a real pointer is **INFERRED pending a two-display rig**.
+**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 44 cases across five suites), **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`): inverting the `beneath` comparison in `bottomEdgeIsFree` to Cocoa orientation — **7**; replacing `if bottomEdgeIsFree(index, among: frames)` with `if true` — **5**; returning `frame.minX` instead of `point.x` from `ClampZone.clamping` — **2**; dropping the `point.y < frame.maxY` bound from `ClampZone.contains` — **1**; removing the mirror refusal — **2**; widening `flushTolerance` from 1 to 2 — **1**. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — and its end-to-end behavior against a real pointer is **INFERRED pending a two-display rig**.
 
 ## DK-NFR-001: Quietness and resource budget
 
@@ -1001,7 +1008,7 @@ Then no donation prompt, upgrade prompt, or nag ever interrupts use
 
 The authoritative state machine (diagram and semantics) is TDD §5.1. States: `Disabled`, `Starting`, `Monitoring`, `Restoring`, `PreferredDisplayMissing`, `Degraded`, `Paused` (planned), `Error`.
 
-**Documented deviation from the kickoff template:** `Awaiting Permission` is dropped for v1 because no privacy-gated permission exists to await (TDD §10 — CONFIRMED that all v1 mechanisms need none). It returns if a follow-window feature ever ships.
+**Documented deviation from the kickoff template:** `Awaiting Permission` is not a top-level app state. Each of the two opt-in Accessibility features — window restore (ADR-010) and the bottom-Dock guard (ADR-015) — degrades in place with its own caption beside its own toggle, rather than putting the whole app into a waiting state; the app is fully functional without either (TDD §10 / §10a).
 
 | Transition | Trigger | Requirement |
 |---|---|---|

@@ -40,7 +40,7 @@ private struct AdvancedTab: View {
             Divider()
 
             Toggle("Keep windows in place when pinning", isOn: $state.preserveWindowLayout)
-            Text("Off by default. Pinning the Dock to your preferred display can shift some windows to the other screen; turn this on to move them back afterward. This is the only feature that needs macOS Accessibility permission, and it's used solely to reposition your windows — nothing else does.")
+            Text("Off by default. Pinning the Dock to your preferred display can shift some windows to the other screen; turn this on to move them back afterward. It is one of two optional features that ask for macOS Accessibility permission, and it uses it solely to reposition your windows.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if state.preserveWindowLayout && !state.accessibilityGranted {
@@ -75,7 +75,13 @@ private struct AdvancedTab: View {
             Divider()
 
             Toggle("Keep a bottom Dock on my preferred display", isOn: $state.lockBottomDockToDisplay)
-            Text("Off by default. With \u{201C}Displays have separate Spaces\u{201D} on, macOS gives a bottom Dock to whichever display you push the pointer to. DockKeeper can hold the pointer a few points clear of the bottom edge on your other displays, so the Dock is never called away — it does not move the Dock back, which macOS does not allow.")
+            // "so the Dock is never called away" overstated what is actually
+            // established: ADR-015 confirms the clamp holds the pointer (with a
+            // control), but that a real hand cannot complete the summon is still
+            // INFERRED. The caption states the mechanism, not the outcome. The
+            // hot-corner cost is named here because it is the one thing the user
+            // gives up, and two docs already claimed this caption said so.
+            Text("Off by default. With \u{201C}Displays have separate Spaces\u{201D} on, macOS gives a bottom Dock to whichever display you push the pointer to. DockKeeper holds the pointer a few points clear of the bottom edge on your other displays, so the gesture that summons it there is not completed — it does not move the Dock back, which macOS does not allow. While this is on, the bottom hot corners on those displays stop working, and a display with another screen directly beneath it is left unguarded.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(state.bottomDockGuardCaption)

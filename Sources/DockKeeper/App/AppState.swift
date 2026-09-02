@@ -558,6 +558,13 @@ final class AppState: ObservableObject {
                 + "be summoned there."
         case .idle(.featureDisabled):
             return ""
+        case .idle(.appDisabled):
+            // Not blank, unlike `featureDisabled`. `.appDisabled` is returned
+            // whatever the feature toggle reads, because the master switch is
+            // disqualified first (TDD §10a) — so this caption names the switch
+            // the user actually turned off, rather than leaving a blank space
+            // under a toggle that looks like it should be doing something.
+            return "Inactive while DockKeeper is turned off."
         case .idle(.accessibilityNotGranted):
             return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
                 + "Privacy & Security \u{203A} Accessibility."
@@ -590,7 +597,8 @@ final class AppState: ObservableObject {
                 preferredDisplayID: resolvedPreferredDisplayID,
                 dockEdge: lockEdge,
                 separateSpacesEnabled: MainDisplayPinner.readSeparateSpacesEnabled(),
-                featureEnabled: isEnabled && lockBottomDockToDisplay,
+                appEnabled: isEnabled,
+                featureEnabled: lockBottomDockToDisplay,
                 accessibilityTrusted: AXIsProcessTrusted()
             )
         )

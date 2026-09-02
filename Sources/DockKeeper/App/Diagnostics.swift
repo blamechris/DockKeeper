@@ -96,7 +96,8 @@ enum Diagnostics {
                 preferredDisplayID: preferredID,
                 dockEdge: settings.lockEdge,
                 separateSpacesEnabled: MainDisplayPinner.readSeparateSpacesEnabled(),
-                featureEnabled: settings.isEnabled && settings.lockBottomDockToDisplay,
+                appEnabled: settings.isEnabled,
+                featureEnabled: settings.lockBottomDockToDisplay,
                 accessibilityTrusted: AXIsProcessTrusted()
             )
         )
@@ -104,12 +105,23 @@ enum Diagnostics {
         case .idle(let reason):
             return reason.explanation
         case .guarding(let zones, let skipped):
-            let base = "guarding \(zones.count) display(s)"
-            guard !skipped.isEmpty else { return base }
-            // Naming the uncovered displays matters: a whole-display refusal
-            // leaves spans that really can host a summon, so an unqualified
-            // "guarding" would overstate the coverage to whoever reads this.
-            return base + " (\(skipped.count) not covered — blocked edge or mirrored)"
+            var base = "guarding \(zones.count) display(s)"
+            if !skipped.isEmpty {
+                // Naming the uncovered displays matters: a whole-display refusal
+                // leaves spans that really can host a summon, so an unqualified
+                // "guarding" would overstate the coverage to whoever reads this.
+                base += " (\(skipped.count) not covered — blocked edge or mirrored)"
+            }
+            // `Paused:` sits directly below this one, and both are new in this
+            // release, so this is the first build whose report can pair a
+            // guarding decision with an active pause. Read cold that looks self-contradictory.
+            // It is not: pause suspends *corrections*, and the guard is prevention
+            // with nothing to resume (DK-FR-014 Known cost, #62). Qualify rather
+            // than suppress — the same rule #69 applied to `status`.
+            if settings.pauseRecord != nil {
+                base += "; unaffected by the pause below (this feature is not released by pausing)"
+            }
+            return base
         }
     }
 

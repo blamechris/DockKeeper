@@ -70,9 +70,9 @@ Menu bar, Preferences, login item, os_log, ad-hoc-signed `.app` packaging (72fbc
 
 **Acceptance:** all DK-FR-003 scenarios S1–S5 unit-green (`RecoveryTests.swift`, 26 new tests; 39 total passing). The 100-restore no-oscillation run belongs to the reliability suite → verified at **M6**. Legacy restore path deleted in the same change (the coordinator is the only reconciler).
 
-## M5 — Permission & onboarding ✅ (by elimination)
+## M5 — Permission & onboarding ✅
 
-No privacy-gated permission exists in v1 (TDD §10 — CONFIRMED); Login Items approval UX is built. No work. Reopens only if follow-window ships (post-v1).
+Two opt-in features request Accessibility — window restore (ADR-010, shipped v0.9.0) and the bottom-Dock guard (ADR-015, shipped v0.9.3); neither is on by default, and each shows a contextual explanation before its one prompt (TDD §10). Login Items approval UX is built. No further work.
 
 ## M6 — Reliability (hardware validation) ❌ — **gate for v1.0**
 
@@ -95,7 +95,7 @@ Reshaped for v1.0.0 (2026-07-24): `notarize.sh` now takes **either** artifact �
 
 Remaining (owner-gated ⚙️): Developer ID certificate + notarytool credentials (Apple Developer account) · App Intents metadata packaging (tool present; wire via an `xcodebuild`-driven release build — Shortcuts discovery until then via the URL scheme) · R-010 trademark call. **Dependencies.** M6 green before the first tag.
 
-## M8 — Separate-Spaces pinning (parity workstream, targets v1.1) 🟡 spike phase
+## M8 — Separate-Spaces pinning (parity workstream, targets v1.1) ✅ shipped opt-in in v0.9.3 — on-device confirmation open
 
 Owner-directed 2026-07-23 (ADR-008): full DockLock replacement requires pinning in the macOS-default separate-Spaces mode.
 
