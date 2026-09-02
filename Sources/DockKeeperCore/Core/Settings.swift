@@ -302,9 +302,27 @@ public final class Settings: @unchecked Sendable {
     /// and a registered default cannot be removed), deliberately **not** in
     /// `externallyObservedKeys` (see the note there), and **no `settingsVersion`
     /// bump** (an optional, absent-by-default key reads compatibly in both
-    /// directions). The encode is folded into the guard for the same reason as
-    /// well — `set(nil, forKey:)` is `removeObject`, so a bare `try?` would turn
-    /// an encode failure into a silent "not paused".
+    /// directions).
+    ///
+    /// The encode is folded into the guard for **readability, not protection**,
+    /// and the distinction was worth correcting (#47): the else-branch is
+    /// `removeObject`, so a failed encode clears the key and the record reads as
+    /// "not paused" — which is exactly the outcome the fold used to be described
+    /// as preventing. `defaults.set(nil, forKey:)` *is* `removeObject`, so the
+    /// folded guard and the bare `try?` it was contrasted with produce identical
+    /// state on success and on failure alike.
+    ///
+    /// Clearing is the fail-safe direction **for this record and only this one**:
+    /// ADR-014 makes a restart an implicit resume and
+    /// `AppState.resumeStalePauseIfNeeded()` discards the key at launch anyway,
+    /// so a lost pause record costs a pause that ends early. It is *not*
+    /// fail-safe for `screenShareHideRecord`, whose whole purpose is to hand
+    /// back borrowed state — losing it there strands the user's Dock. That
+    /// asymmetry, and the fact that the sibling's caller writes the Dock
+    /// regardless, is filed as its own issue rather than patched here.
+    ///
+    /// Unreachable today either way: both `Date`s come from the clock, and
+    /// `JSONEncoder` only throws on a non-finite one.
     public var pauseRecord: PauseRecord? {
         get {
             guard let data = defaults.data(forKey: Keys.pauseRecord) else { return nil }
