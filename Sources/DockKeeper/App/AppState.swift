@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     private let coordinator: RecoveryCoordinator
     private let hotKeyCenter = HotKeyCenter()
     private let screenShareHider = ScreenShareHider()
+    private let bottomDockGuardTap = BottomDockGuardTap()
 
     @Published var isEnabled: Bool {
         didSet {
@@ -36,6 +37,9 @@ final class AppState: ObservableObject {
         didSet {
             guard !isSyncingFromExternal else { return }
             settings.lockEdge = lockEdge
+            // The guard is bottom-only, so leaving or entering `.bottom` arms or
+            // releases the tap regardless of whether we reconcile below.
+            applyBottomDockGuard()
             guard isEnabled else { return }
             // Apply immediately for snappy UX, then let the coordinator verify
             // (and re-pin) through the normal reconcile path.
@@ -139,6 +143,21 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Hold a bottom Dock on the preferred display in separate-Spaces mode by
+    /// blocking the pointer summon that would move it (DK-FR-014, ADR-015).
+    /// Opt-in, default false, and needs Accessibility. Every unmet precondition
+    /// is a silent no-op that `--diagnostics` explains.
+    @Published var lockBottomDockToDisplay: Bool {
+        didSet {
+            settings.lockBottomDockToDisplay = lockBottomDockToDisplay
+            applyBottomDockGuard()
+        }
+    }
+
+    /// The guard's latest decision, for the menu and `--diagnostics`.
+    @Published private(set) var bottomDockGuardDecision: BottomDockGuard.Decision =
+        .idle(.featureDisabled)
+
     /// Whether the private screen-watcher symbol resolved on this macOS. Fixed
     /// for the process lifetime; drives the Advanced-tab "unavailable" note.
     let screenCaptureAvailable = ScreenCapture.isAvailable
@@ -185,6 +204,7 @@ final class AppState: ObservableObject {
         self.preserveWindowLayout = settings.preserveWindowLayout
         self.pauseHotkeyEnabled = settings.pauseHotkeyEnabled
         self.hideDockDuringScreenShare = settings.hideDockDuringScreenShare
+        self.lockBottomDockToDisplay = settings.lockBottomDockToDisplay
         FileDiagnostics.shared.isEnabled = settings.diagnosticsFileEnabled
         // System is the source of truth for login-item state.
         self.launchAtLogin = LoginItemManager.isEnabled
@@ -306,6 +326,7 @@ final class AppState: ObservableObject {
         // and only then restores, so no tick can re-hide behind the restore.
         // Idempotent, and a no-op when we never hid anything.
         screenShareHider.stop()
+        bottomDockGuardTap.stop()
 
         // Drop the pause record on the way out (ADR-014). This is a **latency
         // optimization, not the mechanism** — exactly as the auto-hide restore
@@ -486,9 +507,61 @@ final class AppState: ObservableObject {
         }
         if case .resolved(let displayID, _) = DisplayIdentityResolver.resolve(stored: stored, candidates: candidates) {
             preferredDisplaySelectionID = displays.first { $0.displayID == displayID }?.id
+            resolvedPreferredDisplayID = displayID
         } else {
             preferredDisplaySelectionID = nil
+            resolvedPreferredDisplayID = nil
         }
+        // The guard's zones are a function of the arrangement and of which
+        // display is preferred, so both re-resolutions must re-apply it.
+        applyBottomDockGuard()
+    }
+
+    /// The live status caption under the bottom-Dock toggle. Says what the
+    /// guard is doing *right now* — the toggle can be on while every
+    /// precondition is unmet, and silence there is what makes a feature feel
+    /// broken (the same reasoning as ADR-010's "waiting for permission").
+    var bottomDockGuardCaption: String {
+        switch bottomDockGuardDecision {
+        case .guarding(let zones):
+            return "Active — holding the bottom edge on \(zones.count) other display(s)."
+        case .idle(.featureDisabled):
+            return ""
+        case .idle(.accessibilityNotGranted):
+            return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
+                + "Privacy & Security \u{203A} Accessibility."
+        case .idle(.nothingToGuard):
+            return "Not available on this arrangement: a display sits directly below another, "
+                + "so the bottom edge is the route the pointer takes between them. Holding it "
+                + "would trap your cursor."
+        case .idle(let reason):
+            return "Inactive — \(reason.explanation.replacingOccurrences(of: "idle — ", with: ""))."
+        }
+    }
+
+    /// The preferred display's live `CGDirectDisplayID`, or `nil` when no
+    /// preference is stored, it is not connected, or two candidates tie.
+    /// Distinct from `preferredDisplaySelectionID`, which is a UI-facing string.
+    private(set) var resolvedPreferredDisplayID: CGDirectDisplayID?
+
+    /// Recompute the bottom-Dock guard and arm or release the tap.
+    ///
+    /// Cheap and idempotent, so every path that could change an input calls it
+    /// rather than trying to work out whether it needs to — the same anti-drift
+    /// reasoning as `screenShareHiderShouldRun`.
+    private func applyBottomDockGuard() {
+        let decision = BottomDockGuard.decide(
+            BottomDockGuard.Snapshot(
+                displays: displays,
+                preferredDisplayID: resolvedPreferredDisplayID,
+                dockEdge: lockEdge,
+                separateSpacesEnabled: MainDisplayPinner.readSeparateSpacesEnabled(),
+                featureEnabled: isEnabled && lockBottomDockToDisplay,
+                accessibilityTrusted: AXIsProcessTrusted()
+            )
+        )
+        bottomDockGuardDecision = decision
+        bottomDockGuardTap.apply(decision)
     }
 
     /// Open System Settings so the user can approve the login item.
@@ -550,6 +623,9 @@ final class AppState: ObservableObject {
         // The screen-share hider follows the master enable switch too — disabling
         // DockKeeper stops it (and restores the Dock if it was hidden).
         applyScreenShareHiderState()
+        // Same for the bottom-Dock guard: disabling DockKeeper must not leave an
+        // event tap clamping the pointer.
+        applyBottomDockGuard()
     }
 
     /// The one spelling of "the screen-share poll should be running", shared by

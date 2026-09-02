@@ -799,6 +799,71 @@ Then Dock auto-hide is turned OFF and any record is cleared, regardless of
 
 ---
 
+## DK-FR-014: Hold a bottom Dock on the preferred display (separate-Spaces mode)
+
+**Requirement.** With "Displays have separate Spaces" ON and the lock edge set to **bottom**, DockKeeper may keep the Dock on the preferred display by **preventing the pointer summon** that would move it. Opt-in, off by default, Accessibility-gated, and refused outright on arrangements where a guarded bottom edge is also the route between two displays ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it)).
+
+**It never moves the Dock.** Relocation is not available to any userspace process and this requirement does not promise it. See ADR-015 Evidence for the falsified candidates.
+
+```
+S1 — Off by default
+Given a fresh install
+Then lockBottomDockToDisplay is false and no event tap exists  [CONFIRMED — unit test]
+
+S2 — Only a bottom Dock is guarded
+Given the lock edge is left or right
+Then the guard stays idle                                      [CONFIRMED — unit test;
+                                                                left/right home to the
+                                                                main display, ADR-009]
+
+S3 — Only in separate-Spaces mode, and only with two displays
+Given "Displays have separate Spaces" is off, or one display is attached
+Then the guard stays idle                                      [CONFIRMED — unit test]
+
+S4 — Needs a preferred display that is attached
+Given no preference is stored, or the preferred display is absent
+Then the guard stays idle and says which                       [CONFIRMED — unit test]
+
+S5 — Needs Accessibility, and never pretends otherwise
+Given the feature is on but AXIsProcessTrusted() is false
+Then the guard stays idle and reports "waiting for permission" [CONFIRMED — unit test]
+And no prompt is raised except from the toggle the user just used
+
+S6 — A shared bottom edge is refused, not guarded
+Given another display sits flush beneath a display we would guard
+Then that display is never clamped                             [CONFIRMED — unit test]
+And when no guardable display remains the guard stays idle
+Because clamping the crossing boundary would trap the pointer
+
+S7 — Only non-preferred displays are guarded
+Given a preferred display and one other, both with free bottom edges
+Then exactly the other display is clamped                      [CONFIRMED — unit test]
+
+S8 — Horizontal travel is never restricted
+Given the pointer is inside a guarded band
+Then only its y is pulled back; x is untouched                 [CONFIRMED — unit test]
+
+S9 — The guard dies with the process
+Given DockKeeper is killed, crashes, or the user logs out
+Then the tap stops filtering and the pointer moves normally    [by construction —
+                                                                an event tap is
+                                                                process-owned; no
+                                                                launch repair needed,
+                                                                unlike DK-FR-013]
+
+S10 — A disabled tap is re-armed, not silently dropped
+Given macOS disables the tap for slowness or user input
+Then DockKeeper re-enables it and counts the event             [INFERRED — the app
+                                                                target has no
+                                                                automated coverage]
+```
+
+**Failure behavior.** Every unmet precondition is a silent no-op with a stated reason in `--diagnostics` and under the Preferences toggle. A refused `CGEventTapCreate`, a revoked grant, or a system-disabled tap all end with normal pointer movement — the feature fails open, never closed, because a closed failure is a trapped cursor.
+
+**Known cost.** A guarded display's bottom hot corners and its own Dock summon become unreachable while the guard is active. That is the feature working as specified, and the toggle's caption says so.
+
+**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 30 cases across three suites), including mutation coverage for the two ways this can be dangerously wrong: inverting the coordinate orientation (13 tests fail) and dropping the safety gate (7 fail). The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — and its end-to-end behavior against a real pointer is **INFERRED pending a two-display rig**.
+
 ## DK-NFR-001: Quietness and resource budget
 
 **Description.** DockKeeper must be effectively free at idle and invisible when healthy.

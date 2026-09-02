@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **A bottom Dock can now be kept on the display you chose.** With “Displays have separate Spaces” on, macOS hands a bottom Dock to whichever screen you push the pointer to — so it wanders. Turn on **Keep a bottom Dock on my preferred display** (Preferences › Advanced, off by default) and DockKeeper holds the pointer a few points clear of the bottom edge on your *other* displays, so the Dock is never called away. It needs Accessibility permission, at least two displays, and a bottom-edge lock. It **does not move the Dock back** — macOS does not allow that, and DockKeeper will not pretend otherwise. On arrangements where one display sits directly below another, the feature refuses to run: that bottom edge is how your pointer travels between the screens, and holding it would trap your cursor. While it is active, the bottom hot corners on the guarded displays stop working. ([G1](docs/parity-assessment.md))
+
 - **You can now tell whether DockKeeper is paused without hunting for the menu-bar icon.** `dockkeeper status` gains a `Paused:` line — always present, so a paused install is distinguishable from a working one at a glance — and `DockKeeper --diagnostics` reports it too, which matters because a paused DockKeeper is *correctly* doing nothing and a support report from one used to look identical to a healthy install. Asking Siri or Shortcuts for the status now says the app is paused instead of just "enabled". Pausing does not survive a restart: relaunching DockKeeper resumes it. ([#36](https://github.com/blamechris/DockKeeper/issues/36))
 
 ### Fixed

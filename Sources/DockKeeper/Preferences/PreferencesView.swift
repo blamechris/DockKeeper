@@ -72,6 +72,16 @@ private struct AdvancedTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Divider()
+
+            Toggle("Keep a bottom Dock on my preferred display", isOn: $state.lockBottomDockToDisplay)
+            Text("Off by default. With \u{201C}Displays have separate Spaces\u{201D} on, macOS gives a bottom Dock to whichever display you push the pointer to. DockKeeper can hold the pointer a few points clear of the bottom edge on your other displays, so the Dock is never called away — it does not move the Dock back, which macOS does not allow.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(state.bottomDockGuardCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             // DK-FR-013 S11 — the permanent home of the manual recovery.
             // Unconditional (only gated on CoreDock resolving), because the
             // users who need it most are the ones whose record was never

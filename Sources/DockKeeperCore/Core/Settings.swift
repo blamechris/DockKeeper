@@ -74,6 +74,7 @@ public final class Settings: @unchecked Sendable {
         Keys.preserveWindowLayout: false,
         Keys.pauseHotkeyEnabled: false,
         Keys.hideDockDuringScreenShare: false,
+        Keys.lockBottomDockToDisplay: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
         Keys.settingsVersion: 1,
@@ -93,6 +94,7 @@ public final class Settings: @unchecked Sendable {
         static let preserveWindowLayout = "preserveWindowLayout"
         static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
         static let hideDockDuringScreenShare = "hideDockDuringScreenShare"
+        static let lockBottomDockToDisplay = "lockBottomDockToDisplay"
         static let screenShareHideRecord = "screenShareHideRecord"
         static let pauseRecord = "pauseRecord"
         static let restoreDelay = "restoreDelay"
@@ -239,6 +241,16 @@ public final class Settings: @unchecked Sendable {
     /// and restores it afterward — only if the user wasn't already running
     /// auto-hide. Uses the private `CGSIsScreenWatcherPresent` detector; inert
     /// (and the toggle is disabled with a note) when the symbol is absent.
+    /// Hold a bottom Dock on the preferred display in separate-Spaces mode by
+    /// blocking the pointer summon (DK-FR-014, ADR-015). Opt-in and **false by
+    /// default**: it is the only feature that needs Accessibility for a
+    /// continuous event tap, and it refuses outright on arrangements where a
+    /// guarded bottom edge is also a crossing boundary.
+    public var lockBottomDockToDisplay: Bool {
+        get { defaults.bool(forKey: Keys.lockBottomDockToDisplay) }
+        set { defaults.set(newValue, forKey: Keys.lockBottomDockToDisplay) }
+    }
+
     public var hideDockDuringScreenShare: Bool {
         get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
         set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
