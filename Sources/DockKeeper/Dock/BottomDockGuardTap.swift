@@ -158,16 +158,29 @@ final class BottomDockGuardTap {
         Log.app.notice("Bottom-Dock guard: tap re-enabled after \(reason, privacy: .public)")
     }
 
-    /// Releasing an armed tap without this would leave a live `CFMachPort` on the
-    /// main run loop holding `Unmanaged.passUnretained(self)` — `CFRunLoopAddSource`
-    /// retains the source, which retains the port, which carries that raw pointer —
-    /// so the next mouse event would dereference freed memory. A plain `deinit`
-    /// cannot call the main-actor-isolated `stop()`; `isolated deinit` can.
-    ///
-    /// This is belt and braces, not the main mechanism. An event tap is owned by
-    /// the process and stops filtering the moment it exits by any route, SIGKILL
-    /// included — which is why this feature needs no launch-time repair, unlike
-    /// ADR-013's borrowed Dock auto-hide, which survives its owner and therefore
-    /// does. `AppState.prepareForTermination()` calls `stop()` on the ordinary path.
-    isolated deinit { stop() }
+    // No `deinit` teardown, and the reason is worth stating precisely because the
+    // obvious fix does not build everywhere.
+    //
+    // The hazard is real in the abstract: `start()` hands the tap
+    // `Unmanaged.passUnretained(self)`, and `CFRunLoopAddSource` retains the
+    // source, which retains the port, which carries that raw pointer — so
+    // releasing an armed tap would leave the next mouse event dereferencing freed
+    // memory. `isolated deinit { stop() }` expresses the fix exactly, and compiles
+    // on newer toolchains, but it is **still an experimental feature** and fails on
+    // this project's CI Swift with "requires frontend flag
+    // -enable-experimental-feature IsolatedDeinit". Turning an experimental flag on
+    // for a shipping product to protect against a path that cannot currently occur
+    // is the wrong trade.
+    //
+    // Why it cannot currently occur: the only owner is `AppState`'s
+    // `private let bottomDockGuardTap`, which lives for the whole process and calls
+    // `stop()` from `prepareForTermination()`. There is no path that releases this
+    // object while a tap is armed. **If it ever gains a shorter-lived owner, that
+    // assumption dies with it** — revisit then, either with `isolated deinit` once
+    // it stabilises or by moving the CF handles into a small non-isolated box.
+    //
+    // Independent of all that, an event tap is process-owned and stops filtering
+    // the moment the process exits by any route, SIGKILL included. That is why this
+    // feature needs no launch-time repair, unlike ADR-013's borrowed Dock auto-hide,
+    // which survives its owner and therefore does.
 }
