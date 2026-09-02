@@ -739,14 +739,33 @@ struct PauseRecordSettingsTests {
 @Suite("StatusSummary pause reporting")
 struct StatusSummaryPauseTests {
 
-    private func summary(pause: PauseRecord?) -> StatusSummary {
+    /// Every case reads against a fixed noon, so the day-boundary branch is
+    /// deterministic. Noon is the anchor rather than an arbitrary instant for a
+    /// reason: ±26h from noon is unambiguously another calendar day in every
+    /// timezone, and DST transitions happen in the small hours, so no offset
+    /// used here can land on the wrong side of midnight and flip the rendering.
+    ///
+    /// The anchor is required by *this* change, not a latent bug it uncovered:
+    /// before #47 both surfaces rendered `date: .omitted` unconditionally, so a
+    /// fixture asserting that same rendering held at every minute of the day.
+    /// The same-day branch is what makes an ambient `Date()` non-deterministic
+    /// near midnight, so the fixtures are anchored in the commit that adds it.
+    private let noon = Calendar.current.date(
+        from: DateComponents(year: 2026, month: 9, day: 2, hour: 12)
+    )!
+
+    /// `isEnabled` defaults to `true` so every pre-#47 case keeps describing the
+    /// enabled world it was written for, and the disabled combination has to be
+    /// asked for deliberately.
+    private func summary(pause: PauseRecord?, isEnabled: Bool = true) -> StatusSummary {
         StatusSummary(
-            isEnabled: true,
+            isEnabled: isEnabled,
             lockEdge: .left,
             currentEdge: .left,
             mechanism: "CoreDock",
             coreDockAvailable: true,
-            pauseRecord: pause
+            pauseRecord: pause,
+            reportedAt: noon
         )
     }
 
@@ -755,7 +774,7 @@ struct StatusSummaryPauseTests {
         // The bug was that paused and unpaused output were byte-identical. A
         // line that only appears when paused would not fix a pasted report.
         let unpaused = summary(pause: nil).cliText
-        let paused = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).cliText
+        let paused = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil)).cliText
 
         #expect(unpaused.contains("Paused:     no"))
         #expect(paused.contains("Paused:     yes"))
@@ -764,15 +783,18 @@ struct StatusSummaryPauseTests {
 
     @Test("An untimed pause says so explicitly — it has no timer at all")
     func untimedPauseIsCalledOut() {
-        let text = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).cliText
+        let text = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil)).cliText
         #expect(text.contains("until resumed"))
         #expect(text.contains("no timer"))
     }
 
     @Test("A timed pause reports its deadline")
     func timedPauseReportsDeadline() {
-        let until = Date().addingTimeInterval(900)
-        let text = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: until)).cliText
+        // Anchored by #47, which introduced the same-day branch this asserts
+        // against. Pre-#47 the rendering was unconditional, so ambient `Date()`
+        // was safe here; it no longer is.
+        let until = noon.addingTimeInterval(900)
+        let text = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: until)).cliText
         #expect(text.contains("yes (until"))
         #expect(text.contains(until.formatted(date: .omitted, time: .shortened)))
     }
@@ -789,7 +811,7 @@ struct StatusSummaryPauseTests {
 
     @Test("The voice line leads with the pause instead of claiming enabled (#36)")
     func voiceLineLeadsWithPause() {
-        let paused = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: nil)).voiceLine
+        let paused = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil)).voiceLine
         #expect(paused.contains("paused"))
         #expect(!paused.contains("enabled"), "\"enabled\" alone is the wrong spoken answer while paused")
 
@@ -799,11 +821,164 @@ struct StatusSummaryPauseTests {
     @Test("The voice line speaks a timed pause's deadline")
     func voiceLineSpeaksDeadline() {
         // The untimed branch was covered; this one renders a date and was not.
-        let until = Date().addingTimeInterval(900)
-        let spoken = summary(pause: PauseRecord(pausedAt: Date(), pausedUntil: until)).voiceLine
+        // Anchored for the same reason as `timedPauseReportsDeadline`.
+        let until = noon.addingTimeInterval(900)
+        let spoken = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: until)).voiceLine
         #expect(spoken.contains("paused until"))
         #expect(spoken.contains(until.formatted(date: .omitted, time: .shortened)))
         #expect(!spoken.contains("enabled"))
+    }
+
+    // MARK: - #47: a record read against a clock, not just printed
+
+    @Test("A deadline that has passed is not reported as pending (#47)")
+    func overdueDeadlineIsNotReportedAsPending() {
+        // The filed defect: `status` printed `Paused: yes (until 3:45 PM)` for
+        // a deadline already gone. A running instance auto-resumes at the
+        // deadline and clears the record, so this shape is only ever read from
+        // a cold process — but `status` cannot know that, and must not say so.
+        let until = noon.addingTimeInterval(-1_800)
+        let text = summary(pause: PauseRecord(pausedAt: noon.addingTimeInterval(-3_600),
+                                              pausedUntil: until)).cliText
+
+        #expect(text.contains("auto-resume overdue"))
+        #expect(!text.contains("yes (until "), "a passed deadline must not read as a pending one")
+        #expect(text.contains("Paused:     yes"), "the record is still reported, not suppressed")
+    }
+
+    @Test("`status` reports the deadline as passed without claiming DockKeeper died")
+    func overdueLineMakesNoLivenessClaim() {
+        // ADR-014: `status` reports configured state, not liveness — it already
+        // prints `Enabled: yes` with no app running, and this process has no
+        // liveness signal of any kind. Naming the record "stale" would assert
+        // one; naming the deadline passed asserts only what the record shows.
+        let s = summary(pause: PauseRecord(pausedAt: noon.addingTimeInterval(-3_600),
+                                           pausedUntil: noon.addingTimeInterval(-60)))
+        // Both surfaces, because the ADR presents the *wording* as what keeps
+        // its consequence true and `voiceLine` renders the overdue case through
+        // its own literal. Asserting on `cliText` alone would let Siri say
+        // "DockKeeper has crashed" with the suite green.
+        for rendered in [s.cliText, s.voiceLine] {
+            for forbidden in ["stale", "died", "crashed", "not running"] {
+                #expect(!rendered.lowercased().contains(forbidden),
+                        "\(forbidden) is a liveness claim `status` cannot make")
+            }
+        }
+    }
+
+    @Test("A deadline on another day carries its date; today's stays a bare time (#47)")
+    func crossDayDeadlineCarriesItsDate() {
+        // `date: .omitted` renders yesterday 3:45 PM identically to today's, so
+        // a day-old record read as later today. This is wrong for a LIVE pause
+        // too: a 12-hour pause taken at 11 PM has a valid next-day deadline.
+        // Hence a FUTURE cross-day deadline here — the bug is the rendering,
+        // not the staleness.
+        let tomorrow = noon.addingTimeInterval(26 * 3_600)
+        let crossDay = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: tomorrow)).cliText
+        #expect(crossDay.contains(tomorrow.formatted(date: .abbreviated, time: .shortened)))
+
+        // And the common case stays quiet — nothing here should make every
+        // ordinary pause start printing a date.
+        let sameDay = noon.addingTimeInterval(900)
+        let today = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: sameDay)).cliText
+        #expect(today.contains(sameDay.formatted(date: .omitted, time: .shortened)))
+        #expect(!today.contains(sameDay.formatted(date: .abbreviated, time: .shortened)))
+    }
+
+    @Test("An absurd deadline is reported as unreadable rather than trapping (#47)")
+    func unreadableDeadlineDegradesSafely() {
+        // `pausedUntil` is decoded from a user-writable domain and `Int(_:)`
+        // traps. `status` did no arithmetic on these dates before #47, so this
+        // exposure is created by the fix and covered by it — the same guard
+        // `--diagnostics` has carried since ADR-014.
+        let absurd = PauseRecord(pausedAt: noon,
+                                 pausedUntil: Date(timeIntervalSinceReferenceDate: 1e300))
+        let s = summary(pause: absurd)
+        #expect(s.cliText.contains("deadline unreadable"))
+        #expect(s.voiceLine.contains("unreadable"))
+        #expect(!s.voiceLine.contains("so it is not correcting the Dock right now"),
+                "an unreadable record must not be spoken as a plain live pause")
+    }
+
+    // MARK: - #47 defect 2: a record alongside `Enabled: no`
+
+    @Test("A disabled install with a leftover record is not spoken as paused (#47)")
+    func disabledWithARecordIsNotSpokenAsPaused() {
+        // Reachable and durable: an untrappable exit leaves the record
+        // (ADR-014), then `dockkeeper unlock` writes `isEnabled` from a
+        // separate process without touching it, and nothing reconciles the two
+        // until the app next launches. The pause branch used to return before
+        // `isEnabled` was ever read.
+        let spoken = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil),
+                             isEnabled: false).voiceLine
+        #expect(spoken.contains("DockKeeper is disabled"))
+        #expect(!spoken.contains("paused"), "the disable is the fact that governs")
+    }
+
+    @Test("The report no longer contradicts itself when disabled with a record (#47)")
+    func disabledWithARecordDoesNotContradictItself() {
+        let text = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil),
+                           isEnabled: false).cliText
+        #expect(text.contains("Enabled:    no"))
+        // Qualified, never suppressed: dropping the record would destroy the
+        // evidence #36 exists to preserve. Both lines are individually true;
+        // what was wrong was reading them together.
+        #expect(text.contains("Paused:     yes"))
+        #expect(text.contains("DockKeeper is disabled"))
+    }
+
+    @Test("#36's rule is untouched: an enabled paused install still leads with the pause")
+    func enabledPauseStillLeads() {
+        // The guard added for defect 2 is scoped to `isEnabled == false`, which
+        // is the only input #36 was never about. Re-asserted here so a future
+        // edit cannot widen it without a red test.
+        let spoken = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: nil),
+                             isEnabled: true).voiceLine
+        #expect(spoken.contains("paused"))
+        #expect(!spoken.contains("enabled"))
+    }
+
+    @Test("A deadline still under a second away has not passed (#47)")
+    func subSecondDeadlineIsStillPending() {
+        // `wholeSeconds` truncates toward zero, so classifying on its `Int`
+        // put every deadline in [now, now + 1s) at 0 and reported a live pause
+        // as overdue. The sign is asked of the interval instead.
+        let almost = summary(pause: PauseRecord(pausedAt: noon,
+                                                pausedUntil: noon.addingTimeInterval(0.4)))
+        #expect(almost.cliText.contains("yes (until "))
+        #expect(!almost.cliText.contains("overdue"))
+
+        // The boundary itself is past: equal instants are not "still to come".
+        let exact = summary(pause: PauseRecord(pausedAt: noon, pausedUntil: noon))
+        #expect(exact.cliText.contains("overdue"))
+    }
+
+    @Test("An absurd but in-bound deadline renders visibly wrong, not plausibly wrong (#47)")
+    func absurdInBoundDeadlineIsVisiblyAbsurd() {
+        // `DisplayDuration`'s bound is 9.0e18 s, so a deadline can be absurd and
+        // still classified. That is accepted rather than tightened: bounding
+        // what a *legitimate* deadline may be is a new policy, and the pre-#47
+        // rendering was strictly worse — the same input printed a plausible
+        // "until 4:00 PM" that hid the corruption. What must hold is that it
+        // never reads as an ordinary time today.
+        let far = summary(pause: PauseRecord(pausedAt: noon,
+                                             pausedUntil: Date(timeIntervalSinceReferenceDate: 1e15)))
+        #expect(far.cliText.contains("Paused:     yes"))
+        #expect(!far.cliText.contains("yes (until 12:00"),
+                "an absurd deadline must not render as a bare local time")
+    }
+
+    @Test("An overdue deadline is spoken, not answered as plain `enabled`")
+    func overdueIsSpokenNotSwallowed() {
+        // The trap in gating the pause branch: send `.overdue` down the
+        // fall-through and Siri answers "DockKeeper is enabled" while a record
+        // is sitting right there — the #36 defect, reintroduced by the fix for
+        // its sibling.
+        let until = noon.addingTimeInterval(-1_800)
+        let spoken = summary(pause: PauseRecord(pausedAt: noon.addingTimeInterval(-3_600),
+                                                pausedUntil: until)).voiceLine
+        #expect(spoken.contains("has already passed"))
+        #expect(!spoken.contains("DockKeeper is enabled"))
     }
 }
 
@@ -827,6 +1002,24 @@ struct StatusSummaryLiveTests {
         #expect(summary.pauseRecord?.pausedAt == at)
         #expect(summary.cliText.contains("Paused:     yes"))
         #expect(summary.voiceLine.contains("paused"))
+    }
+
+    @Test("live() threads its injected clock into reportedAt (#47)")
+    func liveInjectsTheClock() {
+        // The whole design rests on `live` being the one real-clock read, and
+        // nothing pinned it: every other #47 case builds `StatusSummary`
+        // directly, so `live` could drop `now:` and read the ambient clock with
+        // the suite green — leaving the only production path (`dockkeeper
+        // status`, `DockKeeperStatusIntent`) uncovered for the property.
+        let settings = makeTestSettings("StatusSummaryLive")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        settings.pauseRecord = PauseRecord(pausedAt: now.addingTimeInterval(-3_600),
+                                           pausedUntil: now.addingTimeInterval(-1_800))
+
+        let summary = StatusSummary.live(settings: settings, now: now)
+        #expect(summary.reportedAt == now)
+        #expect(summary.cliText.contains("overdue"),
+                "the injected clock must be what the record is classified against")
     }
 
     @Test("live() reports no pause once the record is cleared")
