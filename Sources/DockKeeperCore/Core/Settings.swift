@@ -74,6 +74,7 @@ public final class Settings: @unchecked Sendable {
         Keys.preserveWindowLayout: false,
         Keys.pauseHotkeyEnabled: false,
         Keys.hideDockDuringScreenShare: false,
+        Keys.lockBottomDockToDisplay: false,
         Keys.restoreDelay: 0.4,
         Keys.recoveryInterval: 30.0,
         Keys.settingsVersion: 1,
@@ -93,6 +94,7 @@ public final class Settings: @unchecked Sendable {
         static let preserveWindowLayout = "preserveWindowLayout"
         static let pauseHotkeyEnabled = "pauseHotkeyEnabled"
         static let hideDockDuringScreenShare = "hideDockDuringScreenShare"
+        static let lockBottomDockToDisplay = "lockBottomDockToDisplay"
         static let screenShareHideRecord = "screenShareHideRecord"
         static let pauseRecord = "pauseRecord"
         static let restoreDelay = "restoreDelay"
@@ -242,6 +244,16 @@ public final class Settings: @unchecked Sendable {
     public var hideDockDuringScreenShare: Bool {
         get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
         set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
+    }
+
+    /// Hold a bottom Dock on the preferred display in separate-Spaces mode by
+    /// blocking the pointer summon (DK-FR-014, ADR-015). Opt-in and **false by
+    /// default**: it is the only feature that needs Accessibility for a
+    /// continuous event tap, and it refuses outright on arrangements where a
+    /// guarded bottom edge is also a crossing boundary.
+    public var lockBottomDockToDisplay: Bool {
+        get { defaults.bool(forKey: Keys.lockBottomDockToDisplay) }
+        set { defaults.set(newValue, forKey: Keys.lockBottomDockToDisplay) }
     }
 
     /// Breadcrumb saying "DockKeeper is holding Dock auto-hide ON for a screen

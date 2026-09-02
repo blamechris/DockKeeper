@@ -1,3 +1,4 @@
+import ApplicationServices
 import Foundation
 import AppKit
 import ServiceManagement
@@ -58,9 +59,58 @@ enum Diagnostics {
         Dock edge:       \(DockController().currentOrientation()?.displayName ?? "unknown")
         Displays:        \(DisplayManager.activeDisplays().count)
         Separate Spaces: \(pinningVerdict)
+        Bottom guard:    \(bottomDockGuardStatus())
         Paused:          \(pauseStatus())
         Screen-share:    \(screenShareHideStatus())
         """
+    }
+
+    /// DK-FR-014's state, in one line. Reports the *reason* when idle, because
+    /// "I enabled it and nothing happens" is the support question this feature
+    /// will generate — every precondition it needs is invisible to the user.
+    ///
+    /// Read from a fresh process, so it reports what the *decision* would be
+    /// here rather than what a running instance currently holds; the tap itself
+    /// lives in the running app. That is enough to answer every precondition
+    /// question, which is what support needs.
+    @MainActor
+    private static func bottomDockGuardStatus() -> String {
+        let settings = Settings()
+        let displays = DisplayManager.activeDisplays()
+        let stored = settings.preferredDisplayFingerprint
+        let candidates = displays.compactMap { display in
+            display.fingerprint.map {
+                FingerprintMatcher.Candidate(displayID: display.displayID, fingerprint: $0)
+            }
+        }
+        var preferredID: CGDirectDisplayID?
+        if case .resolved(let displayID, _) = DisplayIdentityResolver.resolve(
+            stored: stored, candidates: candidates
+        ) {
+            preferredID = displayID
+        }
+
+        let decision = BottomDockGuard.decide(
+            BottomDockGuard.Snapshot(
+                displays: displays,
+                preferredDisplayID: preferredID,
+                dockEdge: settings.lockEdge,
+                separateSpacesEnabled: MainDisplayPinner.readSeparateSpacesEnabled(),
+                featureEnabled: settings.isEnabled && settings.lockBottomDockToDisplay,
+                accessibilityTrusted: AXIsProcessTrusted()
+            )
+        )
+        switch decision {
+        case .idle(let reason):
+            return reason.explanation
+        case .guarding(let zones, let skipped):
+            let base = "guarding \(zones.count) display(s)"
+            guard !skipped.isEmpty else { return base }
+            // Naming the uncovered displays matters: a whole-display refusal
+            // leaves spans that really can host a summon, so an unqualified
+            // "guarding" would overstate the coverage to whoever reads this.
+            return base + " (\(skipped.count) not covered — blocked edge or mirrored)"
+        }
     }
 
     /// Whether corrections are suspended (DK-FR-009) — the support answer to
