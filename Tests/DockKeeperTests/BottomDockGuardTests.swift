@@ -23,6 +23,7 @@ private func snapshot(
     preferred: CGDirectDisplayID? = 1,
     edge: DockOrientation = .bottom,
     separateSpaces: Bool = true,
+    appEnabled: Bool = true,
     enabled: Bool = true,
     trusted: Bool = true
 ) -> BottomDockGuard.Snapshot {
@@ -31,6 +32,7 @@ private func snapshot(
         preferredDisplayID: preferred,
         dockEdge: edge,
         separateSpacesEnabled: separateSpaces,
+        appEnabled: appEnabled,
         featureEnabled: enabled,
         accessibilityTrusted: trusted
     )
@@ -147,6 +149,36 @@ struct BottomDockGuardDecisionTests {
     func featureDisabled() {
         let d = BottomDockGuard.decide(snapshot(displays: twoFree, enabled: false))
         #expect(idleReason(d) == .featureDisabled)
+    }
+
+    @Test("A disabled DockKeeper is named as such, not as the feature being off")
+    func appDisabledIsDistinct() {
+        // #63: both switches live in Preferences ▸ Advanced. Reporting the
+        // feature toggle when it is the master switch that is off sends support
+        // — and the user — at the control they did not touch.
+        let d = BottomDockGuard.decide(
+            snapshot(displays: twoFree, appEnabled: false, enabled: true)
+        )
+        #expect(idleReason(d) == .appDisabled)
+    }
+
+    @Test("The master switch disqualifies before the feature toggle")
+    func appDisabledOutranksFeatureDisabled() {
+        let d = BottomDockGuard.decide(
+            snapshot(displays: twoFree, appEnabled: false, enabled: false)
+        )
+        #expect(idleReason(d) == .appDisabled)
+    }
+
+    @Test("The two disabled reasons do not share an explanation")
+    func disabledReasonsReadDifferently() {
+        // The defect was a single "off" for both. Distinct enum cases are not
+        // enough on their own — `--diagnostics` prints the explanation, so it is
+        // the strings that have to differ.
+        #expect(
+            BottomDockGuard.IdleReason.appDisabled.explanation
+                != BottomDockGuard.IdleReason.featureDisabled.explanation
+        )
     }
 
     @Test("Only a bottom Dock is pointer-summoned")
@@ -313,9 +345,10 @@ struct BottomDockGuardClampTests {
     @Test("Every idle reason renders a non-empty explanation")
     func explanationsExist() {
         let reasons: [BottomDockGuard.IdleReason] = [
-            .featureDisabled, .edgeNotBottom, .separateSpacesOff, .singleDisplay,
-            .noPreferredDisplay, .preferredDisplayNotConnected, .accessibilityNotGranted,
-            .nothingToGuard(blockedDisplayIDs: [2]),
+            .appDisabled, .featureDisabled, .edgeNotBottom, .separateSpacesOff,
+            .singleDisplay, .noPreferredDisplay, .preferredDisplayNotConnected,
+            .accessibilityNotGranted, .nothingToGuard(blockedDisplayIDs: [2]),
+            .mirrorsPreferredDisplay,
         ]
         for reason in reasons {
             #expect(!reason.explanation.isEmpty, "\(reason)")

@@ -29,8 +29,10 @@ only — no proprietary code, assets, branding, or text from any other product.
 5. Native macOS implementation (SwiftUI/AppKit); no Electron/Tauri/web views.
 6. Public, supported APIs strongly preferred; deviations need an owner-ratified
    ADR (ADR-003 is the one such deviation).
-7. Permissions only when technically necessary, always explained. (Shipped: v1
-   needs none.)
+7. Permissions only when technically necessary, always explained. (Shipped:
+   none required by default; two opt-in features — window restore (ADR-010)
+   and the bottom-Dock guard (ADR-015) — ask for Accessibility, each explained
+   before its one prompt.)
 8. Codebase suitable for an MIT-licensed public repository.
 
 ## v1.0 boundary

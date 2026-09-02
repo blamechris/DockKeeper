@@ -249,8 +249,9 @@ public final class Settings: @unchecked Sendable {
     /// Hold a bottom Dock on the preferred display in separate-Spaces mode by
     /// blocking the pointer summon (DK-FR-014, ADR-015). Opt-in and **false by
     /// default**: it is the only feature that needs Accessibility for a
-    /// continuous event tap, and it refuses outright on arrangements where a
-    /// guarded bottom edge is also a crossing boundary.
+    /// *continuous* event tap — window restore needs the permission too, but
+    /// only for one-shot window moves — and it leaves unguarded any display
+    /// whose bottom edge is also a crossing boundary.
     public var lockBottomDockToDisplay: Bool {
         get { defaults.bool(forKey: Keys.lockBottomDockToDisplay) }
         set { defaults.set(newValue, forKey: Keys.lockBottomDockToDisplay) }

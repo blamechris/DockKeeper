@@ -33,9 +33,9 @@ Every product or technical claim in this document carries one of the kickoff pac
 2. "Displays have separate Spaces" (macOS default: ON) makes the Dock per-display/pointer-following; DockKeeper does not fight the OS in that mode. CONFIRMED default, owner Decision 2A.
 3. Private-API use and `killall Dock` make the **App Sandbox / Mac App Store non-viable** for v1. INFERRED (see §13).
 
-**Major unresolved risks.** Multi-monitor pinning behavior is reasoned but never observed on real hardware (the dev rig has one display); display-UUID stability across reconnects/adapters is UNKNOWN; `CoreDock` symbols could change in a future macOS (mitigated by the fallback path).
+**Major unresolved risks.** Multi-monitor pinning behavior is only partly observed on real hardware (the dev rig is a MacBook Pro plus a DELL G3223Q whose native arrangement is *stacked*, so free-bottom-edge cells need a deliberate rearrange); display-UUID stability across reconnects/adapters is UNKNOWN; `CoreDock` symbols could change in a future macOS (mitigated by the fallback path).
 
-**Why this approach.** Every alternative was worse: Accessibility-driven Dock dragging needs a heavyweight permission and is fragile; `defaults`+restart as the *primary* mechanism flickers and kills Dock state; cursor-warping hijacks the pointer; private SkyLight pinning was explicitly rejected by the owner. The chosen design keeps the reliable 90% (edge lock) on a proven mechanism with a public-API fallback, and ships the honest 10% (pinning) as clearly-communicated best-effort. Notably, **no Accessibility permission is required at all** for v1 (§10) — a significant simplification over the kickoff package's assumptions.
+**Why this approach.** Every alternative was worse: Accessibility-driven Dock dragging needs a heavyweight permission and is fragile; `defaults`+restart as the *primary* mechanism flickers and kills Dock state; private SkyLight pinning was explicitly rejected by the owner. The chosen design keeps the reliable 90% (edge lock) on a proven mechanism with a public-API fallback, and ships the honest 10% (pinning) as clearly-communicated best-effort. **No Accessibility permission is required by default** (§10) — a significant simplification over the kickoff package's assumptions. Two opt-in features do ask for one: window restore (ADR-010) and the bottom-Dock guard (ADR-015). The guard is the one place cursor-warping was adopted, and only in the narrow, fail-open form ADR-015 sets out — it holds the pointer out of a band rather than driving it anywhere.
 
 ---
 
@@ -60,7 +60,7 @@ Every product or technical claim in this document carries one of the kickoff pac
 
 ### Non-Goals (v1.0)
 
-- Follow-mouse / follow-focused-window / follow-active-app modes (deferred; follow-window would introduce the Accessibility permission we currently avoid)
+- Follow-mouse / follow-focused-window / follow-active-app modes (deferred; follow-window would extend the Accessibility permission the two opt-in features already ask for to the default configuration, which is the line §10 holds)
 - Window management or display-arrangement management as a feature
 - Apple Shortcuts, Raycast, AppleScript integration — *update: Apple Shortcuts (App Intents) + a `dockkeeper://` URL scheme **shipped for v1.1** as [DK-FR-010](behavior-specification.md#dk-fr-010-apple-shortcuts--url-scheme-automation) (parity gap G6, public APIs, zero permission); Raycast (G7) and AppleScript remain deferred.*
 - Per-app rules, display profiles, work/home automation
@@ -113,7 +113,7 @@ graph TB
 Interactions worth noting:
 
 - **Dock**: never touched directly; always via `CoreDock` (live) or its own preferences + restart (fallback).
-- **Accessibility services**: *not used* in v1 (§10). The kickoff package anticipated them; the chosen mechanisms make them unnecessary.
+- **Accessibility services**: not needed by the *default* configuration, and used by exactly two **opt-in** features (§10) — window restore (ADR-010) and the bottom-Dock guard (ADR-015, §10a). The kickoff package anticipated a required grant; the chosen mechanisms make it optional instead of unnecessary.
 - **System Settings**: only ever *opened for* the user (Login Items approval); nothing is changed on their behalf.
 - **Network**: no component makes network requests. The "Support Development" menu item opens the GitHub page in the user's browser — the only outbound anything, and it is user-initiated. CONFIRMED (code inspection).
 
@@ -209,7 +209,7 @@ Robust but restarts the Dock (visible). Used only when `CoreDock` is unavailable
 
 ### 5.1 Application state machine
 
-The kickoff package's state list, adapted: `Awaiting Permission` is dropped for v1 (no permission exists to await; it returns if a follow-window feature ever ships).
+The kickoff package's state list, adapted: `Awaiting Permission` is not a top-level app state. Two opt-in features await Accessibility (§10), but each surfaces its own waiting caption beside its own toggle rather than putting the whole app into a permission state — the app is fully functional without either.
 
 ```mermaid
 stateDiagram-v2
@@ -428,7 +428,7 @@ Kickoff principle 19: no continuous polling unless events are shown insufficient
 
 ## 10. Permissions
 
-**The default configuration requires no privacy-gated permission at all.** This is a meaningful improvement over the kickoff package's assumption that Accessibility permission was likely. Exactly one **optional, opt-in** feature touches a TCC permission — window restore (ADR-010) — and only when the user turns it on.
+**The default configuration requires no privacy-gated permission at all.** This is a meaningful improvement over the kickoff package's assumption that Accessibility permission was likely. Exactly two **optional, opt-in** features touch a TCC permission — window restore (ADR-010) and the bottom-Dock guard (ADR-015) — and only when the user turns them on. Neither is on by default, and each shows a contextual explanation before its one prompt.
 
 | Mechanism | Permission | Status |
 |---|---|---|
@@ -438,7 +438,8 @@ Kickoff principle 19: no continuous polling unless events are shown insufficient
 | `CGWindowListCopyWindowInfo` (read window geometry for restore) | None | CONFIRMED (public CG API; reading is permission-free) |
 | Workspace/display notifications | None | CONFIRMED |
 | `SMAppService` login item | User approval in System Settings (not a TCC permission) | CONFIRMED; `.requiresApproval` is detected and the app deep-links the user to the Login Items pane with an explanation (✅ v0.1) |
-| Accessibility (AX) — **opt-in window restore only** (ADR-010) | Accessibility, requested only if the user enables "Keep windows in place when pinning" | CONFIRMED required to *move* another app's window (`AXUIElementSetAttributeValue`/`kAXPositionAttribute`); off by default. Contextual explanation shown before the one prompt; revocation/denial = silent no-op + a "waiting for permission" caption with a deep link to the Accessibility pane. The preserver never prompts — the UI owns that (INFERRED coordinate-system assumption pending hardware validation) |
+| Accessibility (AX) — **opt-in window restore** (ADR-010) | Accessibility, requested only if the user enables "Keep windows in place when pinning" | CONFIRMED required to *move* another app's window (`AXUIElementSetAttributeValue`/`kAXPositionAttribute`); off by default. Contextual explanation shown before the one prompt; revocation/denial = silent no-op + a "waiting for permission" caption with a deep link to the Accessibility pane. The preserver never prompts — the UI owns that (INFERRED coordinate-system assumption pending hardware validation) |
+| Accessibility (AX) — **opt-in bottom-Dock guard** (ADR-015, §10a) | Accessibility, requested only if the user enables "Keep a bottom Dock on my preferred display" | CONFIRMED required for a `CGEventTap` that can *modify* events: without the grant `CGEventTapCreate` yields a tap that never fires. Off by default. `BottomDockGuard.decide` reports `.accessibilityNotGranted` rather than failing silently, and the toggle offers a deep link to the Accessibility pane. Fails **open** in every degraded state — no grant, refused tap, revoked grant, system-disabled tap — because the failure that matters is a trapped cursor, not an unguarded Dock |
 
 Consequences:
 
@@ -447,6 +448,61 @@ Consequences:
 - The `Log.accessibility` category (previously reserved) is now used by `WindowLayoutPreserver` — count-only, no window titles or app names (§12). The still-future follow-window feature would extend, not introduce, this permission posture.
 
 ---
+
+
+### 10a. Bottom-Dock guard (DK-FR-014 / ADR-015)
+
+The one mechanism that keeps a **bottom** Dock on a chosen display when
+*Displays have separate Spaces* is on. macOS hands a bottom Dock to whichever
+display the pointer summons it to, and no API moves it back — every relocation
+mechanism was tested and refuted on hardware (the [spike](spikes/separate-spaces-pinning.md)).
+So the guard **prevents the summon** instead of reversing it.
+
+**Split.** The decision is pure and lives in `DockKeeperCore`
+(`BottomDockGuard.decide`); the effect is an adapter in the app target
+(`BottomDockGuardTap`). The decision function takes a `Snapshot` — displays,
+preferred display, dock edge, separate-Spaces state, `appEnabled`,
+`featureEnabled`, `accessibilityTrusted` — and returns either
+`.idle(IdleReason)` or `.guarding(zones:skipped:)`. Every input is a value, so
+the whole policy is unit-testable with no display hardware.
+
+**Disqualification order is load-bearing.** App off → feature off → edge not
+bottom → separate Spaces off → single display → no preferred display →
+preferred display absent → Accessibility not granted → *then* geometry. Settings
+are evaluated before arrangement so a refusal always names the cause the user
+can act on, rather than blaming their monitors for a switch they left off.
+`appEnabled` and `featureEnabled` are carried separately, and required rather
+than defaulted, so a report can say which of the two switches is off (#63); the
+"required, not defaulted" part is the rule #65 established for guard inputs.
+
+**Geometry.** A `ClampZone` is emitted for each **non-preferred** display whose
+bottom edge is *free* — no other display flush beneath it. The tap pulls a
+pointer inside that band back to `maxY − 3`, altering `y` only. A display whose
+bottom edge is the crossing boundary to another screen is skipped, because
+holding that edge would trap the cursor; when skipping leaves nothing to guard,
+the decision is `.idle(.nothingToGuard)`. Mirrors of the preferred display are
+skipped for a different reason: same pixels, so a band on the "other" display
+lands on the one the user is looking at.
+
+**Fail open, always.** No grant, refused tap, revoked grant, system-disabled tap
+— every degraded state releases the pointer. The failure that matters here is a
+trapped cursor, not an unguarded Dock. An event tap is process-owned, so unlike
+ADR-013's borrowed auto-hide there is **no persisted state and no launch
+repair**: kill the process by any route and the pointer moves normally.
+
+**Known costs**, all recorded rather than mitigated: the bottom hot corners on
+guarded displays stop working; pause does **not** release the guard (pause
+suspends corrections, and prevention has no correction to resume — DK-FR-009 S2
+does not hold for a guarded display while this is on); and every pointer
+movement crosses the tap's callback on the main run loop while armed, which is
+the first continuous-cost mechanism in the app and is unmeasured against
+DK-NFR-001 (M6).
+
+**Evidence status.** That the clamp holds the pointer is CONFIRMED with a
+control (ADR-015). That a *real hand* cannot therefore complete the summon is
+**INFERRED** — it needs a two-display rig with free bottom edges, and is an open
+obligation, not a shipped claim. §3d of the [test strategy](test-strategy.md)
+carries the row.
 
 ## 11. Persistence
 
@@ -581,7 +637,7 @@ Targets (kickoff §6.14) — all currently **unmeasured**; measurement is a Mile
 |---|---|---|
 | **CoreDock private API (live set) + defaults fallback** | **Chosen for edge** — ADR-003, ratified 2026-07-22 | Only flicker-free mechanism; degrades gracefully via runtime `dlsym` (a removed symbol is a fallback, not a crash); CONFIRMED working. Deviates from "public APIs strongly preferred" — the fallback path *is* the public-ish contingency, and the kickoff allows private APIs with explicit owner approval |
 | Defaults write + `killall Dock` as *primary* | Rejected as primary, kept as fallback | Visible Dock restart on every correction; kills Dock state (badges, animations) |
-| Accessibility-driven interaction (AX drag/press on Dock) | Rejected | Requires Accessibility permission (v1 needs none), fragile against Dock UI changes, slow |
+| Accessibility-driven interaction (AX drag/press on Dock) | Rejected | Would require Accessibility permission for a mechanism that is on by *default* — §10's line is that the two AX features which did ship are opt-in — and it is fragile against Dock UI changes, and slow |
 | Pointer simulation / cursor warp | Rejected (spike option 3) | Hijacks the pointer; cannot hold placement |
 | **Main-display relocation via `CGConfigureDisplayOrigin`** | **Chosen for pinning (Decision 1)** | Public, reversible, transaction-based; cost: menu bar moves too (accepted, documented) |
 | Private SkyLight/CGS pinning | Rejected (Decision 1) | Owner declined the fragility/maintenance risk; could pin without moving the menu bar but breaks across releases |
@@ -643,7 +699,7 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | No telemetry / no unnecessary network / offline-capable | ✅ CONFIRMED by construction |
 | Native (no Electron/Tauri/web) | ✅ SwiftUI + AppKit |
 | Public/supported APIs strongly preferred | ⚠️ CoreDock is private — with a public-path fallback and runtime resolution; deviation formally ratified via ADR-003 (2026-07-22) |
-| Accessibility only when necessary + explained | ✅ exceeded: not used at all |
+| Accessibility only when necessary + explained | ✅ met: unused by default; two opt-in features request it, each with a contextual explanation before the prompt (§10) |
 | Event-driven over polling | ⚠️ 2 s poll is polling-first in spirit; §8.6 fixes to 30 s safety net |
 | MIT-suitable codebase | ✅ MIT LICENSE present |
 
@@ -656,7 +712,7 @@ Where each kickoff-required artifact/section stands. Status: ✅ done · 🟡 pa
 | M2 Display registry | ✅ (2026-07-23) fingerprint + scored matching + repair + migration; thresholds tune at M6 |
 | M3 Dock observation | ✅ (2026-07-22) events-only `DockMonitor` + typed `DockEvent`s; external-defaults KVO; Dock-restart detection dropped (spike: restarts benign) |
 | M4 Dock restoration | ✅ code complete (2026-07-22): `RecoveryCoordinator`/`RecoveryMachine` with ladder, cooldown, echo suppression, coalescing — unit-tested; 100-restore reliability run at M6 |
-| M5 Permission & onboarding | ✅-by-elimination: no permission needed; Login Items UX built |
+| M5 Permission & onboarding | ✅ two opt-in AX features (ADR-010, ADR-015), each explain-then-prompt with a Settings deep link; Login Items UX built |
 | M6 Reliability (hardware matrix) | ❌ blocked on 2-monitor rig; the top project risk |
 | M7 Release (signing, notarization, cask, docs) | ✅ shipped in v0.9.0 (2026-07-24) — icon, Developer ID signing, the two-ticket notarization pipeline, cask, and release checklist all landed |
 | (unplanned) CLI | ✅ shipped early — kickoff deferred it post-v1; harmless, keep |

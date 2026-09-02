@@ -1,6 +1,6 @@
 # Spike: Pinning the Dock in separate-Spaces mode (parity workstream)
 
-**Date started:** 2026-07-23 · **Status:** Core question RESOLVED same day (→ ADR-009 shipped); bottom-mode (G1) track open — probe written 2026-08-27, awaiting a run on a free-bottom-edge rig · **Drives:** ADR-008/009, implementation-plan M8
+**Date started:** 2026-07-23 · **Status:** Core question RESOLVED same day (→ ADR-009 shipped); bottom-mode (G1) **resolved 2026-08-27** — the clamp control ran on a free-bottom-edge rig and is ADR-015's Evidence; shipped opt-in in v0.9.3. What remains open is not the mechanism but the human-scale confirmation that a real hand cannot complete the summon ([test strategy §3d](../test-strategy.md) row 1) · **Drives:** ADR-008/009/015, implementation-plan M8
 
 ## Resolution (2026-07-23, hardware-confirmed)
 

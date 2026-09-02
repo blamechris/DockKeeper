@@ -26,7 +26,7 @@ macOS loves to relocate the Dock — after sleep, display changes, or when you l
 - **No Dock restart.** The classic fix — `defaults write com.apple.dock orientation left && killall Dock` — kills and relaunches the Dock every time. DockKeeper repositions it live through the `CoreDock` API, flicker-free, and keeps the `defaults`/`killall` route only as a runtime fallback.
 - **Event-driven, not a polling loop.** It reacts to sleep, wake, display, and preference events instead of running a timer.
 - **Nothing taken on trust.** No telemetry and no network code — and CI fails the build if a networking symbol, raw socket syscall, or networking framework shows up in either binary ([the gate](.github/workflows/ci.yml), [privacy statement](PRIVACY.md)).
-- **No required permissions.** Everything core runs with zero privacy-gated permissions. One optional feature (Keep windows in place) asks for Accessibility, and only if you turn it on.
+- **No required permissions.** Everything core runs with zero privacy-gated permissions. Two optional features — Keep windows in place, and Keep a bottom Dock on my preferred display — ask for Accessibility, and only if you turn them on.
 - **It won't fight your Mac.** An oscillation guard backs off instead of dueling other Dock-moving software, and cases macOS doesn't allow (a bottom Dock pinned while *separate Spaces* is on) get an explanation instead of a fight.
 
 An evidence-labeled, feature-by-feature comparison with the commercial alternative in this space lives in [docs/parity-assessment.md](docs/parity-assessment.md).
@@ -67,9 +67,10 @@ restarts.
 
 - Lock the Dock to **Bottom**, **Left**, or **Right** — flicker-free live repositioning
 - Automatic recovery after sleep, wake, display plug/unplug, resolution and arrangement changes — with burst coalescing, a retry ladder for slow wakes, and an oscillation guard that refuses to fight other software
-- **Preferred display:** keep the Dock on a chosen monitor. Works with *Displays have separate Spaces* **on** (the macOS default) for left/right Docks, and for any edge with it off
+- **Preferred display:** keep the Dock on a chosen monitor. Works with *Displays have separate Spaces* **on** (the macOS default) for left/right Docks, for any edge with it off, and — opt-in — for a bottom Dock via the guard below
 - Displays recognized by a **multi-signal fingerprint** (survives docks, adapters, and UUID churn; never guesses between identical monitors)
-- **Keep windows in place** (opt-in): restores your window layout after a display pin — the only feature that uses a permission (Accessibility), strictly optional
+- **Keep windows in place** (opt-in): restores your window layout after a display pin — one of the two features that use a permission (Accessibility), strictly optional
+- **Keep a bottom Dock on my preferred display** (opt-in): holds the pointer clear of the bottom edge on your other displays so macOS is never asked to move the Dock there. Needs Accessibility, two or more displays, and a bottom-edge lock. It does not move the Dock back, and it leaves a display unguarded when another screen sits flush beneath it, standing down entirely only when that leaves nothing to guard
 - **Pause** (15 min / 1 hour / until resumed) for temporary Dock moves, with an optional global hotkey (⌃⌥⌘D, off by default)
 - **Hide the Dock while screen sharing** (opt-in)
 - Automation: `dockkeeper` CLI, a `dockkeeper://` URL scheme, and Apple Shortcuts intents
@@ -85,10 +86,19 @@ restarts.
 > **A bottom Dock cannot be *moved back* once macOS hands it to another
 > display** — that is settled, and every relocation mechanism was tested on real
 > hardware. But it can be **prevented from leaving**, by guarding the pointer
-> gesture that triggers the hop; that mechanism is confirmed and is being
-> designed now (opt-in, needs Accessibility, bottom edge only). Until it ships,
-> use a left/right edge or turn the setting off. Evidence in
-> [the spike](docs/spikes/separate-spaces-pinning.md).
+> gesture that triggers the hop. That is what **Keep a bottom Dock on my
+> preferred display** (Preferences ▸ Advanced, off by default) does: it holds
+> the pointer a few points clear of the bottom edge on your *other* displays,
+> so the summon never completes. It needs Accessibility, at least two displays
+> and a bottom-edge lock; the bottom hot corners on the guarded displays stop
+> working while it is on; and it leaves a display unguarded when another screen
+> sits flush beneath it, because that edge is how your pointer travels between
+> them. If you would rather not use it, a left/right edge or turning the macOS
+> setting off both still work. Evidence in
+> [the spike](docs/spikes/separate-spaces-pinning.md) and
+> [ADR-015](docs/decision-log.md). The clamp itself is measured with a control;
+> that a real hand therefore cannot complete the summon has not yet been
+> observed on a two-display rig — see the CHANGELOG's *Known beta limits*.
 >
 > **This change is permanent, and turning DockKeeper off does not undo it.**
 > Pinning writes the display arrangement the same way System Settings does, so
@@ -101,7 +111,6 @@ restarts.
 
 ### Planned
 
-- Bottom-Dock pinning in separate-Spaces mode, by guarding the summon gesture (opt-in, Accessibility, bottom edge only, free-bottom-edge layouts only)
 - Follow mouse / active window / active app
 - Raycast extension; Shortcuts app discovery (the intents exist; the metadata packaging lands in v1.1 — the URL scheme works today)
 
