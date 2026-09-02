@@ -261,4 +261,25 @@ struct InstanceGuardSessionTests {
         let myJunior = InstancePeer(pid: 300, launchDate: newer, bundlePath: nil, uid: TestUID.me)
         #expect(decide(selfPID: 100, selfLaunchDate: older, peers: [myJunior]) == .proceed)
     }
+
+    @Test("A uid-less peer is dropped from the search without shadowing a real incumbent")
+    func unknownUIDDoesNotSuppressARealIncumbent() {
+        // `unknownUIDIsNotYieldedTo` pins the lone-peer half, where the right
+        // answer is `.proceed` either way. This pins the half where the guard
+        // still has work to do, and it kills a mutant that one cannot: the
+        // uid-less peer is deliberately the MOST senior, so a `sameSession`
+        // that admitted a nil uid would win `.min` and the bail would name a
+        // dead pid instead of the live incumbent.
+        //
+        // Note what this case does NOT reach. #48's own failure mode is every
+        // peer losing its uid at the single construction site; here `mine`
+        // keeps one, so the whole-list collapse is not exercised and cannot be
+        // — the compiler is what forecloses it now.
+        let corpse = InstancePeer(pid: 50, launchDate: Date(timeIntervalSince1970: 500),
+                                  bundlePath: "/Applications/DockKeeper.app", uid: nil)
+        let mine = InstancePeer(pid: 100, launchDate: older, bundlePath: nil, uid: TestUID.me)
+
+        #expect(decide(selfPID: 200, selfLaunchDate: newer, peers: [corpse, mine])
+                == .yield(to: mine))
+    }
 }

@@ -30,7 +30,40 @@ public struct InstancePeer: Equatable, Sendable {
     /// no extra syscall.
     public let uid: uid_t?
 
-    public init(pid: pid_t, launchDate: Date?, bundlePath: String?, uid: uid_t? = nil) {
+    public init(
+        pid: pid_t,
+        launchDate: Date?,
+        bundlePath: String?,
+        // Deliberately **not** defaulted, and the omission is the whole point.
+        // `decide` uses `sameSession(as:)` as a *filter* on the incumbent
+        // search and an unknown uid answers `false` there, so a peer built
+        // without one is dropped from candidacy. The one production
+        // construction site (`SingleInstance`) maps the whole peer list in a
+        // single expression, so an omission there drops every candidate at
+        // once: no incumbent found, `.proceed` returned, and the guard absent
+        // rather than merely weakened.
+        //
+        // What makes that uncatchable downstream is the *value*. `.proceed` is
+        // exactly what a working guard returns when this really is the only
+        // instance, so a total failure is indistinguishable from a success to
+        // every caller and every test — and `LSUIElement` removes the last
+        // observer, leaving no Dock tile, no ⌘-Tab entry and no Force Quit row
+        // in which two live copies would look like anything but one. A defect
+        // with no possible assertion downstream is caught at compile time or
+        // not at all.
+        //
+        // Requiring it also keeps `SingleInstance` the only *production*
+        // producer of a nil uid — the tests construct one deliberately — which
+        // is what makes `sameSession(as:)`'s "nil means the pid is already
+        // gone" true by construction rather than by convention.
+        //
+        // This is ADR-014's `StatusSummary.init(pauseRecord:)` precedent
+        // applied where it bites harder. There a default kept a stale
+        // hand-rolled copy compiling and the Shortcuts intent answered
+        // "enabled" through every real pause: a wrong *answer*. Here the same
+        // shortcut would disable a *mechanism*.
+        uid: uid_t?
+    ) {
         self.pid = pid
         self.launchDate = launchDate
         self.bundlePath = bundlePath
