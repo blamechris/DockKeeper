@@ -834,6 +834,22 @@ Given another display sits flush beneath a display we would guard
 Then that display is never clamped                             [CONFIRMED — unit test]
 And when no guardable display remains the guard stays idle
 Because clamping the crossing boundary would trap the pointer
+And the refusal is whole-display, so a partially overlapped
+    display is left unguarded and reported, not silently        [CONFIRMED — unit test;
+    dropped                                                     that a blocked edge
+                                                                also cannot host a
+                                                                summon is INFERRED,
+                                                                one observation]
+
+S11 — A display mirroring the preferred one is never guarded
+Given another display shows the same pixels as the preferred one
+Then no band is drawn on it                                     [CONFIRMED — unit test]
+Because that band would land on the only screen the user sees
+
+S12 — A zone never acts beyond the display it names
+Given a pointer location below a guarded display's own frame
+Then it is not clamped                                          [CONFIRMED — unit test]
+Because the gate authorising a zone proves only a local property
 
 S7 — Only non-preferred displays are guarded
 Given a preferred display and one other, both with free bottom edges
@@ -845,11 +861,14 @@ Then only its y is pulled back; x is untouched                 [CONFIRMED — un
 
 S9 — The guard dies with the process
 Given DockKeeper is killed, crashes, or the user logs out
-Then the tap stops filtering and the pointer moves normally    [by construction —
+Then the tap stops filtering and the pointer moves normally    [INFERRED (strong) —
                                                                 an event tap is
-                                                                process-owned; no
-                                                                launch repair needed,
-                                                                unlike DK-FR-013]
+                                                                process-owned, so no
+                                                                launch repair is
+                                                                needed, unlike
+                                                                DK-FR-013; argued,
+                                                                not yet demonstrated
+                                                                by a kill -9 run]
 
 S10 — A disabled tap is re-armed, not silently dropped
 Given macOS disables the tap for slowness or user input
@@ -862,7 +881,9 @@ Then DockKeeper re-enables it and counts the event             [INFERRED — the
 
 **Known cost.** A guarded display's bottom hot corners and its own Dock summon become unreachable while the guard is active. That is the feature working as specified, and the toggle's caption says so.
 
-**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 30 cases across three suites), including mutation coverage for the two ways this can be dangerously wrong: inverting the coordinate orientation (13 tests fail) and dropping the safety gate (7 fail). The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — and its end-to-end behavior against a real pointer is **INFERRED pending a two-display rig**.
+**The guard is not released while DockKeeper is paused**, and that is deliberate rather than an oversight: pause suspends *corrections*, and this feature has no correction to re-enforce afterwards — releasing it would be the one pause in the product that resume cannot undo, because relocation is impossible (ADR-015). DK-FR-009 S2's "the Dock may be moved freely" therefore does not hold for a bottom Dock on a guarded display while this feature is on. Precedent: DK-FR-011 likewise keeps mutating the Dock while paused.
+
+**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 41 cases across five suites), **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`): inverting the `beneath` comparison in `bottomEdgeIsFree` to Cocoa orientation — **7**; replacing `if bottomEdgeIsFree(index, among: frames)` with `if true` — **5**; returning `frame.minX` instead of `point.x` from `ClampZone.clamping` — **2**; dropping the `point.y < frame.maxY` bound from `ClampZone.contains` — **1**; removing the mirror refusal — **2**; widening `flushTolerance` from 1 to 2 — **1**. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — and its end-to-end behavior against a real pointer is **INFERRED pending a two-display rig**.
 
 ## DK-NFR-001: Quietness and resource budget
 

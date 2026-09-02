@@ -103,8 +103,13 @@ enum Diagnostics {
         switch decision {
         case .idle(let reason):
             return reason.explanation
-        case .guarding(let zones):
-            return "guarding \(zones.count) display(s)"
+        case .guarding(let zones, let skipped):
+            let base = "guarding \(zones.count) display(s)"
+            guard !skipped.isEmpty else { return base }
+            // Naming the uncovered displays matters: a whole-display refusal
+            // leaves spans that really can host a summon, so an unqualified
+            // "guarding" would overstate the coverage to whoever reads this.
+            return base + " (\(skipped.count) not covered — blocked edge or mirrored)"
         }
     }
 

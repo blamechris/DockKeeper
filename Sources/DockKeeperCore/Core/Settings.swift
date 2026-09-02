@@ -241,6 +241,11 @@ public final class Settings: @unchecked Sendable {
     /// and restores it afterward — only if the user wasn't already running
     /// auto-hide. Uses the private `CGSIsScreenWatcherPresent` detector; inert
     /// (and the toggle is disabled with a note) when the symbol is absent.
+    public var hideDockDuringScreenShare: Bool {
+        get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
+        set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
+    }
+
     /// Hold a bottom Dock on the preferred display in separate-Spaces mode by
     /// blocking the pointer summon (DK-FR-014, ADR-015). Opt-in and **false by
     /// default**: it is the only feature that needs Accessibility for a
@@ -249,11 +254,6 @@ public final class Settings: @unchecked Sendable {
     public var lockBottomDockToDisplay: Bool {
         get { defaults.bool(forKey: Keys.lockBottomDockToDisplay) }
         set { defaults.set(newValue, forKey: Keys.lockBottomDockToDisplay) }
-    }
-
-    public var hideDockDuringScreenShare: Bool {
-        get { defaults.bool(forKey: Keys.hideDockDuringScreenShare) }
-        set { defaults.set(newValue, forKey: Keys.hideDockDuringScreenShare) }
     }
 
     /// Breadcrumb saying "DockKeeper is holding Dock auto-hide ON for a screen

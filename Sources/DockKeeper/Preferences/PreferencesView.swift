@@ -81,6 +81,10 @@ private struct AdvancedTab: View {
             Text(state.bottomDockGuardCaption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if state.lockBottomDockToDisplay && !state.accessibilityGranted {
+                Button("Open Accessibility Settings") { state.openAccessibilitySettings() }
+                    .font(.caption)
+            }
 
             // DK-FR-013 S11 — the permanent home of the manual recovery.
             // Unconditional (only gated on CoreDock resolving), because the

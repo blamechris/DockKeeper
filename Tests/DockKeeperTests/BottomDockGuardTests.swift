@@ -46,8 +46,13 @@ private let externalRight = CGRect(x: 1728, y: 0, width: 3840, height: 2160)
 private let portraitAbove = CGRect(x: -919, y: -2160, width: 1440, height: 2160)
 
 private func zones(_ decision: BottomDockGuard.Decision) -> [BottomDockGuard.ClampZone] {
-    guard case .guarding(let z) = decision else { return [] }
+    guard case .guarding(let z, _) = decision else { return [] }
     return z
+}
+
+private func skipped(_ decision: BottomDockGuard.Decision) -> [CGDirectDisplayID] {
+    guard case .guarding(_, let s) = decision else { return [] }
+    return s
 }
 
 private func idleReason(_ decision: BottomDockGuard.Decision) -> BottomDockGuard.IdleReason? {
@@ -238,7 +243,7 @@ struct BottomDockGuardDecisionTests {
             snapshot(displays: [display(1, laptop, main: true), display(2, portraitAbove)]),
         ]
         for c in cases {
-            if case .guarding(let z) = BottomDockGuard.decide(c) {
+            if case .guarding(let z, _) = BottomDockGuard.decide(c) {
                 #expect(!z.isEmpty)
             }
         }
@@ -315,5 +320,159 @@ struct BottomDockGuardClampTests {
         for reason in reasons {
             #expect(!reason.explanation.isEmpty, "\(reason)")
         }
+    }
+}
+
+// MARK: - Regressions from the 2026-08-29 review panel
+
+@Suite("BottomDockGuard safety regressions")
+struct BottomDockGuardSafetyTests {
+
+    /// A zone must never act beyond the display it names. Without the
+    /// `point.y < frame.maxY` bound the band is an unbounded half-plane, and one
+    /// wrong frame — stale, mirrored, or transient — drags an entire other
+    /// display's pointer positions onto this one.
+    @Test("A zone never clamps a point below its own display")
+    func zoneIsBoundedBelow() {
+        let zone = BottomDockGuard.ClampZone(displayID: 1, frame: laptop)  // maxY 1117
+        #expect(BottomDockGuard.clamp(CGPoint(x: 100, y: 1116), zones: [zone]) != nil)
+        for y in [CGFloat(1117), 1200, 2159, 5000] {
+            #expect(
+                BottomDockGuard.clamp(CGPoint(x: 100, y: y), zones: [zone]) == nil,
+                "y=\(y) is on another display and must be untouched"
+            )
+        }
+    }
+
+    /// Mirror-set members have distinct display IDs and identical bounds, so the
+    /// preferred-ID check does not catch them. A band on "the other display"
+    /// would land on the only screen the user can see.
+    @Test("A display mirroring the preferred one is never guarded")
+    func mirrorOfPreferredIsRefused() {
+        let displays = [display(1, laptop, main: true), display(2, laptop)]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(zones(d).isEmpty)
+        #expect(idleReason(d) == .mirrorsPreferredDisplay)
+    }
+
+    @Test("A mirror is reported as mirroring, not as a blocked bottom edge")
+    func mirrorReasonIsDistinct() {
+        let displays = [display(1, laptop, main: true), display(2, laptop)]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        // Saying "a display sits directly below another" would be a false
+        // statement about the user's desk.
+        #expect(idleReason(d) != .nothingToGuard(blockedDisplayIDs: [2]))
+    }
+
+    @Test("A mirror alongside a genuine second display guards only the second")
+    func mirrorPlusRealDisplay() {
+        let displays = [
+            display(1, laptop, main: true),
+            display(2, laptop),            // mirrors the preferred
+            display(3, externalRight),     // genuinely separate
+        ]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(zones(d).map(\.displayID) == [3])
+        #expect(skipped(d) == [2])
+    }
+
+    /// Three displays in a vertical chain: only the bottom-most has a free
+    /// bottom edge, so guarding must be exactly one display, not two.
+    @Test("Vertical chain of three guards only the bottom-most")
+    func verticalChain() {
+        let top = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        let mid = CGRect(x: 0, y: 1000, width: 1000, height: 1000)
+        let bot = CGRect(x: 0, y: 2000, width: 1000, height: 1000)
+        let displays = [display(1, top, main: true), display(2, mid), display(3, bot)]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(zones(d).map(\.displayID) == [3])
+        #expect(skipped(d) == [2])
+    }
+
+    /// The invariant behind the whole safety gate, asserted directly rather than
+    /// inferred from individual arrangements.
+    @Test("No zone is ever emitted for a display with a blocked bottom edge")
+    func zonesNeverIncludeBlockedDisplays() {
+        let arrangements: [[DisplayInfo]] = [
+            [display(1, laptop, main: true), display(2, portraitAbove)],
+            [display(1, laptop, main: true), display(2, portraitAbove), display(3, externalRight)],
+            [display(1, CGRect(x: 0, y: 0, width: 1000, height: 1000), main: true),
+             display(2, CGRect(x: 0, y: 1000, width: 1000, height: 1000)),
+             display(3, CGRect(x: 0, y: 2000, width: 1000, height: 1000))],
+        ]
+        for displays in arrangements {
+            for preferred in displays.map(\.displayID) {
+                let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: preferred))
+                let frames = displays.map(\.frame)
+                for zone in zones(d) {
+                    let index = displays.firstIndex { $0.displayID == zone.displayID }!
+                    #expect(
+                        BottomDockGuard.bottomEdgeIsFree(index, among: frames),
+                        "zone emitted for blocked display \(zone.displayID)"
+                    )
+                }
+            }
+        }
+    }
+
+    /// Pins the tolerance itself. Changing `flushTolerance` from 1 to 2 left
+    /// every other test green.
+    @Test("Flush tolerance boundary is pinned at 1 point")
+    func flushToleranceIsPinned() {
+        let upper = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let gap09 = CGRect(x: 0, y: 100.9, width: 100, height: 100)
+        let gap10 = CGRect(x: 0, y: 101.0, width: 100, height: 100)
+        #expect(BottomDockGuard.bottomEdgeIsFree(0, among: [upper, gap09]) == false)
+        #expect(BottomDockGuard.bottomEdgeIsFree(0, among: [upper, gap10]))
+    }
+
+    /// A partially-overlapped display is refused whole, so the spans that really
+    /// can host a summon are left open. That is deliberate — see the docstring —
+    /// but it must be reported, not hidden behind an unqualified "guarding".
+    @Test("A partially overlapped display is skipped and reported, not silently dropped")
+    func partialOverlapIsReported() {
+        let external = CGRect(x: 0, y: 0, width: 3840, height: 2160)
+        let laptopUnder = CGRect(x: 1056, y: 2160, width: 1728, height: 1117)
+        let third = CGRect(x: 3840, y: 0, width: 1920, height: 1080)
+        let displays = [
+            display(1, laptopUnder, main: true), display(2, external), display(3, third),
+        ]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(zones(d).map(\.displayID) == [3])
+        #expect(skipped(d).contains(2))
+    }
+}
+
+// MARK: - The registered default (DK-FR-014 S1)
+
+@Suite("BottomDockGuard setting")
+struct BottomDockGuardSettingTests {
+
+    /// S1 claims the feature is off on a fresh install. Asserted against the
+    /// **registration domain** rather than by passing `featureEnabled: false`
+    /// into a Snapshot — the latter exercises the branch, not the default, and
+    /// would stay green if someone flipped the registered value to `true`.
+    @Test("Off on a fresh install")
+    func defaultsToOff() {
+        let settings = Settings(defaults: makeTestDefaults("bottomdockguard"))
+        #expect(settings.lockBottomDockToDisplay == false)
+    }
+
+    @Test("Round-trips once set")
+    func roundTrips() {
+        let settings = Settings(defaults: makeTestDefaults("bottomdockguard"))
+        settings.lockBottomDockToDisplay = true
+        #expect(settings.lockBottomDockToDisplay)
+        settings.lockBottomDockToDisplay = false
+        #expect(settings.lockBottomDockToDisplay == false)
+    }
+
+    /// The guard's tap is driven by the app, not by an external writer, so the
+    /// key is deliberately absent from `externallyObservedKeys` — but it IS
+    /// re-read in `syncFromSettings`, which is how a CLI edit reaches a running
+    /// app without a KVO storm.
+    @Test("Not externally observed")
+    func notExternallyObserved() {
+        #expect(!Settings.externallyObservedKeys.contains("lockBottomDockToDisplay"))
     }
 }

@@ -46,13 +46,25 @@ public enum BottomDockGuard {
     ///   screens. Clamping it would trap the cursor. This is what DockLock's own
     ///   `warn_incompatible_display` exists for, and it is a hard refusal here,
     ///   never an optimization.
-    /// - **Necessity.** A blocked bottom edge cannot host a summon either: the
-    ///   pointer crosses into the display beneath instead of dwelling, so the
-    ///   Dock cannot be called there. Confirmed 2026-07-23 on the stacked
-    ///   portrait rig — not even a real hand could summon there.
+    /// - **Necessity — INFERRED, and weaker than it first reads.** A blocked
+    ///   bottom edge is *believed* not to host a summon either: the pointer
+    ///   crosses into the display beneath instead of dwelling. That rests on a
+    ///   single owner observation on one stacked portrait rig, immediately
+    ///   followed in the spike by "whether any harder push can summon on a
+    ///   shared edge is UNKNOWN" — and that rig was itself majority-free, with
+    ///   roughly two thirds of the edge unobstructed. Do not quote it as
+    ///   CONFIRMED.
     ///
-    /// Together they mean a blocked display is both unguardable and not in need
-    /// of guarding, so `decide` simply emits no zone for it.
+    /// Safety is the reason a blocked display is skipped; necessity is only the
+    /// reason skipping it is *believed* to cost nothing. **The refusal is whole-
+    /// display**: any horizontal overlap, however small, blocks the entire edge,
+    /// so a display overlapped in its middle is left unguarded across spans that
+    /// really can host a summon. `decide` reports those in `skipped` rather than
+    /// claiming full coverage. Per-free-span clamping would close that, and is
+    /// deliberately not done here — it would extend clamping on the strength of
+    /// an UNKNOWN, and trade a structural guarantee (a whole-display refusal
+    /// cannot mis-compute an interval) for interval arithmetic that has to be
+    /// right. Rig first, code second.
     ///
     /// **Coordinates are Core Graphics global, top-left origin** — the space
     /// `CGDisplayBounds` and therefore `DisplayInfo.frame` use, and the space an
@@ -131,8 +143,20 @@ public enum BottomDockGuard {
         /// Whether `point` (CG global, top-left) falls in this zone's guarded
         /// band. Horizontal containment is half-open on the right so two
         /// side-by-side displays never both claim the seam.
+        ///
+        /// **Bounded below by `frame.maxY`, and that bound is load-bearing.**
+        /// Without it the band is an unbounded half-plane: every point below
+        /// `clampY` anywhere on the desktop matches, so one wrong frame — stale,
+        /// mirrored, or transient during reconfiguration — stops being a local
+        /// nuisance and yanks an entire other display's worth of pointer
+        /// positions onto this one. The gate that authorises a zone
+        /// (`bottomEdgeIsFree`) only proves something about a one-point
+        /// neighbourhood beneath the edge, so a zone must not act on more than
+        /// the display it names. Keeping the two predicates the same shape caps
+        /// the blast radius of failure modes nobody has thought of yet.
         public func contains(_ point: CGPoint) -> Bool {
-            point.x >= frame.minX && point.x < frame.maxX && point.y > clampY
+            point.x >= frame.minX && point.x < frame.maxX
+                && point.y > clampY && point.y < frame.maxY
         }
 
         /// `point` with its `y` pulled back to the band's upper limit. `x` is
@@ -163,15 +187,26 @@ public enum BottomDockGuard {
         /// The tap cannot be created without an Accessibility grant.
         case accessibilityNotGranted
         /// Every non-preferred display has a blocked bottom edge, so none can
-        /// host a summon and none may be clamped. Refusing here is correct on
-        /// both counts, not a limitation.
+        /// be clamped. Refusing is a safety requirement; whether such a display
+        /// also cannot host a summon is INFERRED (see `bottomEdgeIsFree`).
         case nothingToGuard(blockedDisplayIDs: [CGDirectDisplayID])
+        /// Every other display mirrors the preferred one — same pixels, so a
+        /// band drawn on the "other" display lands on the one the user is
+        /// looking at. Nothing to guard, and guarding would be actively wrong.
+        case mirrorsPreferredDisplay
     }
 
     public enum Decision: Sendable, Equatable {
         case idle(IdleReason)
-        /// Hold these bands. Never empty.
-        case guarding([ClampZone])
+        /// Hold these bands. `zones` is never empty.
+        ///
+        /// `skipped` names displays that were deliberately **not** guarded —
+        /// a blocked bottom edge, or a mirror of the preferred display. Carried
+        /// so the UI can say "active, and not covering these" instead of an
+        /// unqualified "active": a partially-overlapped display is refused
+        /// whole, and the user is entitled to know the Dock can still be
+        /// summoned there.
+        case guarding(zones: [ClampZone], skipped: [CGDirectDisplayID])
     }
 
     // MARK: - Decision
@@ -196,12 +231,35 @@ public enum BottomDockGuard {
         }
         guard snapshot.accessibilityTrusted else { return .idle(.accessibilityNotGranted) }
 
+        guard let preferredFrame = snapshot.displays
+            .first(where: { $0.displayID == preferredID })?.frame
+        else { return .idle(.preferredDisplayNotConnected) }
+
         let frames = snapshot.displays.map(\.frame)
         var zones: [ClampZone] = []
         var blocked: [CGDirectDisplayID] = []
+        var mirrored: [CGDirectDisplayID] = []
 
         for (index, display) in snapshot.displays.enumerated() {
             guard display.displayID != preferredID else { continue }
+
+            // A mirror of the preferred display shares its pixels, so a band on
+            // "the other display" is drawn on the screen the user is actually
+            // looking at — the Dock becomes unsummonable on the only visible
+            // surface. Mirror-set members have distinct display IDs and
+            // identical bounds, so the ID check above does not catch them.
+            //
+            // Tested by intersection rather than by CGDisplayMirrorsDisplay on
+            // purpose: it keeps this decision pure and hardware-free, and it
+            // also covers a transiently overlapping bounds report during
+            // reconfiguration, which a mirror-specific query would not.
+            // `CGRect.intersects` is false for edge-adjacent rects, so no real
+            // side-by-side or stacked arrangement is disturbed.
+            guard !display.frame.intersects(preferredFrame) else {
+                mirrored.append(display.displayID)
+                continue
+            }
+
             if bottomEdgeIsFree(index, among: frames) {
                 zones.append(ClampZone(displayID: display.displayID, frame: display.frame))
             } else {
@@ -209,8 +267,14 @@ public enum BottomDockGuard {
             }
         }
 
-        guard !zones.isEmpty else { return .idle(.nothingToGuard(blockedDisplayIDs: blocked)) }
-        return .guarding(zones)
+        guard !zones.isEmpty else {
+            // Mirror-only is its own reason: telling the user "a display sits
+            // directly below another" when their screens are mirrored is a false
+            // statement about their desk.
+            if blocked.isEmpty && !mirrored.isEmpty { return .idle(.mirrorsPreferredDisplay) }
+            return .idle(.nothingToGuard(blockedDisplayIDs: blocked))
+        }
+        return .guarding(zones: zones, skipped: blocked + mirrored)
     }
 
     /// Applies the zones to a pointer location, or returns `nil` when the
@@ -249,6 +313,8 @@ extension BottomDockGuard.IdleReason {
         case .nothingToGuard(let blocked):
             return "idle — no guardable display "
                 + "(\(blocked.count) with a blocked bottom edge; clamping one would trap the pointer)"
+        case .mirrorsPreferredDisplay:
+            return "idle — the other display mirrors the preferred one"
         }
     }
 }

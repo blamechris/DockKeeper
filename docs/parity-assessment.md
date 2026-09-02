@@ -19,7 +19,7 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 
 | Capability | DockLock (edition) | DockKeeper today | Verdict |
 |---|---|---|---|
-| Pin Dock to display — separate Spaces ON, **bottom** Dock | ✓ core (Lite) | ✓ opt-in guard (DK-FR-014, ADR-015) — on-device confirmation open | **G1 closed by prevention** 2026-08-29 |
+| Pin Dock to display — separate Spaces ON, **bottom** Dock | ✓ core (Lite) | ✓ opt-in guard (DK-FR-014, ADR-015) — on-device confirmation open | **G1 closed pending on-device confirmation** 2026-08-29 |
 | Pin Dock to display — separate Spaces ON, **left/right** Dock | ✗ (bottom-only) | ✓ ADR-009, hardware-confirmed | **DockKeeper leads** |
 | Pin Dock — separate Spaces **OFF** | ✗ (requires the setting ON); "Pro" claims it, unreleased | ✓ (mechanism confirmed; final observation pending logout cell) | **DockKeeper leads** |
 | Any-edge Dock (bottom/left/right) lock | ✗ (bottom-only; "Pro" claims any-edge, unreleased) | ✓ shipped | **DockKeeper leads** |
@@ -62,4 +62,4 @@ Evidence labels: **CONFIRMED** · **INFERRED** · **PROPOSED** · **UNKNOWN**. D
 5. **G2/G3** (follow modes) — after G1; design constrained by the re-base cost.
 6. **G7/G8** — post-release.
 
-With G4+G5+G6 shipped and **G1 shipped opt-in on 2026-08-29**, DockKeeper now covers every *shipping* DockLock capability — by prevention rather than relocation, which is almost certainly what DockLock does too (INFERRED from constraint-fit, not reverse-engineered). G1's on-device confirmation remains open. G2/G3 close the premium tier.
+With G4+G5+G6 shipped and **G1 shipped opt-in on 2026-08-29**, DockKeeper has an implementation for every *shipping* DockLock capability — by prevention rather than relocation, which is almost certainly what DockLock does too (INFERRED from constraint-fit, not reverse-engineered). G1's on-device confirmation remains open. G2/G3 close the premium tier.

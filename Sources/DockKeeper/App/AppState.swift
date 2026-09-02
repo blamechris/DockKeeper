@@ -149,7 +149,17 @@ final class AppState: ObservableObject {
     /// is a silent no-op that `--diagnostics` explains.
     @Published var lockBottomDockToDisplay: Bool {
         didSet {
+            // Guarded like every other synced setting: without it, a CLI write
+            // arriving through `syncFromSettings` would raise an unsolicited
+            // system permission dialog, which DK-FR-014 S5 forbids.
+            guard !isSyncingFromExternal else { return }
             settings.lockBottomDockToDisplay = lockBottomDockToDisplay
+            // ADR-010's pattern, which ADR-015 claims to follow: prompt once, on
+            // enable, only when untrusted. Without this the toggle is inert and
+            // the caption asks for a permission nothing ever requests.
+            if lockBottomDockToDisplay, !AXIsProcessTrusted() {
+                requestAccessibilityPermission()
+            }
             applyBottomDockGuard()
         }
     }
@@ -219,6 +229,11 @@ final class AppState: ObservableObject {
                 self.syncFromSettings()
             case .displayReconfigured, .screenParametersChanged:
                 self.refreshDisplays()
+            case .pollTick:
+                // ADR-005's safety net now covers the guard's geometry too: a
+                // missed reconfiguration event would otherwise leave clamp zones
+                // computed from frames that no longer describe the desk.
+                self.refreshDisplays()
             default:
                 break
             }
@@ -234,6 +249,18 @@ final class AppState: ObservableObject {
             self.pausedUntil = self.coordinator.pausedUntil
         }
         hotKeyCenter.onHotKey = { [weak self] in self?.togglePause() }
+        // Accessibility is granted in System Settings, i.e. in another app. The
+        // Preferences view already polls on appear and on activation, but a user
+        // who closes Preferences, grants, and comes back would never re-arm — the
+        // observer has to live on AppState, not on the view.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshAccessibilityStatus() }
+        }
+
         screenShareHider.onTransition = { [weak self] transition in
             // State only — no PII (DK-PRIV-001 S2). Mirrors the pin/state notes.
             FileDiagnostics.shared.note("screenshare", transition.rawValue)
@@ -523,8 +550,12 @@ final class AppState: ObservableObject {
     /// broken (the same reasoning as ADR-010's "waiting for permission").
     var bottomDockGuardCaption: String {
         switch bottomDockGuardDecision {
-        case .guarding(let zones):
-            return "Active — holding the bottom edge on \(zones.count) other display(s)."
+        case .guarding(let zones, let skipped):
+            let base = "Active — holding the bottom edge on \(zones.count) other display(s)."
+            guard !skipped.isEmpty else { return base }
+            return base + " \(skipped.count) display(s) are not covered, because another display "
+                + "overlaps their bottom edge or mirrors your preferred one — the Dock can still "
+                + "be summoned there."
         case .idle(.featureDisabled):
             return ""
         case .idle(.accessibilityNotGranted):
@@ -534,6 +565,9 @@ final class AppState: ObservableObject {
             return "Not available on this arrangement: a display sits directly below another, "
                 + "so the bottom edge is the route the pointer takes between them. Holding it "
                 + "would trap your cursor."
+        case .idle(.mirrorsPreferredDisplay):
+            return "Not available while your displays are mirrored — they show the same pixels, "
+                + "so there is no second bottom edge to hold."
         case .idle(let reason):
             return "Inactive — \(reason.explanation.replacingOccurrences(of: "idle — ", with: ""))."
         }
@@ -573,7 +607,16 @@ final class AppState: ObservableObject {
     /// the Advanced tab on appear and on app reactivation.
     func refreshAccessibilityStatus() {
         let granted = AXIsProcessTrusted()
-        if granted != accessibilityGranted { accessibilityGranted = granted }
+        guard granted != accessibilityGranted else { return }
+        accessibilityGranted = granted
+        // Publishing the flag re-renders the view but does not re-run the
+        // decision, so without this the guard never arms after the user grants —
+        // and the caption keeps asking for a permission they already gave. The
+        // latch is symmetric: a revoked grant must release the tap too.
+        // `refreshDisplays()` rather than `applyBottomDockGuard()` because the
+        // arrangement may have changed while the user was in System Settings,
+        // and stale frames are what make a clamp dangerous.
+        refreshDisplays()
     }
 
     /// Deep-link to the Accessibility pane so the user can grant the permission.
@@ -625,6 +668,18 @@ final class AppState: ObservableObject {
         applyScreenShareHiderState()
         // Same for the bottom-Dock guard: disabling DockKeeper must not leave an
         // event tap clamping the pointer.
+        //
+        // On the enable path the geometry must be re-read first. `displays` is
+        // only written by `refreshDisplays()`, whose sole caller is the monitor's
+        // reconfiguration arm — and `monitor.stop()` removes those observers
+        // while `start()` emits no initial event. So across disable → rearrange →
+        // enable the frames are stale, and a clamp computed from an arrangement
+        // that no longer exists is exactly the trapped-pointer case. Ends in
+        // `applyBottomDockGuard()` itself, so the call below is a harmless
+        // idempotent repeat on this path.
+        if isEnabled {
+            refreshDisplays()
+        }
         applyBottomDockGuard()
     }
 
@@ -736,6 +791,9 @@ final class AppState: ObservableObject {
         defer { isSyncingFromExternal = false }
         if lockEdge != settings.lockEdge {
             lockEdge = settings.lockEdge
+        }
+        if lockBottomDockToDisplay != settings.lockBottomDockToDisplay {
+            lockBottomDockToDisplay = settings.lockBottomDockToDisplay
         }
         refreshPreferredSelection()
         if isEnabled != settings.isEnabled {

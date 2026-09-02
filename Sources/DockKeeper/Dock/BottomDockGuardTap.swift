@@ -45,7 +45,7 @@ final class BottomDockGuardTap {
         switch decision {
         case .idle:
             stop()
-        case .guarding(let newZones):
+        case .guarding(let newZones, _):
             zones = newZones
             if tap == nil { start() }
         }
@@ -88,6 +88,13 @@ final class BottomDockGuardTap {
         }
 
         let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, created, 0)
+        // `handle` uses `MainActor.assumeIsolated`, which is a hard crash if the
+        // callback ever runs off the main thread. Its soundness rests entirely on
+        // this source living on the main run loop. The standard cure for a slow
+        // event tap is to move it to a dedicated thread with its own run loop —
+        // a refactor that would silently turn both `assumeIsolated` calls into
+        // crashes, so the invariant is asserted here rather than left in prose.
+        precondition(Thread.isMainThread, "BottomDockGuardTap must be started on the main thread")
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: created, enable: true)
 
@@ -151,11 +158,16 @@ final class BottomDockGuardTap {
         Log.app.notice("Bottom-Dock guard: tap re-enabled after \(reason, privacy: .public)")
     }
 
-    // No `deinit` cleanup, deliberately. The port is main-actor isolated and a
-    // `deinit` is not, so it cannot legally touch it — and it does not need to.
-    // An event tap is owned by the process: it stops filtering the moment the
-    // process exits, by any route, including SIGKILL. That is the whole reason
-    // this feature needs no launch-time repair, unlike the borrowed Dock
-    // auto-hide of ADR-013, which survives its owner and therefore does.
-    // `AppState.prepareForTermination()` calls `stop()` for the ordinary path.
+    /// Releasing an armed tap without this would leave a live `CFMachPort` on the
+    /// main run loop holding `Unmanaged.passUnretained(self)` — `CFRunLoopAddSource`
+    /// retains the source, which retains the port, which carries that raw pointer —
+    /// so the next mouse event would dereference freed memory. A plain `deinit`
+    /// cannot call the main-actor-isolated `stop()`; `isolated deinit` can.
+    ///
+    /// This is belt and braces, not the main mechanism. An event tap is owned by
+    /// the process and stops filtering the moment it exits by any route, SIGKILL
+    /// included — which is why this feature needs no launch-time repair, unlike
+    /// ADR-013's borrowed Dock auto-hide, which survives its owner and therefore
+    /// does. `AppState.prepareForTermination()` calls `stop()` on the ordinary path.
+    isolated deinit { stop() }
 }
