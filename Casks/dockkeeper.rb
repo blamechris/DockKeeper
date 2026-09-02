@@ -5,8 +5,8 @@
 # package-dmg.sh's hash is pre-staple and will not match what users download.
 # Submit to homebrew/cask central once notability requirements are met.
 cask "dockkeeper" do
-  version "0.9.2"
-  sha256 "20d6e3135a99d2752b3172d9681ea92ffb2059ef67963be89f2bf011d1272309"
+  version "0.9.3"
+  sha256 "469f2ba134f68b749b2202d3f8c3ca0455040c9f23ae080fa23b10fa9e53c41d"
 
   url "https://github.com/blamechris/DockKeeper/releases/download/v#{version}/DockKeeper-#{version}.dmg"
   name "DockKeeper"
@@ -25,7 +25,7 @@ cask "dockkeeper" do
   # directives during an upgrade (`cask/upgrade.rb` loads `old_cask` via
   # `CaskLoader.load_from_installed_caskfile`), and 0.9.0/0.9.1 shipped no
   # `uninstall` stanza — so this takes effect for upgrades FROM 0.9.2 onward. The
-  # 0.9.1 -> 0.9.2 upgrade is carried by `caveats` and the CHANGELOG instead.
+  # 0.9.1 -> 0.9.2 upgrade was carried by `caveats` and the CHANGELOG instead.
   #
   # `quit:` sends a real Quit Apple Event, so the DK-FR-013 auto-hide restore runs
   # on the way out. `signal:` is the backstop for a copy that does not answer it:
