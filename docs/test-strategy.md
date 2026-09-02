@@ -102,7 +102,18 @@ So the three states are: **LS-launched bundled** (identifier, path, `launchDate`
 
 Two cautions for whoever runs the rest of this matrix, both learned the hard way:
 
-- **Probe bundles outlive the session that made them.** A `Probe.app` from an earlier session was still checked in with LaunchServices, and still running, 37 minutes after that session ended. It was harmless only because it claimed `com.example.dkprobeapp`; a probe that reuses `com.dockkeeper.app` would have silently contaminated every row above. Check `lsappinfo list | grep -B2 'bundleID="com.dockkeeper.app"'` before trusting a result, and expect exactly one entry.
+- **Probe bundles outlive the session that made them — and a same-identifier one captures the login item.** A `Probe.app` from an earlier session was still checked in with LaunchServices, and still running, 37 minutes after that session ended. It was harmless only because it claimed `com.example.dkprobeapp`.
+
+  One that reuses `com.dockkeeper.app` is **not** harmless, and this is measured rather than feared. A HEAD build staged at `/Users/Shared/DockKeeper-HEAD.app` on 2026-08-18 for §3b row 1 was still the **running** DockKeeper on 2026-09-02 — eleven days and many logins later, launched every time in place of `/Applications/DockKeeper.app`. `SMAppService.mainApp` registers the login item by **bundle identifier, not by path**, so with two bundles claiming the identifier the resolution is LaunchServices' to make, and it did not pick the installed one. The owner had been running an unreleased build as their daily driver without knowing.
+
+  So: a second bundle claiming `com.dockkeeper.app` must exist only for the minutes a row needs it, and be deleted in the same sitting. Before trusting *any* row, and again after finishing one:
+
+  ```bash
+  lsappinfo list | grep -c 'bundleID="com.dockkeeper.app"'   # expect exactly 1
+  ps -axo pid,user,comm | grep -w '[D]ockKeeper'             # expect /Applications
+  ```
+
+  Note also that `mdfind "kMDItemCFBundleIdentifier == 'com.dockkeeper.app'"` finds every *installed* claimant, running or not — the set that matters for the login item — while `lsappinfo` shows only what is checked in right now.
 - **Rows 6, 8 and 9 need no build gate and no second account.** They were previously grouped with the blocked rows; they are not. Rows 3, 4 and 5 do need the incumbent quit, and were run that way on 2026-08-18. Only rows 1 and 2 are left, and neither is blocked on tooling — they need a second local account and a real logout.
 
 ### 3c. Manual termination / crash-recovery tests (no hardware gate)
