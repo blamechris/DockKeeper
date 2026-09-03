@@ -102,16 +102,15 @@ final class BottomDockGuardTap {
         source = runLoopSource
         clampCount = 0
         reenableCount = 0
-        // Zones, not displays: a display overhanging another contributes one
-        // zone per free span (#83), so counting zones as displays would report
-        // two screens guarded when there is one. The log is read as evidence
-        // that the tap armed — `--diagnostics` re-derives and cannot see a live
-        // tap (#77/#78) — so it must not overstate what armed.
-        let spanCount = zones.count
-        let displayCount = Set(zones.map(\.displayID)).count
-        Log.app.notice(
-            "Bottom-Dock guard: armed over \(spanCount, privacy: .public) span(s) on \(displayCount, privacy: .public) display(s)"
-        )
+        // Built in Core so the counts it claims are reachable from a test
+        // (#84). This log is read as the evidence that the tap armed —
+        // `--diagnostics` re-derives and cannot see a live tap (#77/#78) — so
+        // what it says must not overstate what armed.
+        // Hoisted out of the interpolation on purpose: `Logger`'s interpolation
+        // is an autoclosure, so building the line inside it would read
+        // main-actor state from a closure the logger evaluates on its own terms.
+        let armed = BottomDockGuard.armedLogLine(zones: zones)
+        Log.app.notice("\(armed, privacy: .public)")
     }
 
     func stop() {

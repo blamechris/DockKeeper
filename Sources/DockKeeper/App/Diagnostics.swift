@@ -101,42 +101,11 @@ enum Diagnostics {
                 accessibilityTrusted: AXIsProcessTrusted()
             )
         )
-        switch decision {
-        case .idle(let reason):
-            return reason.explanation
-        case .guarding(let zones, let skipped, let partial):
-            // Distinct displays, never `zones.count`: since #83 one display
-            // contributes one zone per free span, so counting zones would
-            // report two displays guarded where a single overhanging display
-            // is guarded twice over. Spans are named alongside so the figure
-            // is not silently a different unit than the one v0.9.3 printed.
-            let guarded = Set(zones.map(\.displayID)).count
-            var base = "guarding \(guarded) display(s) over \(zones.count) span(s)"
-            if !partial.isEmpty {
-                // Partial is not "not covered", and conflating the two is how a
-                // report overstates coverage in one direction or understates it
-                // in the other. Say which, and say what is left open.
-                base += "; \(partial.count) partly covered "
-                    + "(the strips above other displays stay open — they are the route between them)"
-            }
-            if !skipped.isEmpty {
-                // Naming the uncovered displays matters: a display whose bottom
-                // edge is blocked along its whole length is not guarded at all,
-                // so an unqualified "guarding" would overstate the coverage to
-                // whoever reads this.
-                base += "; \(skipped.count) not covered (blocked edge or mirrored)"
-            }
-            // `Paused:` sits directly below this one, and both are new in this
-            // release, so this is the first build whose report can pair a
-            // guarding decision with an active pause. Read cold that looks self-contradictory.
-            // It is not: pause suspends *corrections*, and the guard is prevention
-            // with nothing to resume (DK-FR-014 Known cost, #62). Qualify rather
-            // than suppress — the same rule #69 applied to `status`.
-            if settings.pauseRecord != nil {
-                base += "; unaffected by the pause below (this feature is not released by pausing)"
-            }
-            return base
-        }
+        // Wording and counts live in Core so they are testable (#84); the
+        // pause read stays here because it is I/O, and the renderer is pure.
+        return BottomDockGuard.diagnosticsLine(
+            for: decision, paused: settings.pauseRecord != nil
+        )
     }
 
     /// Whether corrections are suspended (DK-FR-009) — the support answer to

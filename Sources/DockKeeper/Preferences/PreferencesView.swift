@@ -77,8 +77,13 @@ private struct AdvancedTab: View {
             Toggle("Keep a bottom Dock on my preferred display", isOn: $state.lockBottomDockToDisplay)
             // "so the Dock is never called away" overstated what is actually
             // established: ADR-015 confirms the clamp holds the pointer (with a
-            // control), but that a real hand cannot complete the summon is still
-            // INFERRED. The caption states the mechanism, not the outcome. The
+            // control), and since 2026-09-02 that a real hand cannot complete the
+            // summon is CONFIRMED on device with a control too (§3d row 1). What
+            // is still open is the *crossing* under per-span zones (§3d row 9),
+            // which this paragraph's last sentence is about. The comment said
+            // "still INFERRED" until 2026-09-03, carrying a status word the ADR
+            // had already corrected — the staleness #89 is about.
+            // The caption states the mechanism, not the outcome. The
             // hot-corner cost is named here because it is the one thing the user
             // gives up, and two docs already claimed this caption said so.
             Text("Off by default. With \u{201C}Displays have separate Spaces\u{201D} on, macOS gives a bottom Dock to whichever display you push the pointer to. DockKeeper holds the pointer a few points clear of the bottom edge on your other displays, so the gesture that summons it there is not completed — it does not move the Dock back, which macOS does not allow. While this is on, the bottom hot corners on those displays stop working. Where one display sits directly above another, the overlapping strip is left unguarded — that is the route your pointer takes between them — so the Dock can still be summoned there.")
