@@ -45,32 +45,59 @@ private func snapshot(
     )
 }
 
-/// Every idle reason, in one list. `nothingToGuard` carries an associated value;
-/// one blocked display is enough to render it.
+/// Every idle reason — **derived from a total switch, not kept as a second
+/// list.** `nextIdleReason` has no `default`, so adding a case to `IdleReason`
+/// fails the build inside the very function this list is built from.
 ///
-/// **The list is hand-maintained, and `exhaustivenessGuard` below is what stops
-/// that being a promise.** `IdleReason` cannot be `CaseIterable` — one case has
-/// an associated value — so completeness is borrowed from the compiler instead:
-/// adding a case to the enum stops this file compiling, which forces whoever
-/// adds it to visit the list. Without that, a new reason would ship through
-/// `caption`'s generic fallback with no coverage and every sweep here still
-/// green, because they all measure themselves against this same list.
-private let allIdleReasons: [BottomDockGuard.IdleReason] = [
-    .appDisabled, .featureDisabled, .edgeNotBottom, .separateSpacesOff,
-    .singleDisplay, .noPreferredDisplay, .preferredDisplayNotConnected,
-    .accessibilityNotGranted, .nothingToGuard(blockedDisplayIDs: [2]),
-    .mirrorsPreferredDisplay,
-]
+/// The previous version of this file kept a literal array beside a switch whose
+/// only job was to fail the build, and a comment claiming that "forces whoever
+/// adds a case to visit the list". Round 2 of review disproved it by doing the
+/// lazy thing: add a case, apply the compiler's own one-line fix to the switch,
+/// leave the array at ten entries — 86 tests green, and the new reason shipping
+/// through `caption`'s generic fallback with no coverage. That is verbatim the
+/// outcome the comment said it prevented. Correcting an overclaim with a second
+/// overclaim is how this file earned two review rounds.
+///
+/// **What this construction actually guarantees, and no more:** the build fails
+/// at the list's own definition, and the edit that fixes it is a line *in* the
+/// chain, so the lazy fix and the correct fix are the same edit. **What it does
+/// not guarantee:** a case whose successor is named while nothing names *it* is
+/// still unreachable. Swift cannot close that gap — `IdleReason` carries an
+/// associated value, so it cannot be `CaseIterable`, and no construction can
+/// enumerate it. The cycle is closed (`nextIdleReason` returns a non-optional,
+/// so there is no `nil` to truncate it with) and `chainIsWellFormed` fails if
+/// the walk does not come back round, which is as far as the language goes.
+private let allIdleReasons: [BottomDockGuard.IdleReason] = {
+    var out: [BottomDockGuard.IdleReason] = [.appDisabled]
+    var reason = nextIdleReason(.appDisabled)
+    // Bounded so a malformed cycle fails a test rather than hanging the runner —
+    // a test that hangs is worse than one that fails, and this file has already
+    // been bitten once by an assertion that aborted the process.
+    while reason != .appDisabled && out.count < 64 {
+        out.append(reason)
+        reason = nextIdleReason(reason)
+    }
+    return out
+}()
 
-/// Compiles only while `allIdleReasons` covers every case. Never called: its
-/// whole job is to fail the build when `IdleReason` gains a case, so the
-/// omission cannot be silent. Deliberately has no `default`.
-private func exhaustivenessGuard(_ reason: BottomDockGuard.IdleReason) {
+/// Total by construction, and **cyclic**: each case names the next, and the last
+/// names the first. The return type is non-optional on purpose — an optional
+/// would let a new case be satisfied with `nil`, silently truncating the chain.
+private func nextIdleReason(
+    _ reason: BottomDockGuard.IdleReason
+) -> BottomDockGuard.IdleReason {
     switch reason {
-    case .appDisabled, .featureDisabled, .edgeNotBottom, .separateSpacesOff,
-         .singleDisplay, .noPreferredDisplay, .preferredDisplayNotConnected,
-         .accessibilityNotGranted, .nothingToGuard, .mirrorsPreferredDisplay:
-        break
+    case .appDisabled:                  return .featureDisabled
+    case .featureDisabled:              return .edgeNotBottom
+    case .edgeNotBottom:                return .separateSpacesOff
+    case .separateSpacesOff:            return .singleDisplay
+    case .singleDisplay:                return .noPreferredDisplay
+    case .noPreferredDisplay:           return .preferredDisplayNotConnected
+    case .preferredDisplayNotConnected: return .accessibilityNotGranted
+    // One blocked display is all this reason's explanation renders.
+    case .accessibilityNotGranted:      return .nothingToGuard(blockedDisplayIDs: [2])
+    case .nothingToGuard:               return .mirrorsPreferredDisplay
+    case .mirrorsPreferredDisplay:      return .appDisabled
     }
 }
 
@@ -270,6 +297,18 @@ struct BottomDockGuardCaptionTests {
     /// `IdleReason.explanation`; that coupling is undeclared and now lives in a
     /// different file from the strings it cuts, so retitling the prefix would
     /// otherwise silently render "Inactive — idle: needs a second display."
+    /// The chain that builds `allIdleReasons` must close, and must close without
+    /// hitting the bound that stops a malformed cycle hanging the runner. A walk
+    /// that ran to 64 would silently mean "the list is whatever the first 64 steps
+    /// were", which is not a list of reasons at all.
+    @Test("The idle-reason chain is a closed cycle with no repeats")
+    func chainIsWellFormed() {
+        #expect(allIdleReasons.count < 64, "the successor chain did not come back round")
+        #expect(Set(allIdleReasons.map(String.init(describing:))).count == allIdleReasons.count)
+        // Closing the cycle is the property that makes the walk terminate at all.
+        #expect(nextIdleReason(allIdleReasons[allIdleReasons.count - 1]) == allIdleReasons[0])
+    }
+
     @Test("Every idle caption, word for word")
     func idleCaptionsAreExact() {
         let expected: [(BottomDockGuard.IdleReason, String)] = [

@@ -19,15 +19,29 @@ import Foundation
 /// as a code bug (#72), so the half of the feature that makes such claims is the
 /// half that most needs to be reachable from a test.
 ///
-/// **What moved is every string that makes a claim about the user's arrangement**
-/// — the ones carrying counts. The app target keeps the SwiftUI binding, the
-/// `print` and the `Log` call, and performs no arithmetic over a decision.
-/// It does still hold four fixed lifecycle lines in `BottomDockGuardTap`
-/// (not-starting, tap-creation-failed, released, re-enabled), which take nothing
-/// from the decision and so cannot miscount — but they are still uncovered, and
-/// the first of them is the support-facing counterpart to the armed line in the
-/// same log stream. Saying "no wording remains" would be the kind of
-/// overstatement this file exists to make catchable.
+/// **What moved is every string computed from a decision** — the ones carrying
+/// counts, which are the ones that can miscount. The app target performs no
+/// arithmetic over a decision and holds no wording derived from one.
+///
+/// **What stays is fixed text, and the full list is worth writing down**, because
+/// the first attempt at this paragraph named only half of it and review caught
+/// that as the same class of overstatement the file exists to make catchable:
+///
+/// - `BottomDockGuardTap` — four lifecycle log lines (not-starting,
+///   tap-creation-failed, released, re-enabled). The first is the support-facing
+///   counterpart to the armed line in the same stream, and is what distinguishes
+///   "the grant went stale" from "the tap never ran" (#87).
+/// - `PreferencesView` — the toggle label, the Accessibility button, and a
+///   help paragraph that explains the feature. **One sentence of that paragraph
+///   is a conditional claim about the user's arrangement** — that the overlapping
+///   strip is left unguarded — and #83 rewrote it in the same commit as the
+///   caption below it, which is precisely the co-editing risk this move is
+///   supposed to answer. It is static text, so it cannot miscount; it can go
+///   stale against a span-policy change while the pinned caption tests force the
+///   caption to be updated. Tracked as its own follow-on rather than folded in.
+///
+/// So: uncovered wording does remain in the app target. What no longer lives
+/// there is anything that counts.
 extension BottomDockGuard {
 
     /// The live status caption under the bottom-Dock toggle. Says what the
