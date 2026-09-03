@@ -45,7 +45,7 @@ final class BottomDockGuardTap {
         switch decision {
         case .idle:
             stop()
-        case .guarding(let newZones, _):
+        case .guarding(let newZones, _, _):
             zones = newZones
             if tap == nil { start() }
         }
@@ -102,7 +102,16 @@ final class BottomDockGuardTap {
         source = runLoopSource
         clampCount = 0
         reenableCount = 0
-        Log.app.notice("Bottom-Dock guard: armed over \(self.zones.count, privacy: .public) display(s)")
+        // Zones, not displays: a display overhanging another contributes one
+        // zone per free span (#83), so counting zones as displays would report
+        // two screens guarded when there is one. The log is read as evidence
+        // that the tap armed — `--diagnostics` re-derives and cannot see a live
+        // tap (#77/#78) — so it must not overstate what armed.
+        let spanCount = zones.count
+        let displayCount = Set(zones.map(\.displayID)).count
+        Log.app.notice(
+            "Bottom-Dock guard: armed over \(spanCount, privacy: .public) span(s) on \(displayCount, privacy: .public) display(s)"
+        )
     }
 
     func stop() {

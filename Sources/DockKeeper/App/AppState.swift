@@ -550,12 +550,33 @@ final class AppState: ObservableObject {
     /// broken (the same reasoning as ADR-010's "waiting for permission").
     var bottomDockGuardCaption: String {
         switch bottomDockGuardDecision {
-        case .guarding(let zones, let skipped):
-            let base = "Active — holding the bottom edge on \(zones.count) other display(s)."
-            guard !skipped.isEmpty else { return base }
-            return base + " \(skipped.count) display(s) are not covered, because another display "
-                + "overlaps their bottom edge or mirrors your preferred one — the Dock can still "
-                + "be summoned there."
+        case .guarding(let zones, let skipped, let partial):
+            // Distinct displays, not `zones.count`: an overhanging display
+            // contributes one zone per free span (#83), and "holding the bottom
+            // edge on 2 other displays" when there is one would be a false
+            // statement about the user's desk.
+            let guarded = Set(zones.map(\.displayID)).count
+            var caption = "Active — holding the bottom edge on \(guarded) other display(s)."
+            if !partial.isEmpty {
+                // Plural for the same reason the `skipped` sentence below is:
+                // a bottom edge can sit above two screens at two separate
+                // stretches, so neither "the stretch" nor "another screen" is
+                // a claim the sweep makes. Fixing one and leaving its twin was
+                // itself a review finding (#83 delta review).
+                caption += " \(partial.count) of them only partly: the stretches that sit directly "
+                    + "above your other screens are left open, because that is the route your "
+                    + "pointer takes between them, and the Dock can still be summoned there."
+            }
+            if !skipped.isEmpty {
+                // Not "another display" — the sweep blocks on the UNION of every
+                // neighbour flush beneath, so an edge can be covered by two
+                // screens together with neither covering it alone. The singular
+                // was a claim the computation never made (#83 review).
+                caption += " \(skipped.count) display(s) are not covered at all, because other "
+                    + "screens sit beneath their whole bottom edge, or they mirror your preferred "
+                    + "display — the Dock can still be summoned there."
+            }
+            return caption
         case .idle(.featureDisabled):
             return ""
         case .idle(.appDisabled):
@@ -569,9 +590,9 @@ final class AppState: ObservableObject {
             return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
                 + "Privacy & Security \u{203A} Accessibility."
         case .idle(.nothingToGuard):
-            return "Not available on this arrangement: a display sits directly below another, "
-                + "so the bottom edge is the route the pointer takes between them. Holding it "
-                + "would trap your cursor."
+            return "Not available on this arrangement: every bottom edge DockKeeper could hold "
+                + "is covered along its whole length by the screens below it, so that edge is "
+                + "the route your pointer takes between them. Holding it would trap your cursor."
         case .idle(.mirrorsPreferredDisplay):
             return "Not available while your displays are mirrored — they show the same pixels, "
                 + "so there is no second bottom edge to hold."

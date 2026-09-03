@@ -820,7 +820,7 @@ Then Dock auto-hide is turned OFF and any record is cleared, regardless of
 
 ## DK-FR-014: Hold a bottom Dock on the preferred display (separate-Spaces mode)
 
-**Requirement.** With "Displays have separate Spaces" ON and the lock edge set to **bottom**, DockKeeper may keep the Dock on the preferred display by **preventing the pointer summon** that would move it. Opt-in, off by default, Accessibility-gated, and refused outright on arrangements where a guarded bottom edge is also the route between two displays ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it)).
+**Requirement.** With "Displays have separate Spaces" ON and the lock edge set to **bottom**, DockKeeper may keep the Dock on the preferred display by **preventing the pointer summon** that would move it. Opt-in, off by default, Accessibility-gated, and refused over any span of a bottom edge that is also the route between two displays — leaving a display unguarded entirely when its whole edge is such a route ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it), amended 2026-09-03 for #83).
 
 **It never moves the Dock.** Relocation is not available to any userspace process and this requirement does not promise it. See ADR-015 Evidence for the falsified candidates.
 
@@ -850,17 +850,35 @@ Given the feature is on but AXIsProcessTrusted() is false
 Then the guard stays idle and reports "waiting for permission" [CONFIRMED — unit test]
 And no prompt is raised except from the toggle the user just used
 
-S6 — A shared bottom edge is refused, not guarded
-Given another display sits flush beneath a display we would guard
-Then that display is never clamped                             [CONFIRMED — unit test]
-And when no guardable display remains the guard stays idle
-Because clamping the crossing boundary would trap the pointer
-And the refusal is whole-display, so a partially overlapped
-    display is left unguarded and reported, not silently        [CONFIRMED — unit test;
-    dropped                                                     that a blocked edge
-                                                                also cannot host a
-                                                                summon is INFERRED,
-                                                                one observation]
+S6 — A shared bottom edge is refused span by span, not display by
+     display
+Given another display sits flush beneath part of a display we
+    would guard
+Then the spans of that edge with nothing beneath them are      [CONFIRMED — unit test]
+    clamped, and the shared span is left open
+Because the shared span is the route the pointer takes between
+    the two screens, and clamping it would trap the cursor
+And a display shared along its whole bottom edge yields no      [CONFIRMED — unit test;
+    zone at all, and the guard stays idle when no guardable      that a blocked span
+    display remains                                              also cannot host a
+                                                                 summon is INFERRED,
+                                                                 one observation]
+And a display guarded over only part of its edge is reported    [CONFIRMED — unit test]
+    as partly covered, never as fully guarded
+And a neighbour whose frame OVERLAPS the bottom edge blocks     [CONFIRMED — unit test;
+    it, exactly as a flush one does                              fixed 2026-09-03, #83
+Because its own rectangle covers ground at or above that edge,   review — v0.9.3's flush
+    so a band there would sit on the display beneath             test was symmetric and
+                                                                 dropped such a
+                                                                 neighbour entirely]
+And a real pointer still crosses through the shared span with   [UNKNOWN until run —
+    per-span zones armed                                         needs a rig with one
+                                                                 display overhanging
+                                                                 another; the 2026-09-02
+                                                                 confirmation was
+                                                                 side-by-side and had
+                                                                 no shared span,
+                                                                 test-strategy §3d row 9]
 
 S11 — A display mirroring the preferred one is never guarded
 Given another display shows the same pixels as the preferred one
@@ -900,11 +918,11 @@ Then DockKeeper re-enables it and counts the event             [INFERRED — the
 
 **Failure behavior.** Every unmet precondition is a silent no-op with a stated reason in `--diagnostics` and under the Preferences toggle. A refused `CGEventTapCreate`, a revoked grant, or a system-disabled tap all end with normal pointer movement — the feature fails open, never closed, because a closed failure is a trapped cursor.
 
-**Known cost.** A guarded display's bottom hot corners and its own Dock summon become unreachable while the guard is active. That is the feature working as specified, and the toggle's caption says so.
+**Known cost.** A guarded display's bottom hot corners and its own Dock summon become unreachable while the guard is active. That is the feature working as specified, and the toggle's caption says so. On a display guarded over only part of its bottom edge ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it) amendment 2026-09-03), the cost is confined to the guarded spans: the shared strip keeps its hot corner and can still summon the Dock, which is the same reason it is left open — it is the route between the two screens.
 
 **The guard is not released while DockKeeper is paused**, and that is deliberate rather than an oversight: pause suspends *corrections*, and this feature has no correction to re-enforce afterwards — releasing it would be the one pause in the product that resume cannot undo, because relocation is impossible (ADR-015). DK-FR-009 S2's "the Dock may be moved freely" therefore does not hold for a bottom Dock on a guarded display while this feature is on. Precedent: DK-FR-011 likewise keeps mutating the Dock while paused.
 
-**Testability.** The decision, the geometry gate and the clamp are pure and unit-tested (`BottomDockGuardTests`, 44 cases across five suites), **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`): inverting the `beneath` comparison in `bottomEdgeIsFree` to Cocoa orientation — **7**; replacing `if bottomEdgeIsFree(index, among: frames)` with `if true` — **5**; returning `frame.minX` instead of `point.x` from `ClampZone.clamping` — **2**; dropping the `point.y < frame.maxY` bound from `ClampZone.contains` — **1**; removing the mirror refusal — **2**; widening `flushTolerance` from 1 to 2 — **1**. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — but its end-to-end behavior against a real pointer is **CONFIRMED on-device with a control** (2026-09-02, [hardware matrix session 3](hardware-matrix-results.md)): with the tap armed a real pointer could not summon the Dock to the guarded display, and with the tap released the same push summoned it. Tap state was read from the unified log on both runs rather than assumed, because `--diagnostics` cannot observe a live tap ([#77](https://github.com/blamechris/DockKeeper/issues/77), [#78](https://github.com/blamechris/DockKeeper/issues/78)).
+**Testability.** The decision, the geometry gate, the free-span sweep and the clamp are pure and unit-tested (`BottomDockGuardTests`, **65 cases across six suites**), including the safety property asserted directly as an invariant over whole arrangements — *no emitted band ever overlaps a display flush beneath it* — and a differential test holding the interval arithmetic to a predicate that has no intervals in it. **Mutation coverage is stated as the exact edit so each number is reproducible, and it lives in [ADR-015's Evidence section](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it) only.** It was duplicated here until 2026-09-03; #83 changed two of the six figures, and a table maintained in two places is a table that goes stale in one of them — the same defect class as #72's false claims and the CLAUDE.md rule against a second derivation. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — but its end-to-end behavior against a real pointer is **CONFIRMED on-device with a control** (2026-09-02, [hardware matrix session 3](hardware-matrix-results.md)): with the tap armed a real pointer could not summon the Dock to the guarded display, and with the tap released the same push summoned it. Tap state was read from the unified log on both runs rather than assumed, because `--diagnostics` cannot observe a live tap ([#77](https://github.com/blamechris/DockKeeper/issues/77), [#78](https://github.com/blamechris/DockKeeper/issues/78)).
 
 ## DK-NFR-001: Quietness and resource budget
 

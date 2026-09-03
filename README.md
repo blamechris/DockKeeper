@@ -70,7 +70,7 @@ restarts.
 - **Preferred display:** keep the Dock on a chosen monitor. Works with *Displays have separate Spaces* **on** (the macOS default) for left/right Docks, for any edge with it off, and — opt-in — for a bottom Dock via the guard below
 - Displays recognized by a **multi-signal fingerprint** (survives docks, adapters, and UUID churn; never guesses between identical monitors)
 - **Keep windows in place** (opt-in): restores your window layout after a display pin — one of the two features that use a permission (Accessibility), strictly optional
-- **Keep a bottom Dock on my preferred display** (opt-in): holds the pointer clear of the bottom edge on your other displays so macOS is never asked to move the Dock there. Needs Accessibility, two or more displays, and a bottom-edge lock. It does not move the Dock back, and it leaves a display unguarded when another screen sits flush beneath it, standing down entirely only when that leaves nothing to guard
+- **Keep a bottom Dock on my preferred display** (opt-in): holds the pointer clear of the bottom edge on your other displays so macOS is never asked to move the Dock there. Needs Accessibility, two or more displays, and a bottom-edge lock. It does not move the Dock back, and where one screen sits above another it leaves only the overlapping strip unguarded — your pointer's route between them — standing down entirely only when that leaves nothing to guard
 - **Pause** (15 min / 1 hour / until resumed) for temporary Dock moves, with an optional global hotkey (⌃⌥⌘D, off by default)
 - **Hide the Dock while screen sharing** (opt-in)
 - Automation: `dockkeeper` CLI, a `dockkeeper://` URL scheme, and Apple Shortcuts intents
@@ -91,9 +91,10 @@ restarts.
 > the pointer a few points clear of the bottom edge on your *other* displays,
 > so the summon never completes. It needs Accessibility, at least two displays
 > and a bottom-edge lock; the bottom hot corners on the guarded displays stop
-> working while it is on; and it leaves a display unguarded when another screen
-> sits flush beneath it, because that edge is how your pointer travels between
-> them. If you would rather not use it, a left/right edge or turning the macOS
+> working while it is on; and where one screen sits above another it leaves the
+> overlapping strip unguarded, because that strip is how your pointer travels
+> between them — the parts of the edge that overhang, with nothing beneath them,
+> are guarded normally. If you would rather not use it, a left/right edge or turning the macOS
 > setting off both still work. Evidence in
 > [the spike](docs/spikes/separate-spaces-pinning.md) and
 > [ADR-015](docs/decision-log.md). Both halves are measured with a control: the
