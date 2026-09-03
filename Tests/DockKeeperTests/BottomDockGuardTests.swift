@@ -550,7 +550,7 @@ struct BottomDockGuardSafetyTests {
         // because it *was* the code. So both properties below are stated purely
         // in terms of which display CONTAINS a given point, which is ground
         // truth from the arrangement and involves no tolerance arithmetic.
-        var bandChecks = 0      // property A evaluated against a real neighbour
+        var bandViolations = 0  // property A: bands found on a crossing display's ground
         var crossingChecks = 0  // property B evaluated at a real crossing point
 
         for displays in arrangements {
@@ -589,7 +589,7 @@ struct BottomDockGuardSafetyTests {
                             // the sweep collapses them) from reading as
                             // violations — they are siblings, not crossings.
                             if other.frame.maxY > owner.maxY, other.frame.contains(inBand) {
-                                bandChecks += 1
+                                bandViolations += 1
                                 Issue.record(
                                     "band on \(zone.displayID) clamps (\(x), \(inBand.y)), which lies inside display \(other.displayID)"
                                 )
@@ -629,7 +629,12 @@ struct BottomDockGuardSafetyTests {
         // zones, or arrangements that no longer place anything beneath
         // anything, would leave every assertion above unexecuted and the suite
         // still green. Pin that both properties actually ran.
-        #expect(bandChecks == 0, "property A recorded \(bandChecks) violation(s)")
+        #expect(bandViolations == 0, "property A recorded \(bandViolations) violation(s)")
+        // 37,681 at the time of writing. The floor is deliberately an order of
+        // magnitude below that: it exists to catch an invariant that has gone
+        // *vacuous* — arrangements refactored until nothing sits beneath
+        // anything — not to pin an exact count that every fixture edit would
+        // have to chase.
         #expect(
             crossingChecks > 1000,
             "property B reached only \(crossingChecks) crossing points — the invariant has gone vacuous"
