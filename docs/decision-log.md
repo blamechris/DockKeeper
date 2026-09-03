@@ -491,7 +491,7 @@ The real cost, stated plainly in the UI: a guarded display's **bottom hot corner
 
 Framing is binding: **"stop the Dock leaving this display", never "put the Dock back".** The latter is impossible and every relocation candidate is falsified; a future contributor who reads this as relocation will waste the month the spike already spent.
 
-**Evidence.** Prevention works — **CONFIRMED with a control** (2026-08-27): a tap clamping the bottom edge of `(1728, 0, 3840, 2160)` held the cursor at `y = 2157` when aimed at `y = 2159`, ten clamps applied, while the same aim with the tap disabled reached `y = 2159`. The instrument was validated separately first (20/20 synthetic moves seen), so a zero count is distinguishable from a broken tap — the failure that wasted two earlier runs. Relocation is impossible — **CONFIRMED** across four mechanism families (spike results tables). DockLock's constraint set fits prevention and not summoning — **INFERRED**, strong constraint-fit, not reverse-engineered; their `warn_incompatible_display` fits suppression-on-a-crossing-edge far better than failed summoning, which is how it was read backwards for a month. **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`, **81 tests in 10 suites**). **Re-measured in full twice: on 2026-09-03**, because #83 changed both the code and the fixtures, **and again on 2026-09-03 for #84**, which added 16 tests that call `decide` on real arrangements and so moved the denominator. A figure carried over unmeasured is exactly the false claim #72 was about, and "my change only added a file" is not an exemption — six of these fifteen rows moved.
+**Evidence.** Prevention works — **CONFIRMED with a control** (2026-08-27): a tap clamping the bottom edge of `(1728, 0, 3840, 2160)` held the cursor at `y = 2157` when aimed at `y = 2159`, ten clamps applied, while the same aim with the tap disabled reached `y = 2159`. The instrument was validated separately first (20/20 synthetic moves seen), so a zero count is distinguishable from a broken tap — the failure that wasted two earlier runs. Relocation is impossible — **CONFIRMED** across four mechanism families (spike results tables). DockLock's constraint set fits prevention and not summoning — **INFERRED**, strong constraint-fit, not reverse-engineered; their `warn_incompatible_display` fits suppression-on-a-crossing-edge far better than failed summoning, which is how it was read backwards for a month. **Mutation coverage, stated as the exact edit so the number is reproducible** (distinct failing *tests*, `swift test --filter BottomDockGuard`, **86 tests in 10 suites**). **Re-measured in full twice: on 2026-09-03**, because #83 changed both the code and the fixtures, **and again on 2026-09-03 for #84**, which added 21 tests that call `decide` on real arrangements and so moved the denominator. A figure carried over unmeasured is exactly the false claim #72 was about, and "my change only added a file" is not an exemption — **seven** of these fifteen rows moved. That sentence read *six* until the review panel counted them: the one claim whose entire job is to prove no figure was carried over was itself carrying an unchecked number. Both re-measurements also had to be redone once — the first because a copied `.build` directory carries absolute paths and reported `NO-BUILD` for every edit, the second because a review subagent working in the same scratch directory overwrote the harness script mid-run, so it reported every mutation as surviving. Neither was a result; both looked exactly like one.
 
 **The reconstruction was controlled before the new figures were published.** Every edit was run under *both* filters: the six original suites, whose number must reproduce the figure in the previous revision of this table, and all ten. Fourteen of fifteen reproduced on the first attempt. The fifteenth — *"`isBeneath` inverted to Cocoa orientation"* — did not, because that row names a direction rather than an expression and **two different inversions are consistent with its wording**: `other.maxY > me.minY - flushTolerance && other.minY < me.minY` fails 20, while the literal min/max swap `other.maxY < me.minY + flushTolerance && other.minY > me.minY` fails 19 and is therefore the one originally measured. The row now carries that expression, because a row whose edit two readers apply differently is not the reproducible figure this paragraph claims to publish.
 
@@ -500,13 +500,13 @@ Framing is binding: **"stop the Dock leaving this display", never "put the Dock 
 | Edit | Fails |
 | --- | --- |
 | `isBeneath` reverted to the symmetric `abs(other.minY − me.maxY) < flushTolerance` shipped in v0.9.3 | **2** |
-| `isBeneath` drops the `other.maxY > me.maxY` clause (over-blocks: a display *above* counts as beneath) | **11** |
-| `isBeneath` inverted to Cocoa orientation — `other.maxY < me.minY + flushTolerance && other.minY > me.minY` | **29** |
-| Dropping the blocker scan from `freeBottomSpans`, so every edge reads wholly free | **26** |
+| `isBeneath` drops the `other.maxY > me.maxY` clause (over-blocks: a display *above* counts as beneath) | **12** |
+| `isBeneath` inverted to Cocoa orientation — `other.maxY < me.minY + flushTolerance && other.minY > me.minY` | **31** |
+| Dropping the blocker scan from `freeBottomSpans`, so every edge reads wholly free | **28** |
 | `cursor = max(cursor, blocker.hi)` → `cursor = blocker.hi` (a nested blocker re-opens a span) | **2** |
 | Removing `blockers.sort` | **2** |
 | Not clipping a blocker to the guarded display's own extent | **7** |
-| Dropping the trailing `emit(upTo: me.maxX)` | **29** |
+| Dropping the trailing `emit(upTo: me.maxX)` | **32** |
 | Relaxing the span-width floor from `flushTolerance` to `> 0` | **1** |
 | Dropping the `hi - lo > 0` overlap gate on a blocker | **8** |
 | Deriving `partiallyGuarded` from `spans.count > 1` instead of from `bottomEdgeIsFree` | **1** |
@@ -519,22 +519,36 @@ The old row *"replacing `if bottomEdgeIsFree(…)` with `if true`"* is gone beca
 
 **The four mutations that would put a band on a crossing route — the symmetric flush test, the backwards cursor, the unsorted sweep, and the unclipped blocker — are each caught by the safety invariant itself**, not only by the narrow test written for them. Three of the four fail *only* 2 tests, and that is the point: one of the two is always the invariant. (The unclipped blocker fails 7 since #84 rather than 2, because the report tests read arrangements whose spans it changes — a wider blast radius, not a stronger assertion.)
 
-**What the guard tells the user is measured the same way (#84).** The caption, the `--diagnostics` line and the armed log line were unreachable from any test while they lived in the app target; they are now pure functions in Core, and the twelve edits below are each caught. The two that matter most are the two #83 could have got wrong in silence — counting zones where distinct displays are meant, which overstates a one-display desk as two, and binding `skipped` and `partiallyGuarded` in the wrong order, which tells a user a partly covered display is uncovered. Both are caught in all three renderers.
+**What the guard tells the user is measured the same way (#84).** The caption, the `--diagnostics` line and the armed log line were unreachable from any test while they lived in the app target; they are now pure functions in Core, and the seventeen edits below are each caught. The two that matter most are the two #83 could have got wrong in silence — counting zones where distinct displays are meant, which overstates a one-display desk as two, and binding `skipped` and `partiallyGuarded` in the wrong order, which tells a user a partly covered display is uncovered. The count edit is caught in all three renderers; **the ordering edit exists in only two**, because `armedLogLine` takes zones and never binds either list — this paragraph claimed a third measurement until review pointed out it cannot be taken.
 
-| Edit (`swift test --filter` the four report suites, **16 tests**) | Fails |
+**Five of these seventeen rows were added by the review panel, which measured them surviving the first test set.** Four of the five are the same shape: an assertion that checks a caption is non-empty and distinct is satisfied just as well by a *wrong* caption as by a right one. Rewording `.appDisabled` to name the feature toggle instead of the master switch — the exact conflation shipped as #63 — passed every test, as did sending the user to the Screen Recording pane instead of Accessibility, and as did retitling `explanation`'s `"idle — "` prefix so the caption reads "Inactive — idle: needs a second display." The captions are pinned to literals now. The fifth is the `--diagnostics` line's two optional clauses, which no arrangement in the first set left empty, so neither could be told from `if true`.
+
+| Edit (`swift test --filter` the four report suites, **21 tests**) | Fails |
 | --- | --- |
 | `caption` counts `zones.count` instead of distinct display IDs | **3** |
-| `diagnosticsLine` counts `zones.count` instead of distinct display IDs | **3** |
+| `diagnosticsLine` counts `zones.count` instead of distinct display IDs | **4** |
 | `armedLogLine` counts `zones.count` instead of distinct display IDs | **3** |
 | `caption` binds `.guarding(let zones, let partial, let skipped)` — the two lists swapped | **2** |
-| `diagnosticsLine` binds the same two lists swapped | **1** |
-| `caption` drops the `partiallyGuarded` sentence | **3** |
-| `caption` drops the `skipped` sentence | **3** |
-| `diagnosticsLine` adds the pause qualifier unconditionally | **2** |
-| `diagnosticsLine` never adds the pause qualifier | **1** |
+| `diagnosticsLine` binds the same two lists swapped | **3** |
+| `caption` drops the `partiallyGuarded` sentence (`if !partial.isEmpty` → `if false`) | **3** |
+| `caption` drops the `skipped` sentence (`if !skipped.isEmpty` → `if false`) | **3** |
+| `diagnosticsLine` emits the partly-covered clause unconditionally (`if !partial.isEmpty` → `if true`) | **2** |
+| `diagnosticsLine` emits the not-covered clause unconditionally (`if !skipped.isEmpty` → `if true`) | **2** |
+| `diagnosticsLine` adds the pause qualifier unconditionally (`if paused` → `if true`) | **5** |
+| `diagnosticsLine` never adds the pause qualifier (`if paused` → `if false`) | **1** |
 | `armedLogLine` swaps its span and display counts | **3** |
-| Two idle reasons return the same caption | **2** |
-| Two idle reasons return the same `--diagnostics` explanation | **2** |
+| `.mirrorsPreferredDisplay` returns the `.nothingToGuard` caption verbatim | **3** |
+| `IdleReason.explanation` returns `.noPreferredDisplay`'s string for `.singleDisplay` | **3** |
+| `IdleReason.explanation`'s shared `"idle — "` prefix retitled to `"idle: "` (8 sites) | **2** |
+| `.appDisabled`'s caption names the feature toggle instead of the master switch (#63's conflation) | **1** |
+| `.accessibilityNotGranted`'s caption names the Screen Recording pane | **1** |
+
+**The last two collision rows name an expression, not a direction, and that is deliberate.** Review
+showed the earlier wording — *"two idle reasons return the same caption"* — admits readings that fail
+different numbers: colliding `.mirrorsPreferredDisplay` with `.nothingToGuard` fails 3, while colliding
+`.appDisabled` with `.accessibilityNotGranted` fails only the distinctness sweep. Both are faithful to
+the old phrasing, which is the same defect the Cocoa-orientation row above carried. A row two readers
+apply differently is not a reproducible figure.
 
 One further edit was tried and **survived, and it is recorded because it was a bad mutation rather than a gap**: prepending a second sentence to the mirrored caption leaves it distinct from every other caption, so nothing should have failed. It was replaced with the edit that actually collides two reasons, which fails 2. A survivor is a claim about the tests only once the edit is confirmed to express the defect it names.
 
@@ -542,4 +556,4 @@ One further edit was tried and **survived, and it is recorded because it was a b
 
 **Review corrections (2026-08-29, HIGH-tier panel).** Four defects were fixed before merge and are recorded because each was a way the design could have hurt a user: `ClampZone.contains` claimed an unbounded half-plane below `clampY`, which combined with stale `AppState.displays` could drag an entire other display's pointer positions onto the guarded one — bounded by `frame.maxY`, and the staleness closed by refreshing geometry on enable, on the poll tick, and on an Accessibility change; a display **mirroring** the preferred one was guarded, putting the band on the only visible screen; the guard never re-armed after the permission was granted, and raised no prompt at all, so the toggle was inert while the caption asked for a permission already given; and the mutation figures first published here (13/7/7) were raw `✘` line counts including suite and issue lines, not distinct tests. That last one is the reason the figures above now name the exact edit.
 
-**Date / Status.** 2026-08-29 · **Accepted**; **amended 2026-09-02** (R-008 reopened and R-015 added, the pause interaction recorded, the `--diagnostics` guard line qualified, and DockKeeper-off split from feature-off as its own reason) and **amended 2026-09-03** (per-free-span clamping, #83 — the whole-display refusal is superseded, and one on-device obligation is reopened with it) — implemented behind an opt-in flag (`BottomDockGuard`, `BottomDockGuardTap`, Preferences toggle, `--diagnostics` line, 65 unit tests). Narrows ADR-009's bottom-Dock decline to *"declined unless the guard is on and the arrangement permits it"*. **On-device confirmation: CLOSED 2026-09-02** — see the Evidence section. What remains open is the *cost*, not the mechanism (R-015).
+**Date / Status.** 2026-08-29 · **Accepted**; **amended 2026-09-02** (R-008 reopened and R-015 added, the pause interaction recorded, the `--diagnostics` guard line qualified, and DockKeeper-off split from feature-off as its own reason) and **amended 2026-09-03** (per-free-span clamping, #83 — the whole-display refusal is superseded, and one on-device obligation is reopened with it) — implemented behind an opt-in flag (`BottomDockGuard`, `BottomDockGuardTap`, Preferences toggle, `--diagnostics` line, 86 unit tests). Narrows ADR-009's bottom-Dock decline to *"declined unless the guard is on and the arrangement permits it"*. **On-device confirmation: CLOSED 2026-09-02** — see the Evidence section. What remains open is the *cost*, not the mechanism (R-015).

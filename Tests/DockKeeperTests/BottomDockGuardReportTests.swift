@@ -45,14 +45,46 @@ private func snapshot(
     )
 }
 
-/// Every idle reason, in one list, so the sweeps below cannot silently miss a
-/// case added later. `nothingToGuard` carries an associated value; one blocked
-/// display is enough to render it.
+/// Every idle reason, in one list. `nothingToGuard` carries an associated value;
+/// one blocked display is enough to render it.
+///
+/// **The list is hand-maintained, and `exhaustivenessGuard` below is what stops
+/// that being a promise.** `IdleReason` cannot be `CaseIterable` — one case has
+/// an associated value — so completeness is borrowed from the compiler instead:
+/// adding a case to the enum stops this file compiling, which forces whoever
+/// adds it to visit the list. Without that, a new reason would ship through
+/// `caption`'s generic fallback with no coverage and every sweep here still
+/// green, because they all measure themselves against this same list.
 private let allIdleReasons: [BottomDockGuard.IdleReason] = [
     .appDisabled, .featureDisabled, .edgeNotBottom, .separateSpacesOff,
     .singleDisplay, .noPreferredDisplay, .preferredDisplayNotConnected,
     .accessibilityNotGranted, .nothingToGuard(blockedDisplayIDs: [2]),
     .mirrorsPreferredDisplay,
+]
+
+/// Compiles only while `allIdleReasons` covers every case. Never called: its
+/// whole job is to fail the build when `IdleReason` gains a case, so the
+/// omission cannot be silent. Deliberately has no `default`.
+private func exhaustivenessGuard(_ reason: BottomDockGuard.IdleReason) {
+    switch reason {
+    case .appDisabled, .featureDisabled, .edgeNotBottom, .separateSpacesOff,
+         .singleDisplay, .noPreferredDisplay, .preferredDisplayNotConnected,
+         .accessibilityNotGranted, .nothingToGuard, .mirrorsPreferredDisplay:
+        break
+    }
+}
+
+/// Two external displays, both wholly free of anything beneath them: the only
+/// shape in this file where **both** optional sentences must be absent, which is
+/// what makes their conditions falsifiable in the "must not appear" direction.
+private let twoWhollyFree: [DisplayInfo] = [
+    display(1, laptop, main: true), display(2, freeStanding), display(3, freeStanding2),
+]
+
+/// One guarded display and one refused outright: `skipped` non-empty while
+/// `partiallyGuarded` is empty.
+private let skippedButNothingPartial: [DisplayInfo] = [
+    display(1, laptop, main: true), display(2, freeStanding), display(3, coveredAbove),
 ]
 
 // MARK: - Fixtures whose answers are known by construction
@@ -226,6 +258,60 @@ struct BottomDockGuardCaptionTests {
         #expect(Set(speaking).count == speaking.count, "two idle reasons share a caption")
     }
 
+    /// **Every idle caption, as a literal.** The sweeps above check that the
+    /// captions are non-empty and pairwise distinct, which a *wrong* caption
+    /// satisfies just as well as a right one: rewording `.appDisabled` to name
+    /// the feature toggle instead of the master switch — the exact conflation
+    /// shipped as #63, which pointed support at the switch the user had not
+    /// touched — leaves it non-empty and distinct from all nine others.
+    ///
+    /// So the wording is pinned. Five of these are produced by the generic
+    /// fallback, which string-surgeries the `"idle — "` prefix off
+    /// `IdleReason.explanation`; that coupling is undeclared and now lives in a
+    /// different file from the strings it cuts, so retitling the prefix would
+    /// otherwise silently render "Inactive — idle: needs a second display."
+    @Test("Every idle caption, word for word")
+    func idleCaptionsAreExact() {
+        let expected: [(BottomDockGuard.IdleReason, String)] = [
+            (.featureDisabled, ""),
+            (.appDisabled, "Inactive while DockKeeper is turned off."),
+            (.accessibilityNotGranted,
+             "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
+                + "Privacy & Security \u{203A} Accessibility."),
+            (.nothingToGuard(blockedDisplayIDs: [2]),
+             "Not available on this arrangement: every bottom edge DockKeeper could hold "
+                + "is covered along its whole length by the screens below it, so that edge is "
+                + "the route your pointer takes between them. Holding it would trap your cursor."),
+            (.mirrorsPreferredDisplay,
+             "Not available while your displays are mirrored — they show the same pixels, "
+                + "so there is no second bottom edge to hold."),
+            // The generic fallback. Each must read as one sentence, not two
+            // state words in a row.
+            (.edgeNotBottom, "Inactive — only a bottom Dock is pointer-summoned."),
+            (.separateSpacesOff,
+             "Inactive — needs \u{201C}Displays have separate Spaces\u{201D} on."),
+            (.singleDisplay, "Inactive — needs a second display."),
+            (.noPreferredDisplay, "Inactive — no preferred display chosen."),
+            (.preferredDisplayNotConnected, "Inactive — preferred display isn't connected."),
+        ]
+        #expect(expected.count == allIdleReasons.count)
+        for (reason, want) in expected {
+            #expect(BottomDockGuard.caption(for: .idle(reason)) == want, "\(reason)")
+        }
+    }
+
+    /// The fallback's contract, stated as the property rather than as five more
+    /// literals: it strips the shared prefix, so no caption may contain the word
+    /// the prefix carries. This is what fails if `explanation`'s prefix is
+    /// retitled without the caption following.
+    @Test("The generic fallback strips the reason's own state word")
+    func fallbackStripsIdlePrefix() {
+        for reason in allIdleReasons {
+            let caption = BottomDockGuard.caption(for: .idle(reason))
+            #expect(!caption.lowercased().contains("idle"), "\(reason): \(caption)")
+        }
+    }
+
     /// The two reasons that describe an *arrangement* rather than a setting are
     /// the ones a user is most likely to read as a bug, so each states its own
     /// cause. Conflating them tells someone with mirrored screens that their
@@ -269,6 +355,42 @@ struct BottomDockGuardDiagnosticsLineTests {
             paused: false
         )
         #expect(line.hasPrefix("guarding 1 display(s) over 2 span(s)"))
+    }
+
+    /// **Both optional clauses, asserted absent.** Every other guarding
+    /// assertion in this suite uses an arrangement where `partiallyGuarded` is
+    /// non-empty, so nothing here could tell `if !partial.isEmpty` from
+    /// `if true`: on two wholly-free displays the latter prints "0 partly
+    /// covered (the strips above other displays stay open …)", naming strips
+    /// that do not exist. Exact equality on a desk with neither list populated
+    /// is the only thing that catches it.
+    @Test("Neither qualifying clause appears when its list is empty")
+    func emptyListsProduceNoClause() {
+        let line = BottomDockGuard.diagnosticsLine(
+            for: BottomDockGuard.decide(snapshot(twoWhollyFree)), paused: false
+        )
+        #expect(line == "guarding 2 display(s) over 2 span(s)")
+    }
+
+    /// Skipped populated, partial empty — the half the flagship arrangement and
+    /// the overhang arrangement between them never produce.
+    @Test("A refused display is reported without a partly-covered clause")
+    func skippedWithoutPartial() {
+        let decision = BottomDockGuard.decide(snapshot(skippedButNothingPartial))
+        #expect(partialIDs(decision).isEmpty)          // the shape this test needs
+        #expect(BottomDockGuard.diagnosticsLine(for: decision, paused: false)
+            == "guarding 1 display(s) over 1 span(s); 1 not covered (blocked edge or mirrored)")
+    }
+
+    /// Partial populated, skipped empty — the owner's own desk, whole.
+    @Test("An overhanging display is reported without a not-covered clause")
+    func partialWithoutSkipped() {
+        let decision = BottomDockGuard.decide(
+            snapshot([display(1, laptop, main: true), display(2, dellAbove)])
+        )
+        #expect(BottomDockGuard.diagnosticsLine(for: decision, paused: false)
+            == "guarding 1 display(s) over 2 span(s); 1 partly covered "
+                + "(the strips above other displays stay open — they are the route between them)")
     }
 
     /// A pause suspends corrections; the guard is prevention and has nothing to
@@ -361,4 +483,9 @@ private func zoneCount(_ decision: BottomDockGuard.Decision) -> Int { zonesOf(de
 private func skippedIDs(_ decision: BottomDockGuard.Decision) -> [CGDirectDisplayID] {
     guard case .guarding(_, let s, _) = decision else { return [] }
     return s
+}
+
+private func partialIDs(_ decision: BottomDockGuard.Decision) -> [CGDirectDisplayID] {
+    guard case .guarding(_, _, let p) = decision else { return [] }
+    return p
 }

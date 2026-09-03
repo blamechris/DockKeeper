@@ -17,9 +17,17 @@ import Foundation
 ///
 /// This repo treats a false user-facing claim as a defect of the same severity
 /// as a code bug (#72), so the half of the feature that makes such claims is the
-/// half that most needs to be reachable from a test. What stays in the app
-/// target is the SwiftUI binding, the `print`, and the `Log` call — no wording,
-/// and no arithmetic over the decision.
+/// half that most needs to be reachable from a test.
+///
+/// **What moved is every string that makes a claim about the user's arrangement**
+/// — the ones carrying counts. The app target keeps the SwiftUI binding, the
+/// `print` and the `Log` call, and performs no arithmetic over a decision.
+/// It does still hold four fixed lifecycle lines in `BottomDockGuardTap`
+/// (not-starting, tap-creation-failed, released, re-enabled), which take nothing
+/// from the decision and so cannot miscount — but they are still uncovered, and
+/// the first of them is the support-facing counterpart to the armed line in the
+/// same log stream. Saying "no wording remains" would be the kind of
+/// overstatement this file exists to make catchable.
 extension BottomDockGuard {
 
     /// The live status caption under the bottom-Dock toggle. Says what the
