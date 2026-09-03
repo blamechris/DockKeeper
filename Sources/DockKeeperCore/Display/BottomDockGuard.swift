@@ -55,16 +55,19 @@ public enum BottomDockGuard {
     ///   roughly two thirds of the edge unobstructed. Do not quote it as
     ///   CONFIRMED.
     ///
-    /// Safety is the reason a blocked display is skipped; necessity is only the
-    /// reason skipping it is *believed* to cost nothing. **The refusal is whole-
-    /// display**: any horizontal overlap, however small, blocks the entire edge,
-    /// so a display overlapped in its middle is left unguarded across spans that
-    /// really can host a summon. `decide` reports those in `skipped` rather than
-    /// claiming full coverage. Per-free-span clamping would close that, and is
-    /// deliberately not done here — it would extend clamping on the strength of
-    /// an UNKNOWN, and trade a structural guarantee (a whole-display refusal
-    /// cannot mis-compute an interval) for interval arithmetic that has to be
-    /// right. Rig first, code second.
+    /// Safety is the reason a shared span is skipped; necessity is only the
+    /// reason skipping it is *believed* to cost nothing.
+    ///
+    /// **This predicate is whole-display, and since #83 it no longer decides
+    /// what is clamped** — `freeBottomSpans` does, span by span. The two are
+    /// kept as separate computations rather than one defined in terms of the
+    /// other, because that makes them a differential pair: a test asserts they
+    /// agree on every arrangement, so an error in the interval arithmetic shows
+    /// up as a disagreement with a predicate that has no intervals in it. What
+    /// this one still decides is what the *report* says — a display this
+    /// returns `false` for while `freeBottomSpans` returns something is
+    /// **partly** guarded, and `decide` says so rather than claiming the whole
+    /// display.
     ///
     /// **Coordinates are Core Graphics global, top-left origin** — the space
     /// `CGDisplayBounds` and therefore `DisplayInfo.frame` use, and the space an
@@ -88,6 +91,80 @@ public enum BottomDockGuard {
                 min(frames[other].maxX, me.maxX) - max(frames[other].minX, me.minX) > 0
             return beneath && overlapsHorizontally
         }
+    }
+
+    /// The stretches of display `index`'s bottom edge with **nothing beneath
+    /// them** — the parts that can host a summon and cannot be a crossing
+    /// route, returned as sub-rectangles of the display's own frame so a
+    /// `ClampZone` can be built from one directly.
+    ///
+    /// **Why this exists (#83).** `bottomEdgeIsFree` refuses whole displays, so
+    /// a display overlapped anywhere along its bottom edge was left entirely
+    /// unguarded. On the owner's own desk that abandoned ~2100 px of a 3840 px
+    /// edge: a 4K stacked above a MacBook overhangs it by ~748 px left and
+    /// ~1364 px right, and the guard stood down over all of it because the
+    /// middle ~1728 px is shared. ADR-015 declined this on the strength of an
+    /// UNKNOWN — whether a summon can fire on a *shared* edge — but that
+    /// UNKNOWN is about the shared span, and these spans are free by
+    /// construction. Nothing is beneath them, so clamping them rests on nothing
+    /// unknown.
+    ///
+    /// **The safety property is preserved exactly, not approximately.** Every
+    /// span this returns is disjoint from every blocker, so the shared span —
+    /// the route the pointer takes between the two screens — is never clamped.
+    /// `BottomDockGuardTests` asserts that directly as an invariant over whole
+    /// arrangements rather than leaving it to be inferred from examples, because
+    /// the hazard this file exists to prevent is a trapped cursor.
+    ///
+    /// **The cost, stated rather than glossed.** Within a free span the pointer
+    /// is held 3 pt clear of the edge, so a *slow* downward push there resists,
+    /// as it already does on any fully guarded display. That costs nothing
+    /// reachable: a free span has no display beneath it, so it was never a
+    /// route — the route is the shared span, which stays open, and horizontal
+    /// travel into it is never impeded (`clamping` alters `y` only).
+    ///
+    /// Sub-point spans are discarded as float noise, using the same
+    /// `flushTolerance` that decides "flush beneath" in `y`. Discarding one can
+    /// only *reduce* clamping, so the tolerance fails open in both axes.
+    ///
+    /// Coordinates are CG global, top-left, exactly as in `bottomEdgeIsFree` —
+    /// a display beneath this one has `minY ≈ this.maxY`.
+    public static func freeBottomSpans(_ index: Int, among frames: [CGRect]) -> [CGRect] {
+        guard frames.indices.contains(index) else { return [] }
+        let me = frames[index]
+        guard me.width >= flushTolerance else { return [] }
+
+        // Blockers, clipped to my own horizontal extent. `> 0` matches
+        // `bottomEdgeIsFree`'s overlap test exactly: edge-touching in x is not
+        // an overlap, so a display abutting this one's corner blocks nothing.
+        var blockers: [(lo: CGFloat, hi: CGFloat)] = []
+        for other in frames.indices where other != index {
+            let f = frames[other]
+            guard abs(f.minY - me.maxY) < flushTolerance else { continue }
+            let lo = max(f.minX, me.minX)
+            let hi = min(f.maxX, me.maxX)
+            if hi - lo > 0 { blockers.append((lo, hi)) }
+        }
+        blockers.sort { $0.lo < $1.lo }
+
+        // Sweep left to right, emitting the gaps. `cursor` only ever moves
+        // right (`max`), so overlapping and nested blockers collapse instead of
+        // re-opening a span that something already covers — the one way this
+        // arithmetic could emit a span over a blocker.
+        var spans: [CGRect] = []
+        var cursor = me.minX
+        func emit(upTo limit: CGFloat) {
+            guard limit - cursor >= flushTolerance else { return }
+            spans.append(
+                CGRect(x: cursor, y: me.minY, width: limit - cursor, height: me.height)
+            )
+        }
+        for blocker in blockers {
+            emit(upTo: blocker.lo)
+            cursor = max(cursor, blocker.hi)
+        }
+        emit(upTo: me.maxX)
+        return spans
     }
 
     // MARK: - Inputs
@@ -132,10 +209,17 @@ public enum BottomDockGuard {
 
     // MARK: - Outputs
 
-    /// A band along one display's bottom edge that the pointer is held out of.
+    /// A band along one **free span** of a display's bottom edge that the
+    /// pointer is held out of. A display with a wholly free bottom edge yields
+    /// one zone spanning it; a display overhanging another yields one per
+    /// overhang, and none over the shared span (#83).
     public struct ClampZone: Sendable, Equatable {
         public let displayID: CGDirectDisplayID
-        /// The guarded display's frame, CG top-left.
+        /// The guarded span: a sub-rectangle of the display's frame, CG
+        /// top-left, narrowed in `x` to the free stretch and keeping the
+        /// display's full `y` extent — so `clampY` and the `frame.maxY` bound
+        /// below still describe the display this zone names, never a
+        /// neighbour. For a wholly free edge this *is* the display's frame.
         public let frame: CGRect
         /// The greatest `y` the pointer may hold inside `frame`. A location
         /// below this, within the frame's horizontal span, is pulled back here.
@@ -198,9 +282,12 @@ public enum BottomDockGuard {
         case preferredDisplayNotConnected
         /// The tap cannot be created without an Accessibility grant.
         case accessibilityNotGranted
-        /// Every non-preferred display has a blocked bottom edge, so none can
-        /// be clamped. Refusing is a safety requirement; whether such a display
-        /// also cannot host a summon is INFERRED (see `bottomEdgeIsFree`).
+        /// Every non-preferred display has a bottom edge blocked along its
+        /// **whole** length, so no span of one can be clamped. Refusing is a
+        /// safety requirement; whether such an edge also cannot host a summon
+        /// is INFERRED (see `bottomEdgeIsFree`). Since #83 a display reaches
+        /// this list only when nothing of its edge is free — a partial overlap
+        /// is guarded over its free spans instead.
         case nothingToGuard(blockedDisplayIDs: [CGDirectDisplayID])
         /// Every other display mirrors the preferred one — same pixels, so a
         /// band drawn on the "other" display lands on the one the user is
@@ -212,13 +299,29 @@ public enum BottomDockGuard {
         case idle(IdleReason)
         /// Hold these bands. `zones` is never empty.
         ///
-        /// `skipped` names displays that were deliberately **not** guarded —
-        /// a blocked bottom edge, or a mirror of the preferred display. Carried
-        /// so the UI can say "active, and not covering these" instead of an
-        /// unqualified "active": a partially-overlapped display is refused
-        /// whole, and the user is entitled to know the Dock can still be
-        /// summoned there.
-        case guarding(zones: [ClampZone], skipped: [CGDirectDisplayID])
+        /// `skipped` names displays that were deliberately **not** guarded at
+        /// all — a bottom edge blocked along its whole length, or a mirror of
+        /// the preferred display.
+        ///
+        /// `partiallyGuarded` names displays covered over some of their bottom
+        /// edge but not all of it: the free spans are held, the shared spans
+        /// are left open because they are the route between screens. It is a
+        /// third list rather than more entries in `skipped` because the two
+        /// say different things to a user — "the Dock can still be summoned
+        /// there" versus "the Dock can still be summoned there, in the strip
+        /// above your other screen" — and one list would force the report to
+        /// pick one of those and be wrong about the other.
+        ///
+        /// Both are carried so the UI can say "active, and here is what it
+        /// does not cover" instead of an unqualified "active". A display
+        /// appears in exactly one of `zones`' display IDs, `skipped`, or
+        /// `partiallyGuarded`, and `partiallyGuarded` is always a subset of
+        /// the displays `zones` names.
+        case guarding(
+            zones: [ClampZone],
+            skipped: [CGDirectDisplayID],
+            partiallyGuarded: [CGDirectDisplayID]
+        )
     }
 
     // MARK: - Decision
@@ -251,6 +354,7 @@ public enum BottomDockGuard {
         let frames = snapshot.displays.map(\.frame)
         var zones: [ClampZone] = []
         var blocked: [CGDirectDisplayID] = []
+        var partial: [CGDirectDisplayID] = []
         var mirrored: [CGDirectDisplayID] = []
 
         for (index, display) in snapshot.displays.enumerated() {
@@ -273,10 +377,24 @@ public enum BottomDockGuard {
                 continue
             }
 
-            if bottomEdgeIsFree(index, among: frames) {
-                zones.append(ClampZone(displayID: display.displayID, frame: display.frame))
-            } else {
+            // One zone per free span, not one per display (#83). A display
+            // overhanging another is guarded over the overhangs and left open
+            // over the shared strip, so the pointer's route between the two
+            // screens survives while the spans that can host a summon do not.
+            let spans = freeBottomSpans(index, among: frames)
+            guard !spans.isEmpty else {
                 blocked.append(display.displayID)
+                continue
+            }
+            for span in spans {
+                zones.append(ClampZone(displayID: display.displayID, frame: span))
+            }
+            // Whole-display truth, asked of the predicate that has no interval
+            // arithmetic in it, so the report cannot inherit a bug from the
+            // spans. Anything short of a wholly free edge is reported as
+            // partial rather than as full coverage.
+            if !bottomEdgeIsFree(index, among: frames) {
+                partial.append(display.displayID)
             }
         }
 
@@ -287,14 +405,20 @@ public enum BottomDockGuard {
             if blocked.isEmpty && !mirrored.isEmpty { return .idle(.mirrorsPreferredDisplay) }
             return .idle(.nothingToGuard(blockedDisplayIDs: blocked))
         }
-        return .guarding(zones: zones, skipped: blocked + mirrored)
+        return .guarding(
+            zones: zones, skipped: blocked + mirrored, partiallyGuarded: partial
+        )
     }
 
     /// Applies the zones to a pointer location, or returns `nil` when the
     /// location is already allowed. Pure, so the tap callback holds no policy.
     ///
-    /// The first containing zone wins; zones cannot overlap, because displays
-    /// cannot, and `ClampZone.contains` is half-open horizontally.
+    /// The first containing zone wins, and no two can ever contain the same
+    /// point: zones on different displays cannot overlap because displays
+    /// cannot, `ClampZone.contains` is half-open horizontally so neighbours
+    /// never both claim the seam column, and the several zones a single display
+    /// contributes are the gaps between its blockers — disjoint by construction
+    /// and separated by at least one blocker each (#83).
     public static func clamp(_ point: CGPoint, zones: [ClampZone]) -> CGPoint? {
         for zone in zones where zone.contains(point) {
             return zone.clamping(point)
@@ -327,7 +451,8 @@ extension BottomDockGuard.IdleReason {
             return "idle — waiting for Accessibility permission"
         case .nothingToGuard(let blocked):
             return "idle — no guardable display "
-                + "(\(blocked.count) with a blocked bottom edge; clamping one would trap the pointer)"
+                + "(\(blocked.count) whose bottom edge is blocked along its whole length; "
+                + "clamping the shared span would trap the pointer)"
         case .mirrorsPreferredDisplay:
             return "idle — the other display mirrors the preferred one"
         }

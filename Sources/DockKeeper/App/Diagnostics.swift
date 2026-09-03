@@ -104,13 +104,27 @@ enum Diagnostics {
         switch decision {
         case .idle(let reason):
             return reason.explanation
-        case .guarding(let zones, let skipped):
-            var base = "guarding \(zones.count) display(s)"
+        case .guarding(let zones, let skipped, let partial):
+            // Distinct displays, never `zones.count`: since #83 one display
+            // contributes one zone per free span, so counting zones would
+            // report two displays guarded where a single overhanging display
+            // is guarded twice over. Spans are named alongside so the figure
+            // is not silently a different unit than the one v0.9.3 printed.
+            let guarded = Set(zones.map(\.displayID)).count
+            var base = "guarding \(guarded) display(s) over \(zones.count) span(s)"
+            if !partial.isEmpty {
+                // Partial is not "not covered", and conflating the two is how a
+                // report overstates coverage in one direction or understates it
+                // in the other. Say which, and say what is left open.
+                base += "; \(partial.count) partly covered "
+                    + "(the strip above another display stays open — it is the route between them)"
+            }
             if !skipped.isEmpty {
-                // Naming the uncovered displays matters: a whole-display refusal
-                // leaves spans that really can host a summon, so an unqualified
-                // "guarding" would overstate the coverage to whoever reads this.
-                base += " (\(skipped.count) not covered — blocked edge or mirrored)"
+                // Naming the uncovered displays matters: a display whose bottom
+                // edge is blocked along its whole length is not guarded at all,
+                // so an unqualified "guarding" would overstate the coverage to
+                // whoever reads this.
+                base += "; \(skipped.count) not covered (blocked edge or mirrored)"
             }
             // `Paused:` sits directly below this one, and both are new in this
             // release, so this is the first build whose report can pair a

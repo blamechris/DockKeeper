@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Changed
+
+- **The bottom-Dock guard now covers the parts of an edge that overhang another screen**, instead of standing down over the whole display. If one of your screens sits above another and sticks out past its sides, only the *overlapping strip* is left open now — that strip is how your pointer travels between the two screens, so holding it would trap your cursor — and the overhangs, which have nothing beneath them, are guarded like any other free edge. On a 4K stacked above a MacBook that is about 2100 px of bottom edge that v0.9.3 left open. Preferences and `--diagnostics` now say "partly covered" for such a display rather than reporting it as fully guarded. ([#83](https://github.com/blamechris/DockKeeper/issues/83))
+
 ## [0.9.3] — 2026-09-02
 
 Fourth public beta. The headline is a new opt-in feature: a bottom Dock can finally be kept on the display you chose.

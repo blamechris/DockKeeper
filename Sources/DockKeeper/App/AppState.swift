@@ -550,12 +550,24 @@ final class AppState: ObservableObject {
     /// broken (the same reasoning as ADR-010's "waiting for permission").
     var bottomDockGuardCaption: String {
         switch bottomDockGuardDecision {
-        case .guarding(let zones, let skipped):
-            let base = "Active — holding the bottom edge on \(zones.count) other display(s)."
-            guard !skipped.isEmpty else { return base }
-            return base + " \(skipped.count) display(s) are not covered, because another display "
-                + "overlaps their bottom edge or mirrors your preferred one — the Dock can still "
-                + "be summoned there."
+        case .guarding(let zones, let skipped, let partial):
+            // Distinct displays, not `zones.count`: an overhanging display
+            // contributes one zone per free span (#83), and "holding the bottom
+            // edge on 2 other displays" when there is one would be a false
+            // statement about the user's desk.
+            let guarded = Set(zones.map(\.displayID)).count
+            var caption = "Active — holding the bottom edge on \(guarded) other display(s)."
+            if !partial.isEmpty {
+                caption += " \(partial.count) of them only partly: the stretch that sits directly "
+                    + "above another screen is left open, because that is the route your pointer "
+                    + "takes between them, and the Dock can still be summoned there."
+            }
+            if !skipped.isEmpty {
+                caption += " \(skipped.count) display(s) are not covered at all, because another "
+                    + "display sits beneath their whole bottom edge or mirrors your preferred one "
+                    + "— the Dock can still be summoned there."
+            }
+            return caption
         case .idle(.featureDisabled):
             return ""
         case .idle(.appDisabled):
@@ -569,9 +581,9 @@ final class AppState: ObservableObject {
             return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
                 + "Privacy & Security \u{203A} Accessibility."
         case .idle(.nothingToGuard):
-            return "Not available on this arrangement: a display sits directly below another, "
-                + "so the bottom edge is the route the pointer takes between them. Holding it "
-                + "would trap your cursor."
+            return "Not available on this arrangement: a display sits directly below another "
+                + "along its whole bottom edge, so that edge is the route the pointer takes "
+                + "between them. Holding it would trap your cursor."
         case .idle(.mirrorsPreferredDisplay):
             return "Not available while your displays are mirrored — they show the same pixels, "
                 + "so there is no second bottom edge to hold."

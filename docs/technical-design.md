@@ -475,14 +475,27 @@ can act on, rather than blaming their monitors for a switch they left off.
 than defaulted, so a report can say which of the two switches is off (#63); the
 "required, not defaulted" part is the rule #65 established for guard inputs.
 
-**Geometry.** A `ClampZone` is emitted for each **non-preferred** display whose
-bottom edge is *free* — no other display flush beneath it. The tap pulls a
-pointer inside that band back to `maxY − 3`, altering `y` only. A display whose
-bottom edge is the crossing boundary to another screen is skipped, because
-holding that edge would trap the cursor; when skipping leaves nothing to guard,
-the decision is `.idle(.nothingToGuard)`. Mirrors of the preferred display are
-skipped for a different reason: same pixels, so a band on the "other" display
-lands on the one the user is looking at.
+**Geometry.** A `ClampZone` is emitted for each **free horizontal span** of each
+**non-preferred** display's bottom edge — each stretch with no other display
+flush beneath it (`freeBottomSpans`). The tap pulls a pointer inside that band
+back to `maxY − 3`, altering `y` only. The spans *shared* with a display beneath
+are skipped, because they are the pointer's route between the two screens and
+holding one would trap the cursor; when a display has no free span at all it is
+skipped whole, and when that leaves nothing to guard the decision is
+`.idle(.nothingToGuard)`. Mirrors of the preferred display are skipped for a
+different reason: same pixels, so a band on the "other" display lands on the one
+the user is looking at.
+
+Per-span rather than per-display since [#83](https://github.com/blamechris/DockKeeper/issues/83)
+— a whole-display refusal abandoned ~2112 px of the owner's own 3840 px bottom
+edge to protect a 1728 px crossing strip. A zone is a sub-rectangle of the
+display it names, narrowed in `x` only, so `clampY` and `contains`'s `frame.maxY`
+bound still describe that display and the blast-radius argument below is
+unchanged. The safety property is asserted as an invariant over whole
+arrangements — *no emitted band ever overlaps a display flush beneath it* — and
+the interval arithmetic is held to `bottomEdgeIsFree`, which has none in it, by a
+differential test. `Decision.guarding` carries `partiallyGuarded` alongside
+`skipped` so a partly-covered display is never reported as fully guarded.
 
 **Fail open, always.** No grant, refused tap, revoked grant, system-disabled tap
 — every degraded state releases the pointer. The failure that matters here is a
