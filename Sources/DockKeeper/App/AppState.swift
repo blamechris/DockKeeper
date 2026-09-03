@@ -563,9 +563,13 @@ final class AppState: ObservableObject {
                     + "takes between them, and the Dock can still be summoned there."
             }
             if !skipped.isEmpty {
-                caption += " \(skipped.count) display(s) are not covered at all, because another "
-                    + "display sits beneath their whole bottom edge or mirrors your preferred one "
-                    + "— the Dock can still be summoned there."
+                // Not "another display" — the sweep blocks on the UNION of every
+                // neighbour flush beneath, so an edge can be covered by two
+                // screens together with neither covering it alone. The singular
+                // was a claim the computation never made (#83 review).
+                caption += " \(skipped.count) display(s) are not covered at all, because other "
+                    + "screens sit beneath their whole bottom edge, or they mirror your preferred "
+                    + "display — the Dock can still be summoned there."
             }
             return caption
         case .idle(.featureDisabled):
@@ -581,9 +585,9 @@ final class AppState: ObservableObject {
             return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
                 + "Privacy & Security \u{203A} Accessibility."
         case .idle(.nothingToGuard):
-            return "Not available on this arrangement: a display sits directly below another "
-                + "along its whole bottom edge, so that edge is the route the pointer takes "
-                + "between them. Holding it would trap your cursor."
+            return "Not available on this arrangement: every bottom edge DockKeeper could hold "
+                + "is covered along its whole length by the screens below it, so that edge is "
+                + "the route your pointer takes between them. Holding it would trap your cursor."
         case .idle(.mirrorsPreferredDisplay):
             return "Not available while your displays are mirrored — they show the same pixels, "
                 + "so there is no second bottom edge to hold."

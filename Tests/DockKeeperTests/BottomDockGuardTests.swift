@@ -528,30 +528,112 @@ struct BottomDockGuardSafetyTests {
             [display(1, CGRect(x: 10000, y: 0, width: 500, height: 500), main: true),
              display(2, CGRect(x: 0, y: 0, width: 1000, height: 500)),
              display(3, CGRect(x: 3000, y: 500, width: 500, height: 500))],
+            // The lower display OVERLAPS the upper one's bottom edge by 2 pt
+            // rather than meeting it. macOS's arrangement UI cannot produce
+            // this, but a bounds report during reconfiguration can — the very
+            // premise the mirror gate in `decide` already defends against. The
+            // symmetric `abs(...) < flushTolerance` test this file shipped in
+            // v0.9.3 dropped such a neighbour from the blocker scan entirely
+            // and emitted a full-width band across it (#83 review).
+            [display(1, CGRect(x: 10000, y: 0, width: 500, height: 500), main: true),
+             display(2, CGRect(x: 0, y: 0, width: 1920, height: 1080)),
+             display(3, CGRect(x: 0, y: 1078, width: 1920, height: 1080))],
+            // ...and the same overlap with an overhang, so there is still a
+            // genuine free span to guard rather than a whole-display refusal.
+            [display(1, CGRect(x: 10000, y: 0, width: 500, height: 500), main: true),
+             display(2, CGRect(x: -400, y: 0, width: 2320, height: 1080)),
+             display(3, CGRect(x: 0, y: 1078, width: 1920, height: 1080))],
         ]
+        // The oracle must NOT re-derive the implementation's own "flush beneath"
+        // formula. An earlier version of this test did, and was therefore
+        // structurally blind to a bug in that formula — it agreed with the code
+        // because it *was* the code. So both properties below are stated purely
+        // in terms of which display CONTAINS a given point, which is ground
+        // truth from the arrangement and involves no tolerance arithmetic.
+        var bandChecks = 0      // property A evaluated against a real neighbour
+        var crossingChecks = 0  // property B evaluated at a real crossing point
+
         for displays in arrangements {
             for preferred in displays.map(\.displayID) {
                 let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: preferred))
-                for zone in zones(d) {
-                    let owner = displays.first { $0.displayID == zone.displayID }!.frame
+                let zs = zones(d)
+                for zone in zs {
+                    guard let owner = displays
+                        .first(where: { $0.displayID == zone.displayID })?.frame
+                    else {
+                        Issue.record("zone names display \(zone.displayID), which is not attached")
+                        continue
+                    }
                     // A zone is a sub-rectangle of the display it names: never
                     // wider than it, never on another display's y.
                     #expect(zone.frame.minX >= owner.minX && zone.frame.maxX <= owner.maxX)
                     #expect(zone.frame.minY == owner.minY && zone.frame.maxY == owner.maxY)
 
-                    for other in displays where other.displayID != zone.displayID {
-                        let beneath = abs(other.frame.minY - owner.maxY) < 1
-                        guard beneath else { continue }
-                        let overlap = min(other.frame.maxX, zone.frame.maxX)
-                            - max(other.frame.minX, zone.frame.minX)
-                        #expect(
-                            overlap <= 0,
-                            "band on \(zone.displayID) covers \(overlap) pt of the span shared with \(other.displayID)"
-                        )
+                    // Sample across the zone, half-open on the right to match
+                    // `contains`. One point per point of width is cheap and
+                    // cannot step over a narrow overlap.
+                    var x = zone.frame.minX
+                    while x < zone.frame.maxX {
+                        let inBand = CGPoint(x: x, y: owner.maxY - 0.5)
+
+                        for other in displays where other.displayID != zone.displayID {
+                            // PROPERTY A — the band never sits on the
+                            // territory of a display that continues below the
+                            // owner, i.e. one the pointer would cross into.
+                            // Independent of any notion of "flush": if such a
+                            // neighbour's frame contains a point we are about
+                            // to clamp, clamping it is wrong however that
+                            // overlap arose. The `maxY >` clause is what keeps
+                            // the deliberately-overlapping *blocker* fixtures
+                            // below (two displays sharing a band, used to prove
+                            // the sweep collapses them) from reading as
+                            // violations — they are siblings, not crossings.
+                            if other.frame.maxY > owner.maxY, other.frame.contains(inBand) {
+                                bandChecks += 1
+                                Issue.record(
+                                    "band on \(zone.displayID) clamps (\(x), \(inBand.y)), which lies inside display \(other.displayID)"
+                                )
+                            }
+                        }
+                        x += 1
+                    }
+                }
+
+                // PROPERTY B — the trapped-cursor property, and the reason the
+                // whole feature has a geometry gate. Swept over each display's
+                // ENTIRE bottom edge rather than over the zones, because it is
+                // a claim about what must NOT be clamped: wherever a step
+                // downward lands on another display, that x is the route
+                // between the two screens and has to stay open. Stated without
+                // any arithmetic — "which display contains this point" is
+                // ground truth from the arrangement.
+                for owner in displays.map(\.frame) {
+                    var x = owner.minX
+                    while x < owner.maxX {
+                        let inBand = CGPoint(x: x, y: owner.maxY - 0.5)
+                        let justBelow = CGPoint(x: x, y: owner.maxY + 0.5)
+                        if displays.contains(where: { $0.frame.contains(justBelow) }) {
+                            crossingChecks += 1
+                            #expect(
+                                BottomDockGuard.clamp(inBand, zones: zs) == nil,
+                                "x=\(x) is a crossing route off \(owner) and must not be clamped"
+                            )
+                        }
+                        x += 1
                     }
                 }
             }
         }
+
+        // Without these the whole test can go vacuous under a refactor — zero
+        // zones, or arrangements that no longer place anything beneath
+        // anything, would leave every assertion above unexecuted and the suite
+        // still green. Pin that both properties actually ran.
+        #expect(bandChecks == 0, "property A recorded \(bandChecks) violation(s)")
+        #expect(
+            crossingChecks > 1000,
+            "property B reached only \(crossingChecks) crossing points — the invariant has gone vacuous"
+        )
     }
 
     /// `bottomEdgeIsFree` and `freeBottomSpans` are deliberately independent
@@ -566,6 +648,14 @@ struct BottomDockGuardSafetyTests {
             CGRect(x: -500, y: -1000, width: 3000, height: 1000),
             CGRect(x: 900, y: 0, width: 400, height: 400),
             CGRect(x: 1700, y: 0, width: 400, height: 400),
+            // Sitting exactly ON the y tolerance, either side of it, and
+            // OVERLAPPING it. Without these the pool contained only clean
+            // flush-or-far pairs, so a boundary or sign disagreement between
+            // the two functions — precisely what this test exists to catch —
+            // had nothing to disagree about (#83 review).
+            CGRect(x: 0, y: 1117.9, width: 1728, height: 900),
+            CGRect(x: 0, y: 1118.0, width: 1728, height: 900),
+            CGRect(x: 0, y: 1115.0, width: 1728, height: 900),
         ]
         for i in pool.indices {
             for j in pool.indices where j != i {
@@ -636,9 +726,13 @@ struct BottomDockGuardSpanTests {
         let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
 
         #expect(guardedDisplayIDs(d) == [2])
-        #expect(spans(d, on: 2).count == 2)
-        #expect(spans(d, on: 2)[0].minX == -748 && spans(d, on: 2)[0].maxX == 0)
-        #expect(spans(d, on: 2)[1].minX == 1728 && spans(d, on: 2)[1].maxX == 3092)
+        // Whole-list comparisons, never `[0]` / `[1]`. A trapping subscript aborts the
+        // test *process*, so under a mutation that changes the span count the suite
+        // crashes instead of failing — and every mutation figure published for this file
+        // becomes unmeasurable. Two of ADR-015's re-measured rows were wrong for exactly
+        // that reason before this was fixed.
+        #expect(spans(d, on: 2).map(\.minX) == [-748, 1728])
+        #expect(spans(d, on: 2).map(\.maxX) == [0, 3092])
         // 748 + 1364 — the figure the issue quotes as "about 2100 px".
         let covered = spans(d, on: 2).reduce(CGFloat(0)) { $0 + ($1.maxX - $1.minX) }
         #expect(covered == 2112)
@@ -790,6 +884,62 @@ struct BottomDockGuardSpanTests {
 
     @Test("Mirrored displays sharing a frame do not split each other's spans")
     func mirroredFramesDoNotSplit() {
+        #expect(BottomDockGuard.freeBottomSpans(0, among: [laptop, laptop]) == [laptop])
+    }
+
+    /// `partial` is derived from `bottomEdgeIsFree`, not from `spans.count > 1`,
+    /// and the difference is reachable: a display overlapped on exactly ONE
+    /// side yields a single free span while being only partly covered. Counting
+    /// spans would report it as fully guarded — the overstated-coverage bug the
+    /// three-list design exists to prevent. Nothing caught this substitution
+    /// before the #83 review.
+    @Test("A display overhanging on one side only yields one span and is still reported partial")
+    func oneSidedOverhangIsStillPartial() {
+        // portraitAbove spans x −919 … 521 over a laptop at 0 … 1728: it hangs
+        // off the left and is covered from 0 rightwards. One free span.
+        let displays = [display(1, laptop, main: true), display(2, portraitAbove)]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(spans(d, on: 2).map(\.minX) == [-919])
+        #expect(spans(d, on: 2).map(\.maxX) == [0])
+        #expect(spans(d, on: 2).count == 1)          // a span count of one...
+        #expect(partiallyGuarded(d) == [2])          // ...and still only partly covered
+    }
+
+    /// The converse, so the pair pins the derivation from both sides: a wholly
+    /// free edge is one span AND not partial.
+    @Test("A wholly free display is one span and is not reported partial")
+    func whollyFreeIsNotPartial() {
+        let displays = [display(1, laptop, main: true), display(2, externalRight)]
+        let d = BottomDockGuard.decide(snapshot(displays: displays, preferred: 1))
+        #expect(spans(d, on: 2).count == 1)
+        #expect(partiallyGuarded(d).isEmpty)
+    }
+
+    /// The overlap case the shipped symmetric flush test was blind to, pinned
+    /// directly rather than only via the invariant (#83 review, critical).
+    @Test("A display overlapping the bottom edge blocks it, rather than being ignored")
+    func overlapBlocksLikeAFlushNeighbour() {
+        let upper = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let overlappingBy2 = CGRect(x: 0, y: 1078, width: 1920, height: 1080)
+        #expect(BottomDockGuard.bottomEdgeIsFree(0, among: [upper, overlappingBy2]) == false)
+        #expect(BottomDockGuard.freeBottomSpans(0, among: [upper, overlappingBy2]).isEmpty)
+
+        // ...and an overlap that leaves an overhang still yields just the overhang.
+        let wider = CGRect(x: -400, y: 0, width: 2320, height: 1080)
+        let spans = BottomDockGuard.freeBottomSpans(0, among: [wider, overlappingBy2])
+        #expect(spans.map(\.minX) == [-400])
+        #expect(spans.map(\.maxX) == [0])
+    }
+
+    /// A display *above* satisfies the first half of `isBeneath` and must be
+    /// excluded by the second; a mirror sharing the exact frame likewise. Pins
+    /// the clause that stops the one-sided test from over-blocking.
+    @Test("A display above, or a mirror, is never treated as beneath")
+    func aboveAndMirrorAreNotBeneath() {
+        // portraitAbove sits above the laptop; the laptop's own edge stays free.
+        #expect(BottomDockGuard.bottomEdgeIsFree(1, among: [portraitAbove, laptop]))
+        #expect(BottomDockGuard.freeBottomSpans(1, among: [portraitAbove, laptop]) == [laptop])
+        // Identical frames: neither blocks the other.
         #expect(BottomDockGuard.freeBottomSpans(0, among: [laptop, laptop]) == [laptop])
     }
 

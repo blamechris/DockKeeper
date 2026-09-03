@@ -477,7 +477,11 @@ than defaulted, so a report can say which of the two switches is off (#63); the
 
 **Geometry.** A `ClampZone` is emitted for each **free horizontal span** of each
 **non-preferred** display's bottom edge — each stretch with no other display
-flush beneath it (`freeBottomSpans`). The tap pulls a pointer inside that band
+beneath it (`freeBottomSpans`). "Beneath" is one shared `isBeneath` predicate,
+deliberately **one-sided**: a neighbour whose frame *overlaps* the edge blocks it
+just as a flush one does, because its rectangle covers ground at or above that
+edge. v0.9.3 compared by absolute distance and so ignored an overlapping
+neighbour entirely; that is fixed with #83. The tap pulls a pointer inside that band
 back to `maxY − 3`, altering `y` only. The spans *shared* with a display beneath
 are skipped, because they are the pointer's route between the two screens and
 holding one would trap the cursor; when a display has no free span at all it is

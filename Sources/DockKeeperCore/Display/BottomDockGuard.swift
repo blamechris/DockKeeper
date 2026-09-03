@@ -86,11 +86,38 @@ public enum BottomDockGuard {
         let me = frames[index]
         return !frames.indices.contains { other in
             guard other != index else { return false }
-            let beneath = abs(frames[other].minY - me.maxY) < flushTolerance
+            let beneath = isBeneath(frames[other], me)
             let overlapsHorizontally =
                 min(frames[other].maxX, me.maxX) - max(frames[other].minX, me.minX) > 0
             return beneath && overlapsHorizontally
         }
+    }
+
+    /// Whether `other` sits beneath `me`'s bottom edge closely enough to be the
+    /// route the pointer takes off `me` — the single definition both the
+    /// whole-display predicate and the span sweep ask, so the two cannot drift.
+    ///
+    /// **Deliberately one-sided, and that is a fix rather than a style choice.**
+    /// Until #83's review this read `abs(other.minY - me.maxY) < flushTolerance`,
+    /// symmetric about zero — which treats a *gap* and an *overlap* of the same
+    /// magnitude identically. They are not alike. A gap wider than the tolerance
+    /// really does mean "not touching, nothing to cross to". An overlap wider
+    /// than the tolerance means the opposite: `other`'s own rectangle
+    /// demonstrably includes ground at or above my bottom edge, so it can never
+    /// be safe to ignore, however large. The symmetric form dropped exactly
+    /// those neighbours, and a display overlapping mine by 2 pt was invisible to
+    /// the blocker scan — I would emit a full-width band over ground that
+    /// belongs to it. That is the trapped-cursor failure, reachable through the
+    /// transiently-overlapping bounds report this file already defends against
+    /// in the mirror gate.
+    ///
+    /// `other.maxY > me.maxY` is what keeps it from over-blocking: a display
+    /// *above* me, or a mirror sharing my exact frame, satisfies the first
+    /// clause and is correctly excluded by the second. Erring here can only
+    /// ever *add* a blocker, and an extra blocker only ever removes clamping —
+    /// so this predicate fails open in both directions.
+    private static func isBeneath(_ other: CGRect, _ me: CGRect) -> Bool {
+        other.minY < me.maxY + flushTolerance && other.maxY > me.maxY
     }
 
     /// The stretches of display `index`'s bottom edge with **nothing beneath
@@ -132,7 +159,6 @@ public enum BottomDockGuard {
     public static func freeBottomSpans(_ index: Int, among frames: [CGRect]) -> [CGRect] {
         guard frames.indices.contains(index) else { return [] }
         let me = frames[index]
-        guard me.width >= flushTolerance else { return [] }
 
         // Blockers, clipped to my own horizontal extent. `> 0` matches
         // `bottomEdgeIsFree`'s overlap test exactly: edge-touching in x is not
@@ -140,7 +166,7 @@ public enum BottomDockGuard {
         var blockers: [(lo: CGFloat, hi: CGFloat)] = []
         for other in frames.indices where other != index {
             let f = frames[other]
-            guard abs(f.minY - me.maxY) < flushTolerance else { continue }
+            guard isBeneath(f, me) else { continue }
             let lo = max(f.minX, me.minX)
             let hi = min(f.maxX, me.maxX)
             if hi - lo > 0 { blockers.append((lo, hi)) }
@@ -451,8 +477,8 @@ extension BottomDockGuard.IdleReason {
             return "idle — waiting for Accessibility permission"
         case .nothingToGuard(let blocked):
             return "idle — no guardable display "
-                + "(\(blocked.count) whose bottom edge is blocked along its whole length; "
-                + "clamping the shared span would trap the pointer)"
+                + "(\(blocked.count) whose bottom edge is covered along its whole length by the "
+                + "display(s) below; clamping a shared span would trap the pointer)"
         case .mirrorsPreferredDisplay:
             return "idle — the other display mirrors the preferred one"
         }
