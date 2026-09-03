@@ -544,61 +544,12 @@ final class AppState: ObservableObject {
         applyBottomDockGuard()
     }
 
-    /// The live status caption under the bottom-Dock toggle. Says what the
-    /// guard is doing *right now* — the toggle can be on while every
-    /// precondition is unmet, and silence there is what makes a feature feel
-    /// broken (the same reasoning as ADR-010's "waiting for permission").
+    /// The live status caption under the bottom-Dock toggle. The wording,
+    /// and every count in it, is `BottomDockGuard.caption(for:)` — a pure
+    /// function in Core so it is reachable from a test (#84). This property
+    /// is the SwiftUI binding and nothing else.
     var bottomDockGuardCaption: String {
-        switch bottomDockGuardDecision {
-        case .guarding(let zones, let skipped, let partial):
-            // Distinct displays, not `zones.count`: an overhanging display
-            // contributes one zone per free span (#83), and "holding the bottom
-            // edge on 2 other displays" when there is one would be a false
-            // statement about the user's desk.
-            let guarded = Set(zones.map(\.displayID)).count
-            var caption = "Active — holding the bottom edge on \(guarded) other display(s)."
-            if !partial.isEmpty {
-                // Plural for the same reason the `skipped` sentence below is:
-                // a bottom edge can sit above two screens at two separate
-                // stretches, so neither "the stretch" nor "another screen" is
-                // a claim the sweep makes. Fixing one and leaving its twin was
-                // itself a review finding (#83 delta review).
-                caption += " \(partial.count) of them only partly: the stretches that sit directly "
-                    + "above your other screens are left open, because that is the route your "
-                    + "pointer takes between them, and the Dock can still be summoned there."
-            }
-            if !skipped.isEmpty {
-                // Not "another display" — the sweep blocks on the UNION of every
-                // neighbour flush beneath, so an edge can be covered by two
-                // screens together with neither covering it alone. The singular
-                // was a claim the computation never made (#83 review).
-                caption += " \(skipped.count) display(s) are not covered at all, because other "
-                    + "screens sit beneath their whole bottom edge, or they mirror your preferred "
-                    + "display — the Dock can still be summoned there."
-            }
-            return caption
-        case .idle(.featureDisabled):
-            return ""
-        case .idle(.appDisabled):
-            // Not blank, unlike `featureDisabled`. `.appDisabled` is returned
-            // whatever the feature toggle reads, because the master switch is
-            // disqualified first (TDD §10a) — so this caption names the switch
-            // the user actually turned off, rather than leaving a blank space
-            // under a toggle that looks like it should be doing something.
-            return "Inactive while DockKeeper is turned off."
-        case .idle(.accessibilityNotGranted):
-            return "Waiting for Accessibility permission — grant it in System Settings \u{203A} "
-                + "Privacy & Security \u{203A} Accessibility."
-        case .idle(.nothingToGuard):
-            return "Not available on this arrangement: every bottom edge DockKeeper could hold "
-                + "is covered along its whole length by the screens below it, so that edge is "
-                + "the route your pointer takes between them. Holding it would trap your cursor."
-        case .idle(.mirrorsPreferredDisplay):
-            return "Not available while your displays are mirrored — they show the same pixels, "
-                + "so there is no second bottom edge to hold."
-        case .idle(let reason):
-            return "Inactive — \(reason.explanation.replacingOccurrences(of: "idle — ", with: ""))."
-        }
+        BottomDockGuard.caption(for: bottomDockGuardDecision)
     }
 
     /// The preferred display's live `CGDirectDisplayID`, or `nil` when no
