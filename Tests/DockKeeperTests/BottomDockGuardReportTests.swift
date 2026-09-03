@@ -45,28 +45,29 @@ private func snapshot(
     )
 }
 
-/// Every idle reason — **derived from a total switch, not kept as a second
-/// list.** `nextIdleReason` has no `default`, so adding a case to `IdleReason`
-/// fails the build inside the very function this list is built from.
+/// Every idle reason, built by walking a cyclic successor function.
 ///
-/// The previous version of this file kept a literal array beside a switch whose
-/// only job was to fail the build, and a comment claiming that "forces whoever
-/// adds a case to visit the list". Round 2 of review disproved it by doing the
-/// lazy thing: add a case, apply the compiler's own one-line fix to the switch,
-/// leave the array at ten entries — 86 tests green, and the new reason shipping
-/// through `caption`'s generic fallback with no coverage. That is verbatim the
-/// outcome the comment said it prevented. Correcting an overclaim with a second
-/// overclaim is how this file earned two review rounds.
+/// Two mechanisms keep this list honest, and it is worth being exact about what
+/// each one does — three review rounds in a row corrected an overstatement in
+/// this comment, each time because it described the *intent* rather than the
+/// mechanism:
 ///
-/// **What this construction actually guarantees, and no more:** the build fails
-/// at the list's own definition, and the edit that fixes it is a line *in* the
-/// chain, so the lazy fix and the correct fix are the same edit. **What it does
-/// not guarantee:** a case whose successor is named while nothing names *it* is
-/// still unreachable. Swift cannot close that gap — `IdleReason` carries an
-/// associated value, so it cannot be `CaseIterable`, and no construction can
-/// enumerate it. The cycle is closed (`nextIdleReason` returns a non-optional,
-/// so there is no `nil` to truncate it with) and `chainIsWellFormed` fails if
-/// the walk does not come back round, which is as far as the language goes.
+/// - **The compiler** fails the build when `IdleReason` gains a case, because
+///   `nextIdleReason` below has no `default`. That is the whole of its
+///   contribution. It does **not** force the new case into this list: satisfying
+///   the error with `case .newCase: return .appDisabled` compiles, leaves the
+///   walk ten entries long, and ships the reason with no coverage. Review
+///   demonstrated exactly that, twice, against two different versions of this
+///   file.
+/// - **`chainVisitsEveryReason`** asserts the walk is ten long, which is what
+///   turns a spliced-in case into a red test and then into a required caption.
+///   It cannot see a case that nothing points at.
+///
+/// Swift cannot close the remaining gap: `IdleReason` carries an associated
+/// value, so it cannot be `CaseIterable`, and nothing can enumerate it. What is
+/// actually achieved is that the build breaks *in this file* and a count
+/// assertion sits next to the break. That is less than "the list cannot go
+/// stale", and saying the stronger thing is what earned rounds 2 and 3.
 private let allIdleReasons: [BottomDockGuard.IdleReason] = {
     var out: [BottomDockGuard.IdleReason] = [.appDisabled]
     var reason = nextIdleReason(.appDisabled)
@@ -297,16 +298,30 @@ struct BottomDockGuardCaptionTests {
     /// `IdleReason.explanation`; that coupling is undeclared and now lives in a
     /// different file from the strings it cuts, so retitling the prefix would
     /// otherwise silently render "Inactive — idle: needs a second display."
-    /// The chain that builds `allIdleReasons` must close, and must close without
-    /// hitting the bound that stops a malformed cycle hanging the runner. A walk
-    /// that ran to 64 would silently mean "the list is whatever the first 64 steps
-    /// were", which is not a list of reasons at all.
-    @Test("The idle-reason chain is a closed cycle with no repeats")
-    func chainIsWellFormed() {
-        #expect(allIdleReasons.count < 64, "the successor chain did not come back round")
+    /// The walk must visit every reason and come back round.
+    ///
+    /// **The count is the load-bearing assertion, and it is deliberately a
+    /// literal.** The previous version of this test asserted three properties,
+    /// and review showed two of them could not fail while the first passed: the
+    /// walk is deterministic and exits only on reaching `.appDisabled`, so a
+    /// repeated element implies a cycle that never terminates and therefore hits
+    /// the bound, and "the last element's successor is the first" is the loop's
+    /// own exit condition restated. Worse, the malformation the test was named
+    /// for slipped through — pointing `.edgeNotBottom` straight back at
+    /// `.appDisabled` closes the cycle while dropping seven reasons, and all
+    /// three expectations passed.
+    ///
+    /// A literal count catches that, and is what makes a spliced-in case fail
+    /// here first and then in `idleCaptionsAreExact` until it has a caption.
+    @Test("The idle-reason chain visits every reason and closes")
+    func chainVisitsEveryReason() {
+        #expect(
+            allIdleReasons.count == 10,
+            "the chain skipped a reason, gained one, or did not come back round"
+        )
+        // Distinct by construction if the count holds, but stated because a
+        // future non-deterministic successor would break the implication.
         #expect(Set(allIdleReasons.map(String.init(describing:))).count == allIdleReasons.count)
-        // Closing the cycle is the property that makes the walk terminate at all.
-        #expect(nextIdleReason(allIdleReasons[allIdleReasons.count - 1]) == allIdleReasons[0])
     }
 
     @Test("Every idle caption, word for word")

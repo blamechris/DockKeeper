@@ -23,22 +23,22 @@ import Foundation
 /// counts, which are the ones that can miscount. The app target performs no
 /// arithmetic over a decision and holds no wording derived from one.
 ///
-/// **What stays is fixed text, and the full list is worth writing down**, because
-/// the first attempt at this paragraph named only half of it and review caught
-/// that as the same class of overstatement the file exists to make catchable:
+/// **Fixed text does remain in the app target, and it is still uncovered.** Three
+/// consecutive review rounds corrected this paragraph — "no wording remains",
+/// then "four lines in `BottomDockGuardTap`", then a two-file list that omitted
+/// `Diagnostics` — so it no longer tries to be a list. Re-derive it instead:
 ///
-/// - `BottomDockGuardTap` — four lifecycle log lines (not-starting,
-///   tap-creation-failed, released, re-enabled). The first is the support-facing
-///   counterpart to the armed line in the same stream, and is what distinguishes
-///   "the grant went stale" from "the tap never ran" (#87).
-/// - `PreferencesView` — the toggle label, the Accessibility button, and a
-///   help paragraph that explains the feature. **One sentence of that paragraph
-///   is a conditional claim about the user's arrangement** — that the overlapping
-///   strip is left unguarded — and #83 rewrote it in the same commit as the
-///   caption below it, which is precisely the co-editing risk this move is
-///   supposed to answer. It is static text, so it cannot miscount; it can go
-///   stale against a span-policy change while the pinned caption tests force the
-///   caption to be updated. Tracked as its own follow-on rather than folded in.
+///     grep -rlE "bottomDockGuard|lockBottomDock|Bottom guard" Sources/DockKeeper
+///
+/// At the time of writing that returns four files. `AppState` is binding only.
+/// The other three hold fixed strings: `BottomDockGuardTap`'s lifecycle log lines
+/// and its main-thread `precondition` message (#87); `Diagnostics`' `Bottom guard:`
+/// row label, which is the label on the very line whose *value* moved here; and
+/// `PreferencesView`'s toggle label, Accessibility button and help paragraph —
+/// whose closing sentence is a conditional claim about the user's arrangement,
+/// rewritten by #83 in the same commit as the caption below it (#89).
+///
+/// None of it counts anything, so none of it can miscount. It can go stale.
 ///
 /// So: uncovered wording does remain in the app target. What no longer lives
 /// there is anything that counts.
