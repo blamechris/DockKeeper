@@ -558,9 +558,14 @@ final class AppState: ObservableObject {
             let guarded = Set(zones.map(\.displayID)).count
             var caption = "Active — holding the bottom edge on \(guarded) other display(s)."
             if !partial.isEmpty {
-                caption += " \(partial.count) of them only partly: the stretch that sits directly "
-                    + "above another screen is left open, because that is the route your pointer "
-                    + "takes between them, and the Dock can still be summoned there."
+                // Plural for the same reason the `skipped` sentence below is:
+                // a bottom edge can sit above two screens at two separate
+                // stretches, so neither "the stretch" nor "another screen" is
+                // a claim the sweep makes. Fixing one and leaving its twin was
+                // itself a review finding (#83 delta review).
+                caption += " \(partial.count) of them only partly: the stretches that sit directly "
+                    + "above your other screens are left open, because that is the route your "
+                    + "pointer takes between them, and the Dock can still be summoned there."
             }
             if !skipped.isEmpty {
                 // Not "another display" — the sweep blocks on the UNION of every

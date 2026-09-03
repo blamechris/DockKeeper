@@ -117,7 +117,7 @@ enum Diagnostics {
                 // report overstates coverage in one direction or understates it
                 // in the other. Say which, and say what is left open.
                 base += "; \(partial.count) partly covered "
-                    + "(the strip above another display stays open — it is the route between them)"
+                    + "(the strips above other displays stay open — they are the route between them)"
             }
             if !skipped.isEmpty {
                 // Naming the uncovered displays matters: a display whose bottom

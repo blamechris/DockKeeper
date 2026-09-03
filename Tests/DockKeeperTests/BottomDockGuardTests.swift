@@ -569,33 +569,40 @@ struct BottomDockGuardSafetyTests {
                     #expect(zone.frame.minX >= owner.minX && zone.frame.maxX <= owner.maxX)
                     #expect(zone.frame.minY == owner.minY && zone.frame.maxY == owner.maxY)
 
-                    // Sample across the zone, half-open on the right to match
-                    // `contains`. One point per point of width is cheap and
-                    // cannot step over a narrow overlap.
-                    var x = zone.frame.minX
-                    while x < zone.frame.maxX {
-                        let inBand = CGPoint(x: x, y: owner.maxY - 0.5)
-
-                        for other in displays where other.displayID != zone.displayID {
-                            // PROPERTY A — the band never sits on the
-                            // territory of a display that continues below the
-                            // owner, i.e. one the pointer would cross into.
-                            // Independent of any notion of "flush": if such a
-                            // neighbour's frame contains a point we are about
-                            // to clamp, clamping it is wrong however that
-                            // overlap arose. The `maxY >` clause is what keeps
-                            // the deliberately-overlapping *blocker* fixtures
-                            // below (two displays sharing a band, used to prove
-                            // the sweep collapses them) from reading as
-                            // violations — they are siblings, not crossings.
-                            if other.frame.maxY > owner.maxY, other.frame.contains(inBand) {
-                                bandViolations += 1
-                                Issue.record(
-                                    "band on \(zone.displayID) clamps (\(x), \(inBand.y)), which lies inside display \(other.displayID)"
-                                )
-                            }
+                    // PROPERTY A — the band never sits on the territory of a
+                    // display that continues below the owner, i.e. one the
+                    // pointer would cross into. Independent of any notion of
+                    // "flush": if such a neighbour's rectangle covers ground we
+                    // are about to clamp, clamping it is wrong however that
+                    // overlap arose.
+                    //
+                    // Tested as a RECTANGLE INTERSECTION rather than by probing
+                    // points. An earlier version sampled one point at
+                    // `maxY - 0.5`, which made it blind to any overlap
+                    // shallower than that — the property would have depended on
+                    // a magic probe depth rather than on the geometry (#83
+                    // delta review). `intersects` is false for edge-adjacent
+                    // rects, so a *flush* neighbour starting exactly at
+                    // `owner.maxY` is correctly not a violation, while an
+                    // overlap of any depth at all is.
+                    //
+                    // The `maxY >` clause is what keeps the deliberately-
+                    // overlapping *blocker* fixtures above (two displays
+                    // sharing a band, used to prove the sweep collapses them)
+                    // from reading as violations — they are siblings, not
+                    // crossings.
+                    let band = CGRect(
+                        x: zone.frame.minX, y: zone.clampY,
+                        width: zone.frame.width, height: owner.maxY - zone.clampY
+                    )
+                    for other in displays where other.displayID != zone.displayID {
+                        guard other.frame.maxY > owner.maxY else { continue }
+                        if other.frame.intersects(band) {
+                            bandViolations += 1
+                            Issue.record(
+                                "band \(band) on display \(zone.displayID) overlaps display \(other.displayID) at \(other.frame)"
+                            )
                         }
-                        x += 1
                     }
                 }
 
@@ -607,6 +614,13 @@ struct BottomDockGuardSafetyTests {
                 // between the two screens and has to stay open. Stated without
                 // any arithmetic — "which display contains this point" is
                 // ground truth from the arrangement.
+                //
+                // This half does sample, at one point per point of width. That
+                // is sufficient *because CoreGraphics reports integral display
+                // bounds and every fixture here is integral* — not because a
+                // unit step is safe in general. A sub-point violation window
+                // off the integer grid could hide between samples, so keep the
+                // fixtures integral or narrow the step.
                 for owner in displays.map(\.frame) {
                     var x = owner.minX
                     while x < owner.maxX {
