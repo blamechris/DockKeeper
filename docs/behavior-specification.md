@@ -871,14 +871,22 @@ Because its own rectangle covers ground at or above that edge,   review — v0.9
     so a band there would sit on the display beneath             test was symmetric and
                                                                  dropped such a
                                                                  neighbour entirely]
-And a real pointer still crosses through the shared span with   [UNKNOWN until run —
-    per-span zones armed                                         needs a rig with one
-                                                                 display overhanging
-                                                                 another; the 2026-09-02
-                                                                 confirmation was
-                                                                 side-by-side and had
-                                                                 no shared span,
-                                                                 test-strategy §3d row 9]
+And a real pointer still crosses through the shared span with   [CONFIRMED 2026-09-03
+    per-span zones armed                                         with a control on the
+                                                                 stacked-with-overhang
+                                                                 rig: shared columns
+                                                                 unclamped and reaching
+                                                                 the display below,
+                                                                 both overhangs held
+                                                                 10/10 at clampY = -3,
+                                                                 released control put
+                                                                 every overhang back —
+                                                                 test-strategy §3d row 9,
+                                                                 hardware matrix s4. The
+                                                                 Dock-migration clause was
+                                                                 closed the same day by a
+                                                                 real-hand push with a
+                                                                 control, row 9f]
 
 S11 — A display mirroring the preferred one is never guarded
 Given another display shows the same pixels as the preferred one

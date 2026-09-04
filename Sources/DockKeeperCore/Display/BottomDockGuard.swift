@@ -128,9 +128,14 @@ public enum BottomDockGuard {
     /// **Why this exists (#83).** `bottomEdgeIsFree` refuses whole displays, so
     /// a display overlapped anywhere along its bottom edge was left entirely
     /// unguarded. On the owner's own desk that abandoned ~2100 px of a 3840 px
-    /// edge: a 4K stacked above a MacBook overhangs it by ~748 px left and
-    /// ~1364 px right, and the guard stood down over all of it because the
-    /// middle ~1728 px is shared. ADR-015 declined this on the strength of an
+    /// edge: a 4K stacked above a MacBook overhangs it on both sides, and the
+    /// guard stood down over all of it because the middle 1728 px is shared.
+    /// **Only the 3840 − 1728 = 2112 px total is invariant — the left/right
+    /// split is not**, because the displays' horizontal offset moves between
+    /// sessions: the same desk measured ~748/~1364 when #83 was written and
+    /// 478/1634 when §3d row 9 was run on it. Treat either split as an example,
+    /// never as a figure to check against; `freeBottomSpans` derives the real
+    /// ones from the frames in hand. ADR-015 declined this on the strength of an
     /// UNKNOWN — whether a summon can fire on a *shared* edge — but that
     /// UNKNOWN is about the shared span, and these spans are free by
     /// construction. Nothing is beneath them, so clamping them rests on nothing

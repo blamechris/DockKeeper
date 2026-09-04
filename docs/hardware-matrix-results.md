@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) and session 3 (DK-FR-014 guard, **G1 confirmed**) added 2026-09-02 |
+| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) and session 3 (DK-FR-014 guard, **G1 confirmed**) added 2026-09-02; **session 4** (DK-FR-014 **§3d row 9 confirmed** on the stacked-with-overhang rig) added 2026-09-03 |
 | **Rig** | MacBook Pro built-in Retina (1728×1117) + Dell S2719DGF on external, **portrait** (1440×2560, rotation 90°), macOS 26.5 Apple Silicon |
 | **Inputs** | [Test strategy §3](test-strategy.md) matrix, risk R-002/R-003 |
 
@@ -137,6 +137,198 @@ The only trustworthy signal was the unified log, because `start()` logs on all t
 [#78](https://github.com/blamechris/DockKeeper/issues/78) proposes the live-state readout that
 would have answered this in one command.
 
+## Session 4 — 2026-09-03 (DK-FR-014 §3d row 9, stacked-with-overhang rig)
+
+**§3d row 9 is CONFIRMED with a control.** The crossing under per-span zones — the last open
+on-device obligation of ADR-015, and the only one whose failure direction is a *trapped cursor*
+rather than an unguarded Dock — is now observed on hardware. With the guard armed the pointer
+crosses the shared strip untouched, and is held 3 pt clear on both overhangs; releasing the guard
+moves every overhang column back and leaves the shared strip unchanged.
+
+**Two instruments, and the row needed both.** A synthetic probe answers the *geometry* half
+exactly — which columns are clamped and to what value — and cannot answer the Dock-migration half
+at all, because a summon needs dwell. That half was closed by hand, by the owner, with its own
+control (row 9f). Neither instrument alone closes row 9; the split is recorded per cell below
+rather than averaged into one verdict.
+
+**Rig.** MacBook Pro built-in Retina `(0, 0, 1728, 1117)` — **MAIN and preferred** — with the
+**DELL G3223Q** `(-478, -2160, 3840, 2160)` **stacked above it and overhanging on both sides**:
+the owner's own arrangement, and the shape [#83](https://github.com/blamechris/DockKeeper/issues/83)
+was written for. Separate Spaces ON, Dock bottom, not auto-hidden, `lockEdge = 2`, Accessibility
+granted. macOS **26.6.2 (25G83)**, Apple Silicon — note session 3 ran on **26.5**, so this is a
+fresh OS as row 1 asks for. Build: **0.9.4-dev from `3257335`**, Developer ID signed.
+
+The edge divides as ADR-015 predicts, and the free total is the invariant 3840 − 1728 = **2112 px**:
+
+| Span of the Dell's bottom edge | x-range | Width | Zone |
+|---|---|---|---|
+| Left overhang | `[-478, 0)` | 478 px | **clamped**, `clampY = -3` |
+| Shared with the built-in | `[0, 1728)` | 1728 px | **open — the crossing route** |
+| Right overhang | `[1728, 3362)` | 1634 px | **clamped**, `clampY = -3` |
+
+`clampY = frame.maxY − 3` and the Dell's `maxY` is **0**, so the guard band on this rig is the
+open interval `y ∈ (−3, 0)` and the clamp target is a **negative** number. Every threshold below
+is stated as a number for that reason: a sanity rule carried over from session 3's positive-`y`
+rig (`clampY = 1175`) inverts here.
+
+### What was run
+
+Two instruments, both read in **CG global top-left** — the space `ClampZone` uses — so no Cocoa
+conversion sits between the measurement and the assertion:
+
+- **Decision**, re-derived on the real geometry: `--diagnostics` →
+  `Bottom guard: guarding 1 display(s) over 2 span(s); 1 partly covered`.
+- **Live tap state**, emitted by the running process and never re-derived: the unified log, filtered
+  by `subsystem == "com.dockkeeper.app" AND process == "DockKeeper"` and recorded with its PID —
+  `Bottom-Dock guard: armed over 2 span(s) on 1 display(s)` (PID 6239), and
+  `Bottom-Dock guard: released` on quit.
+
+The measured motion is a 1 pt synthetic walk posted with `CGEvent(…).post(tap: .cghidEventTap)` —
+the HID tap sits below the app's `.cgSessionEventTap`, so the session tap sees it. The question
+asked is not "did motion stop" but **"was the event's location rewritten"**.
+
+**Each column is walked twice, to two different aims, and they answer different questions.** Reading
+the table without this makes 9a and 9b look like one run contradicting itself:
+
+| Aim | Lands | Asks | Armed answer on a free span |
+|---|---|---|---|
+| `y = −1` | the Dell's last row, **inside** the band `(−3, 0)` | *is this column clamped?* | rewritten to **`−3`** |
+| `y = +60` | on the **built-in** for a shared column; on **no display at all** for an overhang column | *can the pointer get to the display beneath?* | **`60`** — outside the band, never clamped |
+
+So `y = −1` is the discriminating cell and `y = +60` is the crossing cell; a column can legitimately
+report "held at −3" for the first and "reached 60" for the second, because the band is only 3 pt
+tall and bounded above by zero. The v1 fault below was using `+60` *as the clamp test*, where it
+can only ever return "not held".
+
+**`y = +60` is load-bearing only on the shared columns**, where it is the actual crossing — the
+pointer arriving on the built-in. On an overhang there is no display at 60, and the reading of `60`
+there says only that the posted event was not rewritten, since a posted move is not bounded by the
+desktop union (below). It is reported for all eleven columns because a *uniform* result is what
+shows the guard alters nothing outside its band, not because an overhang crossing means anything.
+
+| # | Cell | Armed | Released (control) | Result |
+|---|---|---|---|---|
+| 9a | **Shared strip crosses** — `x ∈ {0, 200, 864, 1500, 1727}`, aim `y = +60` on the built-in | reaches **60** at all five | reaches **60** at all five | **CONFIRMED ✅** the crossing route is open with per-span zones armed |
+| 9b | **Shared strip is never clamped** — same five columns, aim `y = −1` | **10/10 at −1** at `x = 864`; −1 at all five in the sweep | 10/10 at −1 | **CONFIRMED ✅** at the five columns sampled. That *no* zone covers `[0, 1728)` is not generalised from them — it is true by construction (the sweep clips the blocker interval out) and asserted as a unit invariant over whole arrangements |
+| 9c | **Left overhang is held** — `x ∈ {−478, −200, −1}`, aim `y = −1` | **10/10 held at −3** at `x = −200`; −3 at all three in the sweep | **10/10 at −1** | **CONFIRMED ✅** held exactly 3 pt clear |
+| 9d | **Right overhang is held** — `x ∈ {1728, 2500, 3361}`, aim `y = −1` | **10/10 held at −3** at `x = 2500`; −3 at all three in the sweep | **10/10 at −1** | **CONFIRMED ✅** |
+| 9e | **The seam** — `x = 1727` (last shared column) vs `x = 1728` (first overhang column) | 1727 → **−1**, 1728 → **−3** | both −1 | **CONFIRMED ✅** the boundary column goes entirely to the overhang; no gap, no double coverage |
+| 9f | **Dock does not migrate** — real hand, by the owner | pushed at an overhang with the tap armed: **Dock did not migrate** | same push after quitting the app: **Dock migrates** | **CONFIRMED ✅** with a control, 95 s apart (see below) |
+
+**The armed and released runs are the same instrument minutes apart, and the only thing that
+changed is the guard.** Six overhang columns moved `−3 → −1`; five shared columns did not move.
+
+**The run is self-validating, which is what makes 9a/9b trustworthy.** A null result ("the shared
+strip was not clamped") is worthless if the instrument cannot see a clamp at all. In *the same run*
+the overhang columns read `−3` — a value only the guard produces — so the instrument demonstrably
+saw clamping at the moment the shared strip read `−1`. Positive and negative in one pass, per
+instrument-discipline rule 5.
+
+### Row 9f — the Dock-migration clause, by hand, with a control
+
+**The synthetic instrument cannot reach this clause and did not try.** It walks the pointer to the
+trigger row and reads back within ~100 ms, while a summon needs sustained dwell; `CoreDockGetRect`
+read `(354, 1039, 1019, 78)` on the built-in before and after every synthetic run, which is
+consistent with the guard working and equally consistent with never having attempted a summon. It
+is not evidence.
+
+**It was closed by hand instead, by the owner, and the unified log timestamps both halves:**
+
+```
+17:12:08.531  Bottom-Dock guard: armed over 2 span(s) on 1 display(s)   DockKeeper[6393]
+              -> pushed the pointer at an overhang: the Dock did NOT migrate
+17:13:43.002  Bottom-Dock guard: released                               DockKeeper[6393]
+              (the owner quitting from the menu bar - this IS the control)
+              -> the same push now moves the Dock as expected
+```
+
+Armed and released are **95 seconds apart** on the same rig, same sitting, and the only thing that
+changed is the guard.
+
+**The control also validates the aim, which is what makes this more than an anecdote.** A push on
+the *shared* strip could not migrate the Dock in either state — the pointer simply crosses down to
+the built-in — so "it moved once the guard was released" is itself proof that the span being pushed
+was a free, summon-capable one, i.e. an overhang. The positive result and its discriminator come
+from the same pair of observations, exactly as rule 6 asks. **Which** overhang, left or right, was
+not recorded.
+
+An earlier reading of this session's log concluded the owner's push happened while nothing was
+armed, because a `released` line sat at the tail and no process remained. That was wrong: the arm
+line preceding it is the window the push happened in, and the release is the control, not a
+disqualification. Recorded because "the instrument was not running" and "the instrument was running
+and then deliberately stopped" produce identical tails in this log, and #87 — the arm line being
+written only on the transition — is what makes the difference invisible without reading the pair.
+
+### The defect #85 fixes, caught in the wild on the way past
+
+The unified log carries both wordings from the same machine on the same day, which is a cleaner
+before/after than the test could have staged. Verbatim lines, one from each end
+(`log show --predicate 'subsystem == "com.dockkeeper.app" AND process == "DockKeeper"'`):
+
+```
+2026-09-02 15:54:44.593 Df DockKeeper[4778:15d076e] [com.dockkeeper.app:app] Bottom-Dock guard: armed over 1 display(s)
+2026-09-02 18:06:27.163 Df DockKeeper[4778:15d076e] [com.dockkeeper.app:app] Bottom-Dock guard: released
+2026-09-02 23:53:01.579 Df DockKeeper[6060:16ca072] [com.dockkeeper.app:app] Bottom-Dock guard: armed over 2 span(s) on 1 display(s)
+```
+
+Those three are quoted exactly. Summarising the rest rather than pasting it: the pre-#85 wording
+`armed over 1 display(s)` appears seven times on 2026-09-02 (13:55:00, 13:55:54, 13:58:19, 14:00:15,
+14:04:57, 15:54:44, 18:03:49) across PIDs 83396, 83528, 83732, 83987, 84268 and 4778, and the
+post-#85 wording `armed over 2 span(s) on 1 display(s)` appears at 23:53:01, 23:56:10 and 23:58:07
+across PIDs 6060, 6239 and 6393, plus 96042 the following day.
+
+0.9.3's last arm was **over a whole display**, it released at **18:06:27**, and it never re-armed —
+through nearly six hours in which the app kept running. By 23:52 the arrangement was
+stacked-with-overhang, and 0.9.3's own `--diagnostics`, run on that desk minutes before the swap,
+answers `idle — no guardable display (1 with a blocked bottom edge; clamping one would trap the
+pointer)`. So the shipped release stood down over all 2112 px of free edge on the owner's actual
+desk, which is exactly the abandonment [#83](https://github.com/blamechris/DockKeeper/issues/83)
+was filed about, observed rather than argued.
+
+**That the 18:06 release was *caused* by the rearrangement is INFERRED, not measured.** The app
+logs no display-reconfiguration line, so the coincidence in time is all there is; the rearrangement
+itself was not observed. What is measured is the pair of endpoint states — armed over a whole
+display before, `idle — no guardable display` on the stacked rig after.
+
+### Three instruments, and the two that lied
+
+**A probe that aimed outside the band would have recorded a false FAIL, and its own control caught
+it.** The first harness walked to `y = +60` and read the endpoint. But `ClampZone.contains` accepts
+only `clampY < y < frame.maxY` — here `(−3, 0)` — so an event at `y = 60` is **never** clamped, by
+a perfectly working guard or a broken one. Run as a baseline against the then-installed
+0.9.3 — which its own `--diagnostics` reports idle on this desk — it printed "crossed" at every
+column including both overhangs. That is what *flagged* it, since a column with no display beneath
+it cannot be "crossed" to anything; re-reading `contains` is what *explained* it. The baseline was
+run to validate the instrument, and validating the instrument is the only reason the fault was
+found before the result was published rather than after. Aiming inside the band is what session 3 did too
+(aim 1177, `maxY` 1178, clamp 1175); the lesson is that **the aim point is part of the instrument**,
+and on this rig the band is 3 pt wide and bounded *above* by zero.
+
+**Posted synthetic events are not constrained by the desktop union, so "the OS stops it at the
+edge" is a false model.** The expected confound for row 9 was that on an overhang there is no
+display beneath, so macOS's own pointer bound would stop downward motion regardless of the guard —
+making armed and released indistinguishable. It does not: a posted move to `(−5000, 5000)` reads
+back as `(−5000, 5000)` from **both** `CGEvent(source: nil)!.location` **and** `NSEvent.mouseLocation`
+converted to CG. Two independent APIs agree, so the reading is not one API echoing the caller. The
+consequence is that the released control reads the aim (`−1`) rather than a desktop bound, the
+armed run reads the clamp (`−3`), and the discriminator is a rewritten value rather than an
+absence of motion — the confound is structurally absent from this design rather than merely
+survived. **This says nothing about a real hand**, which is bounded by the desktop; it is a
+property of synthetic posts, and it is why row 9f is scoped as it is.
+
+**`--diagnostics` reported the guard OFF while the guard was actively clamping** — a fresh instance
+of [#77](https://github.com/blamechris/DockKeeper/issues/77)/[#78](https://github.com/blamechris/DockKeeper/issues/78),
+in the *opposite* direction from session 3's. An external `defaults write com.dockkeeper.app
+lockBottomDockToDisplay -bool false` was not observed by the running app: no `released` line was emitted and the tap kept
+clamping overhangs to `−3`, while `--diagnostics`, re-reading the domain in a fresh process,
+printed `Bottom guard: off — not enabled in Preferences`. Both halves behaved as built — the app
+holds live state, the report re-derives from disk — and that is precisely the point. Session 3's
+case was a false *positive* ("guarding" while nothing armed); this one is a false **negative**, and
+it is worse for support, because the user is told the feature is off while their pointer is still
+being held. It is the case #78's live-state readout exists to remove. The release control was
+therefore taken by **quitting the app** — the tap is process-owned and dies with it — and confirmed
+from the log line, never from the toggle.
+
 ## Matrix cells
 
 | Cell | Result | Session |
@@ -148,6 +340,8 @@ would have answered this in one command.
 | End-to-end pin through the app UI (Spaces ON, left Dock → Dell) | ✅ CONFIRMED by owner — "works and looks good" | 1 |
 | Window migration on pin (coordinate re-base) | ✅ CONFIRMED — windows whose global coords land on the swapped displays move with the re-base (same as a System Settings primary change). Mitigation candidate: opt-in AX window restore (open question #11) | 1 |
 | **Bottom Dock does NOT follow main (Spaces ON)** | ✅ CONFIRMED (stayed put through a main swap) | 1 |
+| **Crossing a shared span with per-span zones armed** (§3d row 9) | ✅ CONFIRMED with a control — shared strip open, both overhangs held at `clampY = −3`, 10/10 each way | 4 |
+| **Per-span zone emission on a stacked-with-overhang rig** | ✅ CONFIRMED — 2 spans on 1 display, `partiallyGuarded`; 0.9.3 refused the same desk outright | 4 |
 | Pointer summon: shared bottom edge (stacked) / free left edge | ✅ CONFIRMED fails for both (owner-observed) | 1 |
 | Leftmost-arrangement hypothesis for left Dock | ✅ falsified | 1 |
 | killall-relocation candidate (bottom Dock, pointer parked on Dell) | ✅ falsified — restarted Dock returns to previous host | 2 |
