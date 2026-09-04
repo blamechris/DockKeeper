@@ -5,8 +5,8 @@
 # package-dmg.sh's hash is pre-staple and will not match what users download.
 # Submit to homebrew/cask central once notability requirements are met.
 cask "dockkeeper" do
-  version "0.9.3"
-  sha256 "469f2ba134f68b749b2202d3f8c3ca0455040c9f23ae080fa23b10fa9e53c41d"
+  version "0.9.4"
+  sha256 "f38785fee76d928d442ebd3760fdb05dbf00d72db243bf0a2856fe8dde1ede95"
 
   url "https://github.com/blamechris/DockKeeper/releases/download/v#{version}/DockKeeper-#{version}.dmg"
   name "DockKeeper"
