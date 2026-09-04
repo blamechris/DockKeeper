@@ -439,7 +439,7 @@ knowing which cell was being run, which is what makes this readable as evidence 
 and was *unset* before this session, so it was deleted rather than written `false`, and
 `com.apple.dock autohide` is back to `0`. Verified after the last relaunch.
 
-## Session 6 — 2026-09-04 (DK-FR-015's writer half, and §3d rows 5–8)
+## Session 6 — 2026-09-04 (DK-FR-015's writer half, and §3d rows 3, 5, 6, 7, 8)
 
 **#96 is closed, and the poll-cadence bound it called "an argued figure and not a measured one" is now
 measured.** This session ran the new build as the real menu-bar app for the first time, which is the
@@ -622,8 +622,19 @@ that precise point, and either side of it:
 | `(800, −10)` — further into the upper display | `(800, −10.0)` | not rewritten |
 | `(800, 40)` — back down into the lower display | `(800, 40.0)` | not rewritten |
 
-The display is left unguarded entirely and the boundary is not held. The arrangement was then restored to
-the measured baseline and the guard re-armed over 2 spans.
+The display is left unguarded entirely and the boundary is not held.
+
+**What that does and does not establish.** The row's expectation has two clauses, and only one of them is
+measured here. *"Left unguarded entirely"* is confirmed directly — the decision says so and the would-be
+band does not clamp. *"The pointer crosses between screens normally"* is **not** established by these
+probes, and the reason is this document's own rule 10: a `CGEvent` post is not bounded by the desktop
+union, so a location that reads back unrewritten is equally consistent with the pointer never having been
+constrained by screen geometry at all. What these rows prove is the **absence of a clamp**, which is the
+half that could trap a cursor. The hand-crossing half was confirmed for shared spans in
+[session 4](#session-4--2026-09-03-dk-fr-014-3d-row-9-stacked-with-overhang-rig) (§3d row 9, with a
+control), and row 5 inherits it rather than re-measuring it.
+
+The arrangement was then restored to the measured baseline and the guard re-armed over 2 spans.
 
 ### §3d row 3 — revoke Accessibility while armed  · **CONFIRMED ✅**
 
@@ -683,6 +694,20 @@ on-screen windows in `CGWindowListCopyWindowInfo`, which is machine-checkable ra
 The negative control is what makes the fires mean anything: the detector responds to the *corner*, not to
 Dock activity in general. The instrument validation is what makes the null results readable — a detector
 that never fires cannot distinguish "blocked" from "blind" (rule 5).
+
+**The armed row does not, on its own, isolate the resting position** — and saying so is the difference
+between this being evidence and being a coincidence that happened to agree. The probe walks in
+diagonally, visiting `(−474, −5)`, `(−470, −9)`, `(−466, −13)` and so on. Every one of those has `y`
+*outside* the band `(−3, 0)`, so the guard never clamps them and the pointer genuinely reaches them. The
+sweep below bounds the region only at `x = −478`, so a transit point like `(−474, −5)` is plausibly inside
+it and was not tested. The armed fire is therefore consistent with two causes: the resting position at
+`−3`, or an unclamped transit point on the way in.
+
+**Both causes falsify the disclosure, which is why the conclusion is safe** — the guard holds a 3 pt band
+and the corner is reachable either way. But they differ in what a *fix* would be, and that matters for
+[#99](https://github.com/blamechris/DockKeeper/issues/99): widening `guardBand` would remove the
+resting-position cause and leave the transit cause untouched, so "just make the band taller" is not
+established as sufficient by this table.
 
 **Trigger-region height**, measured with the guard released so the resting position is exact:
 
@@ -771,7 +796,7 @@ guard band does not cover; the sentence conflates them.
 | Clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
 | **DK-FR-015 writer half: publish, retract, armed heartbeat** (#96) | ✅ CONFIRMED — all seven steps, with a 20 s idle control; the `max(5, recoveryInterval)` bound **measured** at four consecutive 30 s refreshes | 6 |
 | **Accessibility grant survives a Developer ID rebuild** | ✅ CONFIRMED — designated requirements identical across 0.9.4 and the new build; the app's own `AXIsProcessTrusted()` read `granted` at first launch | 6 |
-| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten | 6 |
+| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
 | **Revoke Accessibility while armed** (§3d row 3) | ✅ CONFIRMED — fail-open; whole band swept free, caption asks for the permission, user's setting left on. Run by hand; macOS refuses synthetic clicks on TCC toggles | 6 |
