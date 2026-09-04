@@ -80,8 +80,9 @@ private struct AdvancedTab: View {
             // control), and since 2026-09-02 that a real hand cannot complete the
             // summon is CONFIRMED on device with a control too (§3d row 1). The
             // *crossing* under per-span zones — what this paragraph's last
-            // sentence is about — is CONFIRMED with a control as well, 2026-09-03
-            // on the stacked rig (§3d row 9). The comment said "still INFERRED"
+            // sentence is about — is CONFIRMED with a control too, 2026-09-03 on
+            // the stacked rig (§3d row 9), by a synthetic probe rather than by a
+            // hand; the hand closed the separate Dock-migration clause (row 9f). The comment said "still INFERRED"
             // until 2026-09-03, carrying a status word the ADR had already
             // corrected — the staleness #89 is about.
             // The caption states the mechanism, not the outcome. The

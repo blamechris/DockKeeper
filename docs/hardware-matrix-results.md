@@ -192,7 +192,7 @@ through. That is why this row does not suffer the confound it was expected to.
 | # | Cell | Armed | Released (control) | Result |
 |---|---|---|---|---|
 | 9a | **Shared strip crosses** — `x ∈ {0, 200, 864, 1500, 1727}`, aim `y = +60` on the built-in | reaches **60** at all five | reaches **60** at all five | **CONFIRMED ✅** the crossing route is open with per-span zones armed |
-| 9b | **Shared strip is never clamped** — same five columns, aim `y = −1` | **10/10 at −1** at `x = 864`; −1 at all five in the sweep | 10/10 at −1 | **CONFIRMED ✅** no zone covers `[0, 1728)` |
+| 9b | **Shared strip is never clamped** — same five columns, aim `y = −1` | **10/10 at −1** at `x = 864`; −1 at all five in the sweep | 10/10 at −1 | **CONFIRMED ✅** at the five columns sampled. That *no* zone covers `[0, 1728)` is not generalised from them — it is true by construction (the sweep clips the blocker interval out) and asserted as a unit invariant over whole arrangements |
 | 9c | **Left overhang is held** — `x ∈ {−478, −200, −1}`, aim `y = −1` | **10/10 held at −3** at `x = −200`; −3 at all three in the sweep | **10/10 at −1** | **CONFIRMED ✅** held exactly 3 pt clear |
 | 9d | **Right overhang is held** — `x ∈ {1728, 2500, 3361}`, aim `y = −1` | **10/10 held at −3** at `x = 2500`; −3 at all three in the sweep | **10/10 at −1** | **CONFIRMED ✅** |
 | 9e | **The seam** — `x = 1727` (last shared column) vs `x = 1728` (first overhang column) | 1727 → **−1**, 1728 → **−3** | both −1 | **CONFIRMED ✅** the boundary column goes entirely to the overhang; no gap, no double coverage |
@@ -245,13 +245,20 @@ written only on the transition — is what makes the difference invisible withou
 ### The defect #85 fixes, caught in the wild on the way past
 
 The unified log carries both wordings from the same machine on the same day, which is a cleaner
-before/after than the test could have staged:
+before/after than the test could have staged. Verbatim lines, one from each end
+(`log show --predicate 'subsystem == "com.dockkeeper.app" AND process == "DockKeeper"'`):
 
 ```
-13:55 – 18:03  DockKeeper[83396…4778]  Bottom-Dock guard: armed over 1 display(s)      <- 0.9.3, whole-display
-18:06:27       DockKeeper[4778]        Bottom-Dock guard: released
-23:53 – 23:58  DockKeeper[6060…6393]   Bottom-Dock guard: armed over 2 span(s) on 1 display(s)   <- 0.9.4-dev
+2026-09-02 15:54:44.593 Df DockKeeper[4778:15d076e] [com.dockkeeper.app:app] Bottom-Dock guard: armed over 1 display(s)
+2026-09-02 18:06:27.163 Df DockKeeper[4778:15d076e] [com.dockkeeper.app:app] Bottom-Dock guard: released
+2026-09-02 23:53:01.579 Df DockKeeper[6060:16ca072] [com.dockkeeper.app:app] Bottom-Dock guard: armed over 2 span(s) on 1 display(s)
 ```
+
+Those three are quoted exactly. Summarising the rest rather than pasting it: the pre-#85 wording
+`armed over 1 display(s)` appears seven times on 2026-09-02 (13:55:00, 13:55:54, 13:58:19, 14:00:15,
+14:04:57, 15:54:44, 18:03:49) across PIDs 83396, 83528, 83732, 83987, 84268 and 4778, and the
+post-#85 wording `armed over 2 span(s) on 1 display(s)` appears at 23:53:01, 23:56:10 and 23:58:07
+across PIDs 6060, 6239 and 6393, plus 96042 the following day.
 
 0.9.3's last arm was **over a whole display**, it released at **18:06:27**, and it never re-armed —
 through nearly six hours in which the app kept running. By 23:52 the arrangement was
@@ -271,9 +278,12 @@ display before, `idle — no guardable display` on the stacked rig after.
 **A probe that aimed outside the band would have recorded a false FAIL, and its own control caught
 it.** The first harness walked to `y = +60` and read the endpoint. But `ClampZone.contains` accepts
 only `clampY < y < frame.maxY` — here `(−3, 0)` — so an event at `y = 60` is **never** clamped, by
-a perfectly working guard or a broken one. Run against the *idle* 0.9.3 build it reported "crossed"
-at every column including both overhangs, which is what exposed it: a column with no display
-beneath it cannot be "crossed" to anything. Aiming inside the band is what session 3 did too
+a perfectly working guard or a broken one. Run as a baseline against the then-installed
+0.9.3 — which its own `--diagnostics` reports idle on this desk — it printed "crossed" at every
+column including both overhangs. That is what *flagged* it, since a column with no display beneath
+it cannot be "crossed" to anything; re-reading `contains` is what *explained* it. The baseline was
+run to validate the instrument, and validating the instrument is the only reason the fault was
+found before the result was published rather than after. Aiming inside the band is what session 3 did too
 (aim 1177, `maxY` 1178, clamp 1175); the lesson is that **the aim point is part of the instrument**,
 and on this rig the band is 3 pt wide and bounded *above* by zero.
 
@@ -291,8 +301,8 @@ property of synthetic posts, and it is why row 9f is scoped as it is.
 
 **`--diagnostics` reported the guard OFF while the guard was actively clamping** — a fresh instance
 of [#77](https://github.com/blamechris/DockKeeper/issues/77)/[#78](https://github.com/blamechris/DockKeeper/issues/78),
-in the *opposite* direction from session 3's. An external `defaults write lockBottomDockToDisplay
--bool false` was not observed by the running app: no `released` line was emitted and the tap kept
+in the *opposite* direction from session 3's. An external `defaults write com.dockkeeper.app
+lockBottomDockToDisplay -bool false` was not observed by the running app: no `released` line was emitted and the tap kept
 clamping overhangs to `−3`, while `--diagnostics`, re-reading the domain in a fresh process,
 printed `Bottom guard: off — not enabled in Preferences`. Both halves behaved as built — the app
 holds live state, the report re-derives from disk — and that is precisely the point. Session 3's
