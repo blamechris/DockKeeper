@@ -183,11 +183,28 @@ conversion sits between the measurement and the assertion:
   `Bottom-Dock guard: armed over 2 span(s) on 1 display(s)` (PID 6239), and
   `Bottom-Dock guard: released` on quit.
 
-The measured motion is a 1 pt synthetic walk **ending at `y = −1`**, i.e. *inside* the band, posted
-with `CGEvent(…).post(tap: .cghidEventTap)` — the HID tap sits below the app's `.cgSessionEventTap`,
-so the session tap sees it. The question asked is not "did motion stop" but **"was the event's
-location rewritten"**: armed, the tap rewrites `y` to `−3`; released, the posted `−1` passes
-through. That is why this row does not suffer the confound it was expected to.
+The measured motion is a 1 pt synthetic walk posted with `CGEvent(…).post(tap: .cghidEventTap)` —
+the HID tap sits below the app's `.cgSessionEventTap`, so the session tap sees it. The question
+asked is not "did motion stop" but **"was the event's location rewritten"**.
+
+**Each column is walked twice, to two different aims, and they answer different questions.** Reading
+the table without this makes 9a and 9b look like one run contradicting itself:
+
+| Aim | Lands | Asks | Armed answer on a free span |
+|---|---|---|---|
+| `y = −1` | the Dell's last row, **inside** the band `(−3, 0)` | *is this column clamped?* | rewritten to **`−3`** |
+| `y = +60` | on the **built-in** for a shared column; on **no display at all** for an overhang column | *can the pointer get to the display beneath?* | **`60`** — outside the band, never clamped |
+
+So `y = −1` is the discriminating cell and `y = +60` is the crossing cell; a column can legitimately
+report "held at −3" for the first and "reached 60" for the second, because the band is only 3 pt
+tall and bounded above by zero. The v1 fault below was using `+60` *as the clamp test*, where it
+can only ever return "not held".
+
+**`y = +60` is load-bearing only on the shared columns**, where it is the actual crossing — the
+pointer arriving on the built-in. On an overhang there is no display at 60, and the reading of `60`
+there says only that the posted event was not rewritten, since a posted move is not bounded by the
+desktop union (below). It is reported for all eleven columns because a *uniform* result is what
+shows the guard alters nothing outside its band, not because an overhang crossing means anything.
 
 | # | Cell | Armed | Released (control) | Result |
 |---|---|---|---|---|
