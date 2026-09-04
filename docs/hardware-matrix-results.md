@@ -625,6 +625,40 @@ that precise point, and either side of it:
 The display is left unguarded entirely and the boundary is not held. The arrangement was then restored to
 the measured baseline and the guard re-armed over 2 spans.
 
+### §3d row 3 — revoke Accessibility while armed  · **CONFIRMED ✅**
+
+The last unrun §3d safety row, and the one whose failure direction is a **trapped cursor**. Run by the
+machine owner's own hand, because macOS refuses synthetic events on TCC toggles (see *Not run* below —
+the same property that stops a process granting itself Accessibility).
+
+With the grant revoked while the tap was armed:
+
+```
+Accessibility: NOT granted, as the running app sees it
+Held:          enabled=yes edge=Bottom bottom-guard=on
+Guard:         idle — waiting for Accessibility permission
+Tap:           not armed
+```
+
+and `Bottom-Dock guard: released` in the unified log at **09:02:17.514**.
+
+**Nothing was trapped anywhere.** The whole former band was swept, not just one column — both overhangs,
+both bottom corners, and the shared strip — and every one came back free at the aimed `y = −1`:
+
+| left overhang | shared strip | right overhang | bottom-left corner | bottom-right corner |
+|---|---|---|---|---|
+| free | free | free | free | free |
+
+Two things are worth separating here, because the row's expectation packs both into one line. **Fail-open
+is confirmed:** the pointer is released, and a closed failure — the trapped cursor — did not happen.
+**The caption does ask for the permission:** `idle — waiting for Accessibility permission`, which is the
+reason string a user sees rather than a generic "off".
+
+`Held: bottom-guard=on` is the third thing, and it is the one a careless implementation would get wrong:
+the user's *setting* was left alone. The app is waiting on a permission, not quietly turning the feature
+off behind the user's back, so restoring the grant restores the guard without the user having to re-find
+a toggle they never touched.
+
 ### §3d row 7 — bottom hot corners  · **RUN, and it FALSIFIES the shipped disclosure** ⚠️
 
 This row was first written up in this same document as "half run — the corners are unreachable, the
@@ -740,7 +774,7 @@ guard band does not cover; the sentence conflates them.
 | **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
-| **Revoke Accessibility while armed** (§3d row 3) | ⏳ needs the owner's own hand (authenticated action) | — |
+| **Revoke Accessibility while armed** (§3d row 3) | ✅ CONFIRMED — fail-open; whole band swept free, caption asks for the permission, user's setting left on. Run by hand; macOS refuses synthetic clicks on TCC toggles | 6 |
 | Identical twin externals | n/a on this rig (different panels) | — |
 
 ---
