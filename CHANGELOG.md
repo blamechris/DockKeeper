@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.9.4] — 2026-09-03
+
+Fifth public beta. One user-visible change, and it matters most on the arrangement it was found on: a screen stacked above another and sticking out past its sides.
+
 ### Changed
 
 - **The bottom-Dock guard now covers the parts of an edge that overhang another screen**, instead of standing down over the whole display. If one of your screens sits above another and sticks out past its sides, only the *overlapping strip* is left open now — that strip is how your pointer travels between the two screens, so holding it would trap your cursor — and the overhangs, which have nothing beneath them, are guarded like any other free edge. On a 4K stacked above a MacBook that is about 2100 px of bottom edge that v0.9.3 left open. Preferences and `--diagnostics` now say "partly covered" for such a display rather than reporting it as fully guarded. ([#83](https://github.com/blamechris/DockKeeper/issues/83))
@@ -112,7 +116,8 @@ First public release: a free, open-source, native macOS utility that keeps your 
 - A bottom Dock can't be pinned while *separate Spaces* is on (macOS limitation — DockKeeper explains instead of fighting).
 - Shortcuts-app discovery of the intents lands in v1.1; the `dockkeeper://` URL scheme works today.
 
-[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/blamechris/DockKeeper/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/blamechris/DockKeeper/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/blamechris/DockKeeper/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/blamechris/DockKeeper/compare/v0.9.0...v0.9.1
