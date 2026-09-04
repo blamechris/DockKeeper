@@ -729,6 +729,43 @@ and separately confirmed** — the Dock summon really is blocked (§3d row 1, se
 two differ because the summon needs the pointer to reach the edge, while the hot corner has a tolerance the
 guard band does not cover; the sentence conflates them.
 
+### DK-NFR-001 — the *released-guard* control, measured  · partial
+
+R-015's soak has never had a paired measurement; session 2's attempt was spot samples on a machine in
+use, which read incoherently (idle higher than active). The armed half still needs the 24 h soak. But the
+window in which the Accessibility grant was revoked for row 3 **is** the released condition, so it was
+used to take the control half rather than wasted.
+
+**The metrics are named, because a budget written without one is unfalsifiable** (rule 8). CPU is a
+**CPU-time delta over a wall interval** — `ri_user_time + ri_system_time` from `proc_pid_rusage`, *not*
+`ps -o %cpu`, which is an average since process start and is dominated by a long-lived process's launch
+burst. Memory is **`ri_phys_footprint`**, which is what Activity Monitor's *Memory* column shows, *not*
+RSS, which counts shared framework pages every process maps and does not pay for.
+
+```
+window 600s   CPU-time delta 0.011s   ->  0.0018% of one core
+phys_footprint 23.0 MB -> 22.9 MB (delta -0.02 MB)
+```
+
+`Tap: not armed` was read at **both ends** of the window, so the condition being measured held for all of
+it — without that check the number describes an unknown mixture of states.
+
+| DK-NFR-001 metric | target | this measurement |
+|---|---|---|
+| Idle CPU | ~0% under stable conditions | **0.0018% of one core**, guard released |
+| Memory | < 30 MB preferred, < 50 MB acceptable | **22.9 MB** — inside the *preferred* budget |
+
+**What this does not establish.** It is 10 minutes, not 24 hours, so it says nothing about slow growth —
+which is most of what the soak exists to catch, and the reason the row is written as a soak rather than a
+sample. It is the **released** guard, so it is the control and not the measurement: the tap's continuous
+cost is precisely what is still unmeasured. And the machine was not otherwise idle — other processes were
+working — though that perturbs this metric only indirectly, since it counts DockKeeper's own CPU time and
+no pointer moved during the window.
+
+The memory figure is the one that carries further than the guard question, because `phys_footprint` barely
+depends on whether the tap is armed: DK-NFR-001's memory target was recorded as **UNKNOWN** ("MenuBarExtra
+apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against it.
+
 ### Two defects found on the way past
 
 - **[#98](https://github.com/blamechris/DockKeeper/issues/98) — an unrelated CLI edit silently disarms the
@@ -799,6 +836,7 @@ guard band does not cover; the sentence conflates them.
 | **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
+| **DK-NFR-001 idle cost, guard RELEASED** (R-015 control half) | ◐ PARTIAL — 0.0018% of one core over 600 s; `phys_footprint` **22.9 MB**, inside the <30 MB preferred budget (was UNKNOWN). 10 min not 24 h, and the armed half is still the open soak | 6 |
 | **Revoke Accessibility while armed** (§3d row 3) | ✅ CONFIRMED — fail-open; whole band swept free, caption asks for the permission, user's setting left on. Run by hand; macOS refuses synthetic clicks on TCC toggles | 6 |
 | Identical twin externals | n/a on this rig (different panels) | — |
 

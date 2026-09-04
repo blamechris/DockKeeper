@@ -1102,12 +1102,12 @@ Because #77 was never a settings disagreement, so a report       the decision sa
 
 **Preconditions.** None (applies in every state). **Trigger.** Continuous constraint, verified at the M6 measurement gate.
 
-**Requirements** (targets requiring measurement — none measured yet; M6 gate):
+**Requirements** (M6 gate; idle CPU and memory first measured 2026-09-04, both partial — see the rows):
 
 | Metric | Target | Evidence status |
 |---|---|---|
-| Idle CPU | ~0% under stable conditions | INFERRED achievable (event-driven + 30 s poll of two C calls) |
-| Memory | < 30 MB preferred; < 50 MB acceptable | UNKNOWN — MenuBarExtra apps commonly 25–50 MB (R-009) |
+| Idle CPU | ~0% under stable conditions | **0.0018% of one core** over a 600 s window with the guard **released** ([session 6](hardware-matrix-results.md), 2026-09-04) — a CPU-time delta, not `ps -o %cpu`. The **armed** figure is still unmeasured and is the open 24 h soak (R-015) |
+| Memory | < 30 MB preferred; < 50 MB acceptable | **22.9 MB `phys_footprint`** — inside the *preferred* budget ([session 6](hardware-matrix-results.md), 2026-09-04), flat across the window (−0.02 MB). First real reading; was UNKNOWN on the R-009 "commonly 25–50 MB" prior. **Growth over 24 h is still unmeasured** — 10 minutes cannot see a slow leak |
 | Cold launch | < 1 s on supported hardware | INFERRED |
 | Visible behavior | No Dock oscillation ever; no flicker on the primary edge path | Flicker-free CONFIRMED on-device; oscillation guard PROPOSED |
 
