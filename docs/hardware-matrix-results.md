@@ -625,17 +625,50 @@ that precise point, and either side of it:
 The display is left unguarded entirely and the boundary is not held. The arrangement was then restored to
 the measured baseline and the guard re-armed over 2 spans.
 
-### §3d row 7 — bottom hot corners  · **reachability CONFIRMED ✅; the trigger half NOT run**
+### §3d row 7 — bottom hot corners  · **RUN, and it FALSIFIES the shipped disclosure** ⚠️
 
-Both bottom corners of the guarded display — `x = −477` in the left overhang and `x = 3360` in the right —
-are held at `clampY = −3`, so the pointer cannot reach the corner-most row. That is the mechanism the
-shipped disclosure rests on, and it is measured.
+This row was first written up in this same document as "half run — the corners are unreachable, the
+trigger half needs a hand." **That was wrong, and running it properly is what caught it.** The clamp data
+can only show where the pointer stops; it cannot show what macOS does at that position, and those turn out
+to be different questions.
 
-**What is not measured is a hot corner configured there failing to fire.** Triggering a hot corner depends
-on a real pointer arriving and dwelling, and a posted `CGEvent` is not bounded by the constraints a hand
-obeys — the same limit that keeps synthetic input away from summon-by-dwell. The row is therefore recorded
-as **half run**: unreachable is confirmed, "and therefore the hot corner never fires" is still INFERRED,
-and no shipped disclosure may claim more than that until a hand has tried it.
+The guard is fine. `guardBand` is 3, the pointer rests at `clampY = −3`, and it does exactly that. But
+macOS's hot-corner trigger region is **taller than 3 pt**, so the clamped resting position is *still inside
+it* and the corner fires anyway.
+
+Hot corner set to Mission Control on the bottom-left; firing detected headlessly by counting `Dock`-owned
+on-screen windows in `CGWindowListCopyWindowInfo`, which is machine-checkable rather than eyeballed.
+
+| | aim | settled | Dock windows | |
+|---|---|---|---|---|
+| **instrument validation** — built-in (main, unguarded) | `(0, 1116)` | `(0, 1116.0)` | 1 → 6 | **FIRED** |
+| guarded 4K bottom-left, **armed** | `(−478, −1)` | `(−478, −3.0)` | 1 → 6 | **FIRED** — clamped, and still fired |
+| guarded 4K bottom-left, **released** | `(−478, −1)` | `(−478, −1.0)` | 1 → 6 | FIRED |
+| **negative control** — mid bottom edge, not a corner | `(1500, −1)` | `(1500, −1.0)` | 1 → 1 | no trigger |
+
+The negative control is what makes the fires mean anything: the detector responds to the *corner*, not to
+Dock activity in general. The instrument validation is what makes the null results readable — a detector
+that never fires cannot distinguish "blocked" from "blind" (rule 5).
+
+**Trigger-region height**, measured with the guard released so the resting position is exact:
+
+| `y` | −3 | −8 | −16 | −32 |
+|---|---|---|---|---|
+| | **FIRED** | no | no | no |
+
+So the conclusion does not rest on how the pointer arrived. With the guard **released** the corner fires at
+exactly `y = −3`; with the guard **armed** the pointer rests at exactly `y = −3`. A hand pushed against the
+guard sits inside the trigger region, and the armed run confirms that directly rather than inferring it.
+
+It is a near miss, not a wild one — it fires at −3 and not at −8 — so a `guardBand` around 8 would make the
+claim true. That is almost certainly the wrong fix; the text is what should move.
+
+**The false claim ships in the UI**, not just in a design doc: `PreferencesView.swift:91` says *"While this
+is on, the bottom hot corners on those displays stop working."* Filed as
+[#99](https://github.com/blamechris/DockKeeper/issues/99). **The sibling claim in the same sentence is true
+and separately confirmed** — the Dock summon really is blocked (§3d row 1, session 3, with a control). The
+two differ because the summon needs the pointer to reach the edge, while the hot corner has a tolerance the
+guard band does not cover; the sentence conflates them.
 
 ### Two defects found on the way past
 
@@ -658,9 +691,14 @@ and no shipped disclosure may claim more than that until a hand has tried it.
 
 ### Not run, and why
 
-- **§3d row 3 (revoke Accessibility while armed)** — the revoke is an authenticated System Settings action.
-  Entering the owner's credentials is not something this session may do, so the row needs the owner's own hand.
-- **§3d row 7, trigger half** — see above; needs a real hand.
+- **§3d row 3 (revoke Accessibility while armed)** — needs the owner's own hand, and **the reason is
+  stronger than the one first written here.** This was initially recorded as blocked on authentication.
+  It is not: three synthetic clicks were delivered onto the DockKeeper switch in Privacy & Security ▸
+  Accessibility, the pointer was visibly on the control, and the switch did not move — no auth prompt ever
+  appeared, and the guard stayed armed with the grant intact throughout. macOS refuses synthetic events on
+  TCC permission toggles by design, which is the whole reason a process cannot grant itself Accessibility.
+  So this row is not merely inconvenient to automate; it is **structurally closed to automation** and will
+  stay that way.
 - **§3d row 2 / R-015 (24 h soak)** — needs the machine otherwise idle, so it is started last and read next
   session. **Never drive it with synthetic `CGEvent.post`**: that measured 52 % against 2 % by hand.
 - **§3d row 4 (system disables the tap)** — unchanged; #61 tracks the unbounded re-enable.
@@ -701,7 +739,7 @@ and no shipped disclosure may claim more than that until a hand has tried it.
 | **Accessibility grant survives a Developer ID rebuild** | ✅ CONFIRMED — designated requirements identical across 0.9.4 and the new build; the app's own `AXIsProcessTrusted()` read `granted` at first launch | 6 |
 | **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
-| **Bottom hot corners on a guarded display** (§3d row 7) | ◐ HALF — unreachable CONFIRMED (both corners held at `clampY = −3`); the hot-corner *trigger* is INFERRED, needs a hand | 6 |
+| **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
 | **Revoke Accessibility while armed** (§3d row 3) | ⏳ needs the owner's own hand (authenticated action) | — |
 | Identical twin externals | n/a on this rig (different panels) | — |
 
