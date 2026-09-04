@@ -22,6 +22,15 @@ enum Diagnostics {
     @MainActor
     static func report() -> String {
         let bundle = Bundle.main
+        // Derived exactly once, then used by two rows.
+        //
+        // `Bottom guard:` renders it and `Live state:` compares the running
+        // instance against it, so re-deriving per row would let the report
+        // compare one verdict against a *different* one computed microseconds
+        // later — and then report the two as agreeing or diverging on evidence
+        // neither row printed. One derivation is what makes the comparison mean
+        // what the line says it means.
+        let derived = derivedGuardObservation()
         let loginStatus: String
         switch SMAppService.mainApp.status {
         case .enabled: loginStatus = "enabled"
@@ -59,7 +68,8 @@ enum Diagnostics {
         Dock edge:       \(DockController().currentOrientation()?.displayName ?? "unknown")
         Displays:        \(DisplayManager.activeDisplays().count)
         Separate Spaces: \(pinningVerdict)
-        Bottom guard:    \(bottomDockGuardStatus())
+        Bottom guard:    \(BottomDockGuard.diagnosticsLine(for: derived.decision, paused: Settings.shared.pauseRecord != nil))
+        Live state:      \(liveGuardStatus(derived: derived))
         Paused:          \(pauseStatus())
         Screen-share:    \(screenShareHideStatus())
         """
@@ -74,7 +84,7 @@ enum Diagnostics {
     /// lives in the running app. That is enough to answer every precondition
     /// question, which is what support needs.
     @MainActor
-    private static func bottomDockGuardStatus() -> String {
+    private static func derivedGuardObservation() -> LiveGuardReport.DerivedObservation {
         let settings = Settings()
         let displays = DisplayManager.activeDisplays()
         let stored = settings.preferredDisplayFingerprint
@@ -102,9 +112,50 @@ enum Diagnostics {
             )
         )
         // Wording and counts live in Core so they are testable (#84); the
-        // pause read stays here because it is I/O, and the renderer is pure.
-        return BottomDockGuard.diagnosticsLine(
-            for: decision, paused: settings.pauseRecord != nil
+        // pause read stays at the call site because it is I/O, and the renderer
+        // is pure.
+        return LiveGuardReport.DerivedObservation(
+            accessibilityTrusted: AXIsProcessTrusted(), decision: decision
+        )
+    }
+
+    /// What a *running* instance says about itself, against what this report
+    /// just re-derived (DK-FR-015).
+    ///
+    /// Every other row above is a fresh process re-reading disk and the OS. That
+    /// is the right instrument for the *decision* on real geometry, and it is
+    /// blind to the running app by construction — `runIfRequested()` prints and
+    /// exits inside `App.init()`, before the `@StateObject` autoclosure that
+    /// builds `AppState`, so this process has never held a tap and never will.
+    ///
+    /// Twice that blindness produced a confident wrong answer. `guarding 1
+    /// display(s)` while the tap had never armed, because TCC answered
+    /// `AXIsProcessTrusted()` for the granted terminal that launched this
+    /// process rather than for the GUI app (#77). And `off — not enabled in
+    /// Preferences` while the tap was actively clamping the pointer to `y = -3`,
+    /// because an external `defaults write` to `lockBottomDockToDisplay` is not
+    /// in `Settings.externallyObservedKeys` and so never reached the running app.
+    ///
+    /// This row is the missing half. It does not correct the rows above — they
+    /// are honest about what this machine's disk says — it reports whether the
+    /// instance that is actually holding the pointer agrees with them.
+    private static func liveGuardStatus(derived: LiveGuardReport.DerivedObservation) -> String {
+        let settings = Settings()
+        return LiveGuardReport.diagnosticsLine(
+            for: LiveGuardReading.classify(
+                stored: settings.liveGuardRecord,
+                writerIdentityNow: { ProcessIdentity.of(pid: $0) },
+                readerUID: getuid()
+            ),
+            onDisk: DiskSettings(
+                isEnabled: settings.isEnabled,
+                lockEdge: settings.lockEdge,
+                lockBottomDockToDisplay: settings.lockBottomDockToDisplay
+            ),
+            // The very rows above, so the comparison is against what this report
+            // actually printed rather than against a fresh guess.
+            derived: derived,
+            now: Date()
         )
     }
 

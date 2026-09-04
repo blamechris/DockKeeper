@@ -35,6 +35,7 @@ This document describes externally observable behavior only; mechanisms live in 
 | [DK-FR-012](#dk-fr-012-single-instance-guard) | Single-instance guard | P1 | v1.0 |
 | [DK-FR-013](#dk-fr-013-restore-borrowed-dock-auto-hide-across-process-death) | Restore borrowed Dock auto-hide across process death | P1 | v1.1 |
 | [DK-FR-014](#dk-fr-014-hold-a-bottom-dock-on-the-preferred-display-separate-spaces-mode) | Hold a bottom Dock on the preferred display (separate-Spaces mode) | P2 | v1.1 |
+| [DK-FR-015](#dk-fr-015-ask-a-running-instance-what-it-is-holding) | Ask a running instance what it is holding | P1 | v1.0 |
 | [DK-NFR-001](#dk-nfr-001-quietness-and-resource-budget) | Quietness and resource budget | P0 | v1.0 |
 | [DK-NFR-002](#dk-nfr-002-zero-network-communication) | Zero network communication | P0 | v1.0 |
 | [DK-PRIV-001](#dk-priv-001-no-telemetry-accounts-or-data-collection) | No telemetry, accounts, or data collection | P0 | v1.0 |
@@ -931,6 +932,167 @@ Then DockKeeper re-enables it and counts the event             [INFERRED — the
 **The guard is not released while DockKeeper is paused**, and that is deliberate rather than an oversight: pause suspends *corrections*, and this feature has no correction to re-enforce afterwards — releasing it would be the one pause in the product that resume cannot undo, because relocation is impossible (ADR-015). DK-FR-009 S2's "the Dock may be moved freely" therefore does not hold for a bottom Dock on a guarded display while this feature is on. Precedent: DK-FR-011 likewise keeps mutating the Dock while paused.
 
 **Testability.** The decision, the geometry gate, the free-span sweep and the clamp are pure and unit-tested (`BottomDockGuardTests`, **65 cases across six suites**), including the safety property asserted directly as an invariant over whole arrangements — *no emitted band ever overlaps a display flush beneath it* — and a differential test holding the interval arithmetic to a predicate that has no intervals in it. **Mutation coverage is stated as the exact edit so each number is reproducible, and it lives in [ADR-015's Evidence section](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it) only.** It was duplicated here until 2026-09-03; #83 changed two of the six figures, and a table maintained in two places is a table that goes stale in one of them — the same defect class as #72's false claims and the CLAUDE.md rule against a second derivation. The `CGEventTap` adapter is **not** unit-tested — the app target has no coverage — but its end-to-end behavior against a real pointer is **CONFIRMED on-device with a control** (2026-09-02, [hardware matrix session 3](hardware-matrix-results.md)): with the tap armed a real pointer could not summon the Dock to the guarded display, and with the tap released the same push summoned it. Tap state was read from the unified log on both runs rather than assumed, because `--diagnostics` cannot observe a live tap ([#77](https://github.com/blamechris/DockKeeper/issues/77), [#78](https://github.com/blamechris/DockKeeper/issues/78)).
+
+---
+
+## DK-FR-015: Ask a running instance what it is holding
+
+**Requirement.** A running DockKeeper publishes what it is actually holding — the settings it has in memory, the Accessibility grant it sees, the guard decision it last computed and the vitals of its live tap — into the shared `com.dockkeeper.app` domain, where any process may read it back. `dockkeeper status --live` and `--diagnostics` report that record and nothing else; neither supplies a value the running instance did not publish. Published unconditionally, with no toggle: [#78](https://github.com/blamechris/DockKeeper/issues/78) proposed gating it off by default, and a gated instrument is absent in exactly the two moments it is wanted — a release-checklist §6 gate and a support request (ADR-016).
+
+**It is a belief, not a proof.** The record says what the running app *thinks*. It cannot say that the tap is really filtering events — only that the app armed one and that macOS still reports it enabled — and a reader must never present it as more. What it can do, and what nothing in the product could do before, is make the app's belief comparable with the disk. That comparison is the whole feature: both historical false verdicts were a divergence between the two halves, and no surface could see both at once.
+
+**Liveness is a kernel fact, never a freshness heuristic.** A reader asks `sysctl(KERN_PROC_PID)` whether the writing pid is still there and whether its start time still matches to the whole microsecond; it consults no timestamp in the record to decide that. The stamps are reported to the user as freshness and are never evidence of life. An age threshold would need a tolerance, a tolerance is a guess, and a guess is how an instrument starts lying.
+
+**Nothing in the report is re-derived.** `LiveGuardReport` is handed a reading, three plain disk values and a clock; it holds no `Settings`, no `DockController`, no `CoreDock`, no `DisplayManager` and no `BottomDockGuard.decide`. "Never silently fall back to re-derivation" is therefore not a property a reviewer must keep policing — there is nothing in scope to re-derive *from*. That is deliberately stronger than a test of the same property, because a test can be deleted and a missing dependency cannot be forgotten.
+
+**Priority / target.** P1 / v1.0. Justification: DockKeeper behaves identically without it — it touches no Dock, no pointer and no permission — so it is not P0. But the two false verdicts it removes were produced by v1.0's own support surfaces: `--diagnostics` reported `guarding 1 display(s)` while the tap had never armed ([#77](https://github.com/blamechris/DockKeeper/issues/77)), and reported `off — not enabled in Preferences` while the tap was actively clamping the pointer to `y = -3` ([#78](https://github.com/blamechris/DockKeeper/issues/78)). Shipping without it means shipping a release checklist whose §6 gate is demonstrably capable of passing on a lie. **Related risks:** **R-016** (the record is the app's belief, and the app-side publish/retract wiring is the half still unverified on device), **R-015** (this is the first surface anywhere that can see a tap macOS has disabled) and **R-008** (it reports the Accessibility grant as the running app sees it — the only process that can answer that question).
+
+```
+S1 — A running instance publishes what it holds
+Given DockKeeper is running
+When the guard is applied — a settings change, a display change,
+    an Accessibility re-check, or the poll tick
+Then it writes its held settings, its Accessibility grant, its [CONFIRMED — unit test;
+    guard decision and its tap vitals, stamped with its own     the app-side publish is
+    kernel identity                                             INFERRED — see
+And an unchanged state is not rewritten                         Testability]
+And nothing is published when the process cannot read its own
+    kernel identity
+
+S2 — Liveness comes from the process table, never from a clock
+Given a published record
+When a reader asks whether the writer is still alive
+Then it asks the kernel for that pid's start time and compares [CONFIRMED — unit test;
+    whole microseconds, and consults no stamp in the record     CONFIRMED on-device
+Because a freshness threshold needs a tolerance, and a          2026-09-03 on a record
+    tolerance is where a wrong answer hides                     19 s old — a freshness
+                                                                test would have called
+                                                                it live]
+
+S3 — A recycled pid is not the writer
+Given the writing process has exited and its pid has been reused
+Then the reading is "that pid now belongs to another process", [CONFIRMED — unit test;
+    never "live"                                                one microsecond of
+                                                                difference is enough]
+
+S4 — No not-live verdict shows a single field of guard state
+Given any reading other than live
+Then no held setting, decision, zone or counter is printed,     [CONFIRMED — unit test
+    and the block says so in as many words                      over every not-live
+Because the report that started this printed guard state that   case, and by
+    nobody was holding                                          construction: only
+                                                                `.live` carries the
+                                                                record]
+
+S5 — An instance that has published nothing is not "no instance"
+Given a DockKeeper is running but has published no record
+Then the reader says an instance is running and has published  [CONFIRMED on-device
+    no live state, and names its pid, version and bundle path   2026-09-03 against the
+Because that is a different fact from "no DockKeeper", and an   shipped 0.9.4, which
+    `NSRunningApplication` liveness test gets the other one     publishes nothing —
+    wrong — it cannot see an unbundled instance at all          exit 3]
+
+S6 — A surviving record is evidence of an untrappable death
+Given DockKeeper removes its record on a clean quit
+When a record is found whose writer is not running
+Then the reader reports that it was killed rather than quit    [CONFIRMED on-device
+Because the only routes that skip the retraction are a crash,   2026-09-03 — `kill -9`,
+    Force Quit, `kill -9`, and the logout kill                  exit 4. That a clean
+                                                                quit retracts is
+                                                                CONFIRMED at the
+                                                                Settings layer and
+                                                                INFERRED in the app]
+
+S7 — A divergence is named, and so is the side in force
+Given the running app holds bottom-guard on and the disk says off
+When either surface is asked
+Then the disagreement is printed field by field, followed by   [CONFIRMED on-device
+    "the running app's values are the ones in force" and the    2026-09-03 — the
+    list of keys a `defaults write` actually reaches            motivating incident
+Because knowing only that the two disagree leaves the reader    reproduced with a real
+    unable to predict what the pointer will do                  `defaults write`,
+                                                                exit 6]
+
+S8 — The counters are unreadable when nothing is armed
+Given no tap is armed
+Then no clamp or re-enable count is published or printed       [CONFIRMED — unit test;
+Because they reset when a tap arms and never when one is        unreachable by
+    released, so a released tap still holds the last run's      construction, not by
+    totals                                                      discipline]
+
+S9 — A tap macOS has disabled is armed and not filtering
+Given macOS disabled the tap for slowness or user input
+Then the record carries `CGEvent.tapIsEnabled` and the reader  [CONFIRMED — unit test
+    prints "NOT filtering", not merely "armed"                  on the rendering. That
+Because `isActive` is `tap != nil` and nothing more             this state ever occurs
+                                                                in the field is
+                                                                UNKNOWN — nothing could
+                                                                observe it before]
+
+S10 — Another user's record is not this session's state
+Given fast user switching, and a record published by a process
+    running as another uid
+Then the reading is "another user's DockKeeper", never live    [CONFIRMED — unit test;
+Because that is a different app managing a different Dock       not reproduced on
+                                                                device, which would
+                                                                need a second account]
+
+S11 — A newer schema fails closed
+Given a record whose schema this reader does not know
+Then it refuses the record, names both versions, and says to   [CONFIRMED — unit test]
+    update the CLI — it never best-effort parses it
+
+S12 — Nothing in the block is re-derived
+Given no instance is running
+Then the block reports that, and prints no configured state    [CONFIRMED by
+Because `dockkeeper status` already answers the configured      construction — the
+    question and has always printed `Enabled: yes` with         renderer holds nothing
+    nothing running; blending the two is the instrument that    to re-derive from; unit
+    lied                                                        test on the not-live
+                                                                branches]
+
+S13 — Published by default, and carrying no personal data beyond
+      the bundle path
+Given a fresh install
+Then every instance publishes, with no toggle to forget to     [CONFIRMED — unit test
+    turn on, and the record carries pid, start time, uid,       that the key is neither
+    version, bundle path, three settings, the decision          registered nor
+    geometry and the tap counters — and nothing else            externally observed;
+And the bundle path never reaches `os.Logger`, and every age a  the field list is code
+    reader prints is relative (DK-PRIV-001 S2), though the      inspection]
+    stored record itself carries absolute stamps
+
+S14 — Exit codes gate on live AND consistent
+Given release-checklist §6 wants a gate, not a paragraph
+Then `status --live` exits 0 only when an instance is live and [CONFIRMED — unit test;
+    agrees with the disk; 3 no live state, 4 writer gone,       3, 0, 6 and 4 observed
+    5 unreadable, 6 live but diverging                          on-device 2026-09-03]
+Because a gate that passed on "live but contradicting the disk"
+    would pass on the exact condition #78 was filed about
+
+S15 — The record checks itself, so #77 is caught with the
+      settings agreeing
+Given the app decided to guard but its tap never armed — the
+    shape of #77, in which every setting matches on both sides
+Then the reading names the contradiction and the gate refuses  [CONFIRMED — unit test;
+    it, even though nothing on disk disagrees                    CONFIRMED on-device
+And a tap macOS has disabled, and a span count that differs      2026-09-03: `Divergence:
+    from the decision's, are named the same way                  none` beside `Warning:
+Because #77 was never a settings disagreement, so a report       the decision says
+    that compared only settings would print "agrees" directly     guarding but no tap is
+    beneath the wrong verdict                                     armed`, exit 6]
+```
+
+**Failure behavior.** Every failure resolves to a named verdict rather than a guess. An undecodable record reads as `unreadable` with the decoder's reason attached, never as "nothing published": the `pauseRecord` idiom degrades a broken value to `nil`, which is correct there — "not paused" is a true and safe reading — and is a lie here, because "no instance is publishing" and "an instance published something I could not read" are different claims. A record stamped in this machine's future is called out rather than rendered as `0s`, and an absurd-but-decodable stamp renders as unreadable rather than trapping the process. On the writing side an encoding failure retracts the previous record instead of leaving a description of a state that no longer exists, and a process that cannot read its own kernel identity publishes nothing at all — a record whose writer cannot be proved alive is the unverifiable artifact this requirement exists to replace. The CLI fails the same way: trailing arguments to `status` used to be discarded silently, so `dockkeeper status --liv` printed the configured-state block and exited 0 — a typo answering the question this requirement exists to stop answering. Every token is accounted for now (DK-FR-007).
+
+**Known cost.** The record is written from the tail of `applyBottomDockGuard()` and never from the tap's own callback, because an encoder and a defaults write on the mouse-move path is precisely the latency macOS disables a tap for. The clamp and re-enable counters are therefore refreshed only at the reconcile cadence — up to `max(5, recoveryInterval)` seconds, 30 s by default — and can be that far behind. The cost is stated rather than hidden: the record carries `observedAt`, every reader prints its age, and a *visibly* stale count is worth more than a fresher one that could stop the guard working. Everything else in the record is a state change and is published as it happens. An unchanged state is rewritten in exactly one circumstance — **while a tap is armed** — and that exception is the price of `observedAt` meaning anything. Suppress every unchanged write and the field silently stops meaning "when this was last observed" and starts meaning "when it last changed", at which point a healthy idle instance and one whose run loop has wedged are byte-identical while the wedged one has had its tap disabled by macOS and is guarding nothing. Refreshing while armed costs one small write per reconcile in exactly the window where that difference can hurt someone; an idle instance — every install with the feature off, which is the default — settles into writing nothing at all (DK-NFR-001 — an unchanged rewrite spends the quietness budget to say nothing new).
+
+**The record is a support artifact, and it is stored as text for that reason.** `defaults read com.dockkeeper.app liveGuardRecord` *is* the machine-readable form — JSON with sorted keys, so two support reports diff cleanly — unlike `pauseRecord` and `screenShareHideRecord`, which store `Data` and render as a hex blob no support reader can use. The key is deliberately absent from the registration domain, because absence is a real state rather than a missing default, and absent from `Settings.externallyObservedKeys`, because this app writes it and observing a self-written key would turn every publish into a `.settingsChanged` event and a full reconcile (ADR-011 and ADR-014 already record that argument for the two records above it).
+
+**Testability.** The wire format, the classifier and the renderer are pure and unit-tested (`LiveGuardTests`, **57 cases across six suites**; the whole suite moves from 294 tests in 43 suites to 351 in 49), with the kernel injected into `LiveGuardReading.classify` so a dead writer, a recycled pid and a foreign uid are all reachable from `swift test` with no hardware, no running app and nothing to kill. **Mutation coverage is stated as the exact edit, and lives in ADR-016's Evidence section only** — not duplicated here, for the reason DK-FR-014's Testability records. The **reader half is CONFIRMED on-device** (2026-09-03, against the real `com.dockkeeper.app` domain and the real kernel, with the shipped 0.9.4 running as pid 28571 throughout, and a throwaway harness standing in for the writer so no second DockKeeper went near the Dock): an instance that publishes nothing, a live and agreeing instance, the motivating divergence reproduced by a real `defaults write`, and a `kill -9`ed writer read as gone on a 19-second-old record — exits 3, 0, 6 and 4. That last figure is the control that matters: a design inferring liveness from freshness would have called a 19-second-old record live. The **writer half inside the app is INFERRED**: that `AppState.publishLiveGuardState()` fires from `applyBottomDockGuard()` and that `prepareForTermination()` retracts have unit-level and harness-level evidence only, because confirming them needs the new build running as the real menu-bar app, which would displace the installed 0.9.4. It is recorded as unverified rather than assumed — this repo has twice shipped a document whose status line and evidence disagreed, and this is the one requirement that cannot afford to.
+
+---
+
 
 ## DK-NFR-001: Quietness and resource budget
 

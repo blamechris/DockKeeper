@@ -36,7 +36,39 @@ final class BottomDockGuardTap {
     /// value means the callback is too slow and is worth surfacing.
     private(set) var reenableCount: Int = 0
 
+    /// When the current arming began, or `nil` when nothing is armed.
+    ///
+    /// It exists to bound the counters above, which are reset in `start()` and
+    /// **not** in `stop()` — so a released tap still holds the previous run's
+    /// totals. Publishing a count without the window it was counted over is how
+    /// a stale figure gets read as a live one, so `vitals` carries the two
+    /// together or not at all (DK-FR-015).
+    private(set) var armedAt: Date?
+
     var isActive: Bool { tap != nil }
+
+    /// What the tap actually holds, for the live-state record (DK-FR-015).
+    ///
+    /// `nil` when nothing is armed, which is what makes the counters
+    /// unreachable in that case rather than merely unwise to read.
+    ///
+    /// `systemEnabled` is a genuinely new observation, and the distinction it
+    /// draws has been invisible until now: `isActive` is `tap != nil` and
+    /// nothing more, so between a `tapDisabledByTimeout` and the next event that
+    /// re-enables it, this object reports an armed tap that is filtering
+    /// nothing. `CGEvent.tapIsEnabled` asks macOS instead of asking ourselves.
+    /// It is read here, on a support path, and never from `handle` — the whole
+    /// hazard being described is a callback that takes too long.
+    var vitals: LiveGuardRecord.TapRecord? {
+        guard let tap, let armedAt else { return nil }
+        return LiveGuardRecord.TapRecord(
+            armedAt: armedAt,
+            installedZoneCount: zones.count,
+            systemEnabled: CGEvent.tapIsEnabled(tap: tap),
+            clampCount: clampCount,
+            reenableCount: reenableCount
+        )
+    }
 
     /// Applies a decision. Idempotent: re-applying the same zones keeps the
     /// existing tap rather than tearing it down, so a reconcile storm cannot
@@ -102,6 +134,9 @@ final class BottomDockGuardTap {
         source = runLoopSource
         clampCount = 0
         reenableCount = 0
+        // Stamped in the same breath as the counters it bounds, so the window
+        // and the totals can never describe different armings.
+        armedAt = Date()
         // Built in Core so the counts it claims are reachable from a test
         // (#84). This log is read as the evidence that the tap armed —
         // `--diagnostics` re-derives and cannot see a live tap (#77/#78) — so
@@ -123,6 +158,10 @@ final class BottomDockGuardTap {
         self.tap = nil
         self.source = nil
         zones = []
+        // The counters are deliberately left alone — they are reset on the next
+        // arm, and that asymmetry predates this change. Clearing the window
+        // instead is what makes them unpublishable rather than merely stale.
+        armedAt = nil
         Log.app.notice("Bottom-Dock guard: released")
     }
 

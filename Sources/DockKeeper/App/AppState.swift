@@ -25,6 +25,17 @@ final class AppState: ObservableObject {
     private let screenShareHider = ScreenShareHider()
     private let bottomDockGuardTap = BottomDockGuardTap()
 
+
+    /// This process's own kernel identity, read once.
+    ///
+    /// It cannot change while the process lives — that is the entire property
+    /// that makes it a liveness key — so re-reading it on every reconcile would
+    /// be a `sysctl` per poll tick to learn something already known. `nil` means
+    /// the read failed, and the publisher then writes nothing at all: a record
+    /// whose writer cannot be proved alive is the unverifiable artifact
+    /// DK-FR-015 exists to replace, so publishing none is the honest failure.
+    private lazy var liveGuardWriterIdentity: ProcessIdentity? = ProcessIdentity.current()
+
     @Published var isEnabled: Bool {
         didSet {
             guard !isSyncingFromExternal else { return }
@@ -354,6 +365,12 @@ final class AppState: ObservableObject {
         // Idempotent, and a no-op when we never hid anything.
         screenShareHider.stop()
         bottomDockGuardTap.stop()
+        // Retract, so a record that *survives* means the process died by a route
+        // that skipped this line — a crash, Force Quit, `kill -9`, or the logout
+        // kill. That asymmetry is the only crash signal this app has, and it is
+        // the reason the reader can say "it was killed rather than quit" instead
+        // of merely "stale" (DK-FR-015).
+        retractLiveGuardState()
 
         // Drop the pause record on the way out (ADR-014). This is a **latency
         // optimization, not the mechanism** — exactly as the auto-hide restore
@@ -563,6 +580,7 @@ final class AppState: ObservableObject {
     /// rather than trying to work out whether it needs to — the same anti-drift
     /// reasoning as `screenShareHiderShouldRun`.
     private func applyBottomDockGuard() {
+        let trusted = AXIsProcessTrusted()
         let decision = BottomDockGuard.decide(
             BottomDockGuard.Snapshot(
                 displays: displays,
@@ -571,11 +589,98 @@ final class AppState: ObservableObject {
                 separateSpacesEnabled: MainDisplayPinner.readSeparateSpacesEnabled(),
                 appEnabled: isEnabled,
                 featureEnabled: lockBottomDockToDisplay,
-                accessibilityTrusted: AXIsProcessTrusted()
+                // Read once and reused below. Two calls a few lines apart can
+                // legitimately disagree — a grant can be revoked between them —
+                // and the record is supposed to say what *this* decision was
+                // made on, not what a second, later question answered.
+                accessibilityTrusted: trusted
             )
         )
         bottomDockGuardDecision = decision
         bottomDockGuardTap.apply(decision)
+        // Strictly after `apply`, so the record describes the tap as it is and
+        // not as it was about to be. Publishing from the tail of this one
+        // function rather than from its call sites is the same anti-drift rule
+        // the function's own docstring argues above: a sixth input path added in
+        // two years inherits the publish without anyone remembering to add it.
+        publishLiveGuardState(accessibilityTrusted: trusted)
+    }
+
+    /// Publish what this instance is actually holding, for DK-FR-015.
+    ///
+    /// **Never on the tap's callback.** Every caller reaches here through
+    /// `applyBottomDockGuard()`, which runs on the main actor from a settings
+    /// change, a display change, an Accessibility re-check, or the poll tick —
+    /// never from `BottomDockGuardTap.handle`, where an encoder and a defaults
+    /// write would lengthen the mouse-move path that macOS disables a tap for
+    /// being slow. The cost of that choice is stated rather than hidden: the
+    /// clamp counter is refreshed at the poll cadence, so it can be up to
+    /// `recoveryInterval` seconds behind. The record carries `observedAt` and
+    /// every reader prints its age, so a stale count is *visibly* stale — which
+    /// is the property that matters, since the alternative was a fresher number
+    /// that could stop the guard working.
+    ///
+    /// Two writes are skipped rather than made. Nothing is written when the
+    /// substantive state and both counters are unchanged (DK-NFR-001: an
+    /// unchanged rewrite spends the quietness budget to say nothing new), and
+    /// nothing is written at all when this process cannot read its own kernel
+    /// identity — a record whose writer cannot be proved alive is exactly the
+    /// unverifiable artifact this requirement exists to replace, so publishing
+    /// none is the honest failure.
+    private func publishLiveGuardState(accessibilityTrusted: Bool) {
+        guard let writer = liveGuardWriterIdentity else { return }
+        let now = Date()
+        let tap = bottomDockGuardTap.vitals
+        let candidate = LiveGuardRecord(
+            writer: writer,
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+            // Reported only for a genuinely bundled process. An unbundled
+            // `swift run DockKeeper` has no bundle, and `Bundle.main.bundlePath`
+            // then names the *directory the executable sits in* — a plausible
+            // path that is not an install location, which is worse than saying
+            // nothing. The reader renders `nil` as "running unbundled".
+            bundlePath: Bundle.main.bundleIdentifier == nil ? nil : Bundle.main.bundlePath,
+            observedAt: now,
+            stateChangedAt: now,
+            held: LiveGuardRecord.HeldSettings(
+                isEnabled: isEnabled,
+                lockEdge: lockEdge,
+                lockBottomDockToDisplay: lockBottomDockToDisplay
+            ),
+            // The app's own answer, because TCC resolves `AXIsProcessTrusted()`
+            // for the *responsible* process — which is why a `--diagnostics` run
+            // from a granted terminal reported a permission the GUI app did not
+            // have (#77). Only this process can answer this about this process.
+            accessibilityTrusted: accessibilityTrusted,
+            decision: LiveGuardRecord.DecisionRecord(bottomDockGuardDecision),
+            tap: tap
+        )
+
+        // The policy — ownership, the change guard, the armed heartbeat and the
+        // change-stamp carry-forward — lives in Core so it is reachable from a
+        // test. What is left here is gathering live values and one call.
+        switch LiveGuardPublisher.next(candidate: candidate, stored: settings.liveGuardRecord) {
+        case .write(let record):
+            settings.publishLiveGuardRecord(record)
+        case .skip:
+            break
+        }
+    }
+
+    /// Withdraw this instance's record on a clean exit.
+    ///
+    /// **Ownership-checked, and that is not a nicety.** DK-FR-012 documents two
+    /// supported modes in which a second instance runs — an unbundled
+    /// `swift run`, and `DOCKKEEPER_ALLOW_MULTIPLE_INSTANCES=1` — and both share
+    /// this one key. An unconditional retraction would let one instance's quit
+    /// delete a *live* instance's record, and the reader would then report "no
+    /// instance has published" about an app that is running and guarding. That is
+    /// the class of wrong answer this whole requirement exists to remove, so the
+    /// retraction refuses to touch a record it did not write.
+    private func retractLiveGuardState() {
+        guard let writer = liveGuardWriterIdentity else { return }
+        guard LiveGuardPublisher.shouldRetract(stored: settings.liveGuardRecord, writer: writer) else { return }
+        settings.publishLiveGuardRecord(nil)
     }
 
     /// Open System Settings so the user can approve the login item.
