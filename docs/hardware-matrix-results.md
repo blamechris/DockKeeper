@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) and session 3 (DK-FR-014 guard, **G1 confirmed**) added 2026-09-02; **session 4** (DK-FR-014 **§3d row 9 confirmed** on the stacked-with-overhang rig) added 2026-09-03 |
+| **Status** | Living record — session 1 complete; session 2 (DK-NFR-001 spot check) and session 3 (DK-FR-014 guard, **G1 confirmed**) added 2026-09-02; **session 4** (DK-FR-014 **§3d row 9 confirmed** on the stacked-with-overhang rig) and **session 5** (DK-FR-011's standing capture-flip UNKNOWN closed, plus DK-FR-013 §3c rows 3 and 6) added 2026-09-03 |
 | **Rig** | MacBook Pro built-in Retina (1728×1117) + Dell S2719DGF on external, **portrait** (1440×2560, rotation 90°), macOS 26.5 Apple Silicon |
 | **Inputs** | [Test strategy §3](test-strategy.md) matrix, risk R-002/R-003 |
 
@@ -329,6 +329,116 @@ being held. It is the case #78's live-state readout exists to remove. The releas
 therefore taken by **quitting the app** — the tap is process-owned and dies with it — and confirmed
 from the log line, never from the toggle.
 
+## Session 5 — 2026-09-03 (DK-FR-011 + DK-FR-013 release gates for 0.9.4)
+
+**The standing ADR-011 UNKNOWN is closed, and with it the two crash-recovery cells that sat on top
+of it.** Whether a real screen capture flips `CGSIsScreenWatcherPresent` had been the open M6/M12
+question since the feature shipped on 2026-07-23 — *"the true capture-flip (does the flag fire,
+latency, which apps) is UNKNOWN pending on-device verification"*. It fires.
+
+**Rig.** Same as session 4 (built-in + DELL G3223Q stacked above, overhanging), macOS **26.6.2
+(25G83)**, Apple Silicon, build **0.9.4-dev from `0bf6d5c`**, Developer ID signed. Capture driven
+with `screencapture -V <n> -v` — a real recording that produced a real ~9.6 MB `.mov`, not a
+simulated flag.
+
+Two instruments, both read directly rather than through the app: `CGSIsScreenWatcherPresent`
+(SkyLight, `dlsym`'d exactly as `ScreenCaptureMonitor` does) and `CoreDockGetAutoHideEnabled`,
+polled twice a second, alongside the app's own unified-log lines.
+
+### §3c row 1 — a real capture flips the flag  · **CONFIRMED ✅**
+
+| t | `watcherPresent` | Dock auto-hide | |
+|---|---|---|---|
+| 0.5 s | **TRUE** | off | capture starts — flag fires within ½ s |
+| 3.0 s | TRUE | **ON** | app reacts: `Hid Dock for screen capture (auto-hide on)` |
+| 10.5 s | false | ON | capture ends |
+| 11.5 s | false | **off** | `Restored Dock auto-hide to off (restored)` |
+
+**Latency, measured rather than estimated: ~2.5 s to hide, ~1 s to restore** — the poll cadence, not
+the detector, which fires in under half a second. Afterwards `com.apple.dock autohide` read `0`, its
+pre-test value, and `--diagnostics` reported `Screen-share: no record held`.
+
+**Which apps** is answered only for `screencapture`. QuickTime, Zoom, Teams and Screen Sharing.app
+remain unverified; the detector is a system-wide screen-watcher flag rather than a per-app one, so
+they are *expected* to behave alike, and that expectation is INFERRED.
+
+### The safety property — a pre-existing user auto-hide  · **CONFIRMED ✅**
+
+With the user's *own* auto-hide already ON before the capture, a full capture cycle ran and the app
+did **nothing**: no `Hid Dock` line, no `Restored` line, no record written, and auto-hide stayed ON
+throughout and after. This is ADR-011's never-touch-the-user's-own-auto-hide rule, which the unit
+suite proves as a decision and which had never been observed against the real Dock.
+
+### §3c row 3 — `kill -9` mid-capture, then relaunch  · **CONFIRMED ✅**
+
+The end-to-end proof of the [#29](https://github.com/blamechris/DockKeeper/issues/29) fix, and the
+first time the whole chain has run against the real Dock. The defect condition was reproduced
+first: with the Dock hidden for a capture, `SIGKILL` left auto-hide **stuck ON with no owner** and a
+`screenShareHideRecord` on disk. The capture was then allowed to end — auto-hide still stuck ON —
+and the app relaunched:
+
+```
+Restored Dock auto-hide to off (repaired)
+```
+
+Auto-hide **off**, and the record **removed from the domain** rather than merely ignored
+(`defaults read com.dockkeeper.app screenShareHideRecord` → *does not exist*), which exercises the
+guarded write in `AppState.init` end to end. `--diagnostics`: `Screen-share: no record held`.
+Note the reason word: `(repaired)` is the launch path, distinct from `(restored)`.
+
+### §3c row 6 — relaunch mid-capture adopts, with no Dock write  · **CONFIRMED ✅ (as far as this
+instrument reaches)**
+
+`SIGKILL` during a capture, then relaunch **while the capture was still running**:
+
+```
+Adopted a leftover screen-share Dock hide; a capture is still running
+```
+
+and **no `Hid Dock` line** — the adopt path issued no Dock write at all, which is the property the
+unit tests assert as `writes == [true]` only. Auto-hide read ON continuously across the kill and the
+relaunch, so there was no window in which it was off. When the capture ended the adopted hide
+restored normally: `Restored Dock auto-hide to off (restored)`.
+
+**What is still not observed is the far end.** Row 6's stated expectation is *"the far end never
+sees the Dock appear"*, and there was no remote viewer — a local recording has no far end. What is
+confirmed is the mechanism that expectation rests on (no write, no off-window). The visual claim
+stays INFERRED.
+
+### The whole sequence, from the unified log
+
+Four different PIDs, which is what makes the process deaths legible:
+
+```
+17:47:19 DockKeeper[96515] Hid Dock for screen capture (auto-hide on)
+17:47:28 DockKeeper[96515] Restored Dock auto-hide to off (restored)      <- row 1, clean cycle
+17:49:07 DockKeeper[96515] Hid Dock for screen capture (auto-hide on)
+                           ... SIGKILL 96515 ...
+17:49:31 DockKeeper[99938] Restored Dock auto-hide to off (repaired)      <- row 3, launch repair
+17:50:13 DockKeeper[99938] Hid Dock for screen capture (auto-hide on)
+                           ... SIGKILL 99938, relaunched mid-capture ...
+17:50:20 DockKeeper[ 1536] Adopted a leftover screen-share Dock hide; a capture is still running
+17:50:38 DockKeeper[ 1536] Restored Dock auto-hide to off (restored)      <- row 6, adopt then restore
+```
+
+All three outcomes — `(restored)`, `(repaired)`, `Adopted` — are distinguishable in the log without
+knowing which cell was being run, which is what makes this readable as evidence at all.
+
+### Not run, and why
+
+- **§3c row 4 (logout with a hide held)** — needs a real logout, which ends the session driving the
+  test. Still the dominant real exit path and still INFERRED.
+- **§3c rows 2 and 5** (menu Quit, `SIGTERM`) — not exercised here; a hide was never held across
+  either path in this sitting.
+- **§3c rows 7, 8, 9, 10** unchanged: the poisoned-population menu item, `CoreDock` durability
+  across an immediate exit, panic durability (untestable), cross-user (argued, not measured).
+- **§3d rows 3, 5, 6, 7, 8** unchanged from session 4 — all fail *open*.
+- **DK-NFR-001 cost** unchanged — R-015, the 24 h soak.
+
+**The app's settings were returned to their pre-test state**: `hideDockDuringScreenShare` is opt-in
+and was *unset* before this session, so it was deleted rather than written `false`, and
+`com.apple.dock autohide` is back to `0`. Verified after the last relaunch.
+
 ## Matrix cells
 
 | Cell | Result | Session |
@@ -350,8 +460,9 @@ from the log line, never from the toggle.
 | Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
 | Edge lock survives display events (2-display, app running) | ⏳ | — |
 | Unplug / replug drift presentation | ⏳ | — |
-| **Screen-capture hide: `kill -9` mid-capture → relaunch restores auto-hide** (DK-FR-013 S5, issue #29) | ⏳ | — |
-| **Screen-capture hide: relaunch *during* a live capture adopts, Dock does not flash** (DK-FR-013 S6) | ⏳ | — |
+| **A real capture flips `CGSIsScreenWatcherPresent`** (ADR-011's standing M6/M12 UNKNOWN) | ✅ CONFIRMED — flag fires < 0.5 s; hide ~2.5 s, restore ~1 s; a pre-existing user auto-hide is left untouched | 5 |
+| **Screen-capture hide: `kill -9` mid-capture → relaunch restores auto-hide** (DK-FR-013 S5, issue #29) | ✅ CONFIRMED — `(repaired)` on relaunch, record removed from the domain | — |
+| **Screen-capture hide: relaunch *during* a live capture adopts, Dock does not flash** (DK-FR-013 S6) | ✅ CONFIRMED as *no Dock write* — adopt issued none and auto-hide never went off; the far-end visual is still unobserved | — |
 | **Screen-capture hide: logout with a hide held → auto-hide off after login** (DK-FR-013 S4) | ⏳ | — |
 | **`applicationWillTerminate` / `SIGTERM` restore in the signed bundle** (DK-FR-013 S3) | ⏳ | — |
 | UUID stability across ports/adapters/reboot | ⏳ baseline recorded | — |
