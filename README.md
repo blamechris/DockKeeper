@@ -123,8 +123,21 @@ The CLI and the app share one settings store, so either can drive the other:
 ```sh
 dockkeeper lock left
 dockkeeper unlock
-dockkeeper status
+dockkeeper status         # your configured settings
+dockkeeper status --live  # what the running copy is actually holding
 ```
+
+`dockkeeper status` reports your *configured* state and works whether or not
+DockKeeper is running. `dockkeeper status --live` asks the copy that *is*
+running what it holds: the settings it has in memory, whether it sees the
+Accessibility permission, whether the bottom-Dock guard's pointer tap is armed,
+and whether any of that disagrees with the settings on this Mac — an external
+`defaults write` to the bottom-guard setting never reaches a running app, so the
+two can drift apart. With nothing running it says so and prints no guard state,
+rather than guessing at one. Exit codes: `0` live and agreeing, `3` nothing
+published, `4` the publisher is gone, `5` the record could not be read, `6` live
+but diverging.
+
 
 The same commands are available as a URL scheme, for Shortcuts, Raycast, Alfred,
 or anything else that can open a URL:
@@ -179,6 +192,12 @@ Scripts/run-app.sh
 # One-shot status report (handy for bug reports)
 dist/DockKeeper.app/Contents/MacOS/DockKeeper --diagnostics
 ```
+
+That report's `Live state:` row says whether the DockKeeper that is actually
+running agrees with the rest of it: every other row is re-derived from this
+Mac's settings by the process you just ran, which cannot see what a running app
+holds. `dockkeeper status --live` prints the same comparison in full.
+
 
 > **Launch at Login note:** macOS registers login items through Background Task
 > Management, which requires the app to live in **`/Applications`** with a full

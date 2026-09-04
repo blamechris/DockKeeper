@@ -11,7 +11,16 @@ DockKeeper is built on a simple rule: **nothing ever leaves your Mac.**
 - **No accounts, no ads, no payment gates.** There is nothing to sign in to
   and nothing to buy.
 - **Local logs only, opt-in, bounded.** By default DockKeeper writes nothing
-  to disk beyond your preferences. If you enable verbose logging, extra detail
+  to disk beyond your preferences. While it runs, one of those preferences is
+  a live-state record, so that `dockkeeper status --live` and `--diagnostics`
+  can report what the running copy is holding rather than guess at it: the
+  running process (pid, start time, version, and where the app is installed),
+  the settings it is holding — on/off, lock edge, and whether the bottom-Dock
+  guard is on — whether it sees the Accessibility grant, and, when that guard
+  is armed, which screen-edge spans it is holding and how many times it has
+  nudged the pointer. It contains no pointer coordinates, no window titles,
+  and no application names, and DockKeeper removes it when you quit.
+  If you enable verbose logging, extra detail
   goes to the macOS unified log (visible in Console.app, system-managed
   retention). If you enable the diagnostics file (Preferences ▸ Advanced), a
   small local log of state changes and Dock corrections is kept — capped

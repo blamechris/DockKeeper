@@ -97,6 +97,7 @@ public final class Settings: @unchecked Sendable {
         static let lockBottomDockToDisplay = "lockBottomDockToDisplay"
         static let screenShareHideRecord = "screenShareHideRecord"
         static let pauseRecord = "pauseRecord"
+        static let liveGuardRecord = "liveGuardRecord"
         static let restoreDelay = "restoreDelay"
         static let recoveryInterval = "recoveryInterval"
         static let settingsVersion = "settingsVersion"
@@ -336,6 +337,104 @@ public final class Settings: @unchecked Sendable {
             }
             defaults.set(data, forKey: Keys.pauseRecord)
         }
+    }
+
+    // MARK: Live guard record (DK-FR-015)
+
+    /// What a *running* instance last published about the bottom-Dock guard.
+    ///
+    /// Read-only here, and paired with `publishLiveGuardRecord(_:)` rather than
+    /// exposed as a `var`, because the two directions are not symmetric. A
+    /// writer supplies a record or clears it; a reader gets a three-case answer
+    /// in which "there is nothing" and "there is something I could not read" are
+    /// different verdicts. A `var` would have to collapse them into `nil`, which
+    /// is the one thing this record may never do — see `StoredLiveGuardRecord`.
+    ///
+    /// Stored as a JSON **string**, deliberately unlike `pauseRecord` and
+    /// `screenShareHideRecord`, which store `Data`. Those are private state that
+    /// happens to persist; this one has "machine-readable" as an acceptance
+    /// criterion, and a `Data` value renders in `defaults read` as a hex blob no
+    /// support reader can use. As a string, `defaults read com.dockkeeper.app
+    /// liveGuardRecord` *is* the machine-readable artifact, with no second
+    /// surface to keep in step.
+    ///
+    /// Absent from `registrationDomain()` because absence is a real state — no
+    /// instance has published — and from `externallyObservedKeys` because this
+    /// app writes it, and observing a self-written key turns every publish into
+    /// a `.settingsChanged` event and a full reconcile (the argument ADR-011 and
+    /// ADR-014 already record for the two records above it).
+    public var liveGuardRecord: StoredLiveGuardRecord {
+        // `object(forKey:)`, not `string(forKey:)`. A non-string value in the
+        // domain — someone's stray `defaults write ... -int 1` — makes
+        // `string(forKey:)` answer `nil`, which would read as "no instance has
+        // published" and collapse the one distinction this enum exists to keep.
+        guard let stored = defaults.object(forKey: Keys.liveGuardRecord) else { return .absent }
+        guard let text = stored as? String else {
+            return .unreadable("stored value is a \(type(of: stored)), not a string")
+        }
+        guard let data = text.data(using: .utf8) else {
+            return .unreadable("stored value is not UTF-8")
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        // The envelope is decoded first, on its own, so a record from a newer
+        // DockKeeper is recognised as a version difference rather than as
+        // corruption. Decoding the payload to reach `schema` would report every
+        // structural change — a field that became required, a case that gained
+        // an associated value — as a damaged record, which is a confident wrong
+        // answer about the one thing this feature promises to get right.
+        guard let envelope = try? decoder.decode(SchemaEnvelope.self, from: data) else {
+            return .unreadable("stored value is not a recognisable record")
+        }
+        guard envelope.schema == LiveGuardRecord.currentSchema else {
+            return .wrongSchema(found: envelope.schema)
+        }
+        do {
+            return .present(try decoder.decode(LiveGuardRecord.self, from: data))
+        } catch {
+            // The reason is carried, not swallowed. A reader that can only say
+            // "unreadable" sends its user back to guessing, which is the state
+            // this feature exists to end.
+            return .unreadable(String(describing: error))
+        }
+    }
+
+    /// Just enough of a record to learn which version wrote it.
+    private struct SchemaEnvelope: Decodable {
+        let schema: Int
+    }
+
+    /// Publish, or retract with `nil`.
+    ///
+    /// Retraction on a clean exit is what makes a *surviving* record evidence:
+    /// find one whose writer is gone and you know the process died by a route
+    /// that skipped its own cleanup. That asymmetry is the only crash signal
+    /// this app has ever had.
+    ///
+    /// An encoding failure retracts rather than leaving the previous record in
+    /// place. A record that no longer describes the running state is worse than
+    /// none — it is the stale instrument this whole requirement is about — and
+    /// the reader is built to report "nothing published" honestly.
+    public func publishLiveGuardRecord(_ record: LiveGuardRecord?) {
+        guard let record else {
+            defaults.removeObject(forKey: Keys.liveGuardRecord)
+            return
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        // Sorted keys so an unchanged record encodes to an identical string.
+        // The change guard upstream compares records, not strings, but a stable
+        // encoding also means `defaults read` output diffs cleanly between two
+        // support reports, which is how a maintainer spots what moved.
+        encoder.outputFormatting = [.sortedKeys]
+        guard
+            let data = try? encoder.encode(record),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            defaults.removeObject(forKey: Keys.liveGuardRecord)
+            return
+        }
+        defaults.set(text, forKey: Keys.liveGuardRecord)
     }
 
     /// Schema version hook for future migrations (current: 1).

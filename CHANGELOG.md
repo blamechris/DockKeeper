@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+
+### Added
+
+- **You can now ask a running DockKeeper what it is actually doing.** `dockkeeper status --live` reports the state of the copy in your menu bar instead of inferring it: the settings it is holding in memory, whether *it* sees the Accessibility permission, whether the bottom-Dock guard's pointer tap is armed, and whether macOS currently has that tap filtering. When any of it disagrees with the settings on this Mac, the report names the disagreement and says which side is in force — the running app's. That case is not hypothetical: a `defaults write` to the bottom-guard setting never reaches a running app, so the guard can be holding your pointer while every other report says the feature is off. `dockkeeper status` on its own is unchanged — it reports your *configured* state and has never claimed to know whether DockKeeper is running — and the live block never quietly falls back to it: with nothing published it says so and prints no guard state at all, and it distinguishes "no DockKeeper is running" from "one is running but has published nothing". Whether the publisher is still alive is asked of the kernel rather than guessed from how recent the record is, so a record left behind by a `kill -9` reads as stale seconds later. Exit codes, for scripts and release gates: `0` live and agreeing with your settings, `3` nothing published, `4` the publisher is gone, `5` the record could not be read, `6` live but diverging. ([#78](https://github.com/blamechris/DockKeeper/issues/78))
+- `--diagnostics` gained a `Live state:` row. Every other row in that report is re-derived from this Mac's settings by the process you just ran, which cannot see what a running app holds; this row is the only one that says whether the two agree. Twice a report has confidently contradicted the running app — once reporting the guard as guarding a display when its tap had never armed, once reporting it off while it was actively holding the pointer — and this row catches both.
+- The record is published whenever DockKeeper is running, with nothing to switch on: a diagnostic you have to enable first is missing exactly when you need it. It lives in DockKeeper's own preferences, so `defaults read com.dockkeeper.app liveGuardRecord` is the same state in machine-readable form, and DockKeeper removes it when you quit — which is why a record that outlives its writer is itself evidence that DockKeeper was killed rather than quit. It names the running process, its version and install path, the settings it is holding and what the guard is doing; never pointer coordinates, window titles, or application names ([privacy statement](PRIVACY.md)).
+
+### Fixed
+
+- **`dockkeeper status` no longer ignores a mistyped option.** Trailing arguments were discarded silently, so `dockkeeper status --liv` printed the ordinary configured-state block and exited `0` — a confident answer to a question you did not ask, on the one command people run when they are already unsure what is happening. An unrecognised option is now an error.
+
+### Known beta limits
+
+- The live record's clamp and re-enable counters are refreshed on DockKeeper's regular re-check — every 30 seconds by default — and not on every pointer event. That is deliberate: doing extra work on the pointer path is how macOS decides an event tap is too slow and switches it off. So those two counts can lag by up to that interval. Every reading is printed with its age, so a stale one is visibly stale.
+
 ## [0.9.4] — 2026-09-03
 
 Fifth public beta. One user-visible change, and it matters most on the arrangement it was found on: a screen stacked above another and sticking out past its sides.
