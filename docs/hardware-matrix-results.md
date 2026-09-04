@@ -636,6 +636,58 @@ control), and row 5 inherits it rather than re-measuring it.
 
 The arrangement was then restored to the measured baseline and the guard re-armed over 2 spans.
 
+### §3d row 5 again, on hardware that produced the refusal by itself  · **CONFIRMED ✅ (second rig)**
+
+Later the same day the external display was swapped: the G3223Q was replaced by an **S2719DGF in
+portrait**, and the refusal appeared *without anyone building a rig for it*.
+
+| | CG frame (top-left origin) | |
+|---|---|---|
+| Built-in Retina Display (id 1) | `(0, 0) 1728×1117` | main, **preferred** |
+| S2719DGF, portrait (id 3) | `(130, −2560) 1440×2560` | non-preferred, directly above |
+
+A portrait 27" panel is **1440 pt wide against the laptop's 1728**, so it is genuinely narrower than the
+display beneath it and its span `x ∈ [130, 1570]` falls entirely inside `[0, 1728]`. Its whole bottom edge
+is covered, and the guard stood down on its own:
+
+```
+Guard: idle — no guardable display (1 whose bottom edge is covered along its whole length by the
+       display(s) below; clamping a shared span would trap the pointer)
+Tap:   not armed
+```
+
+**Why this is stronger than the first run, and worth its own entry.** The earlier confirmation needed the
+4K narrowed to a 1280×720 mode to reach the shape, which leaves a fair objection open: a synthesized
+display mode is not proof that the arrangement occurs. This one was **nobody's test rig** — it is a
+commonplace desk setup (a portrait secondary above a laptop), and it produced the refusal spontaneously.
+The safety branch is therefore not a defensive corner case; it is load-bearing on ordinary hardware.
+
+**The control that makes it readable.** A stood-down guard looks identical whether it refused on geometry
+or simply lacked permission — and this rig was measured *minutes after* the Accessibility grant was
+restored, which is exactly when that confusion is most likely. `Accessibility: granted, as the running app
+sees it` was read from the live record in the same breath as the reason string, so the refusal is
+attributable to geometry and nothing else. Without that line this observation would be worthless.
+
+Probing the boundary a failed refusal would have clamped — `y ∈ (−3, 0)` on the upper display, sitting
+exactly on the crossing — at `x = 800`, inside both displays' spans:
+
+| posted CG | settled (`CGEvent`) | settled (`NSEvent`→CG) | |
+|---|---|---|---|
+| `(800, −1)` — **the point a failed refusal would clamp** | `−1.0` | `−1.0` | not rewritten |
+| `(800, −10)` — further up into the covered display | `−10.0` | `−10.0` | not rewritten |
+| `(800, +40)` — back down into the lower display | `+40.0` | `+40.0` | not rewritten |
+
+Two independent APIs agree in every row. Scoped the same way as the first run: this proves the **absence
+of a clamp**, which is the half that could trap a cursor; the crossing half is inherited from session 4's
+row 9 rather than re-measured here.
+
+**One consequence worth stating plainly, because it is a product fact and not a test result:** on this
+arrangement DK-FR-014 does nothing at all. A user whose secondary display is narrower than the one below
+it gets the refusal permanently, and the feature is inert for them. That is the correct and safe outcome —
+clamping a fully-shared span would trap the pointer at the boundary — but it means the bottom-Dock guard
+has a real population it silently cannot help, which the Preferences caption does communicate
+(`no guardable display …`) and the requirement's Known cost does not mention.
+
 ### §3d row 3 — revoke Accessibility while armed  · **CONFIRMED ✅**
 
 The last unrun §3d safety row, and the one whose failure direction is a **trapped cursor**. Run by the
@@ -833,7 +885,7 @@ apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against
 | Clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
 | **DK-FR-015 writer half: publish, retract, armed heartbeat** (#96) | ✅ CONFIRMED — all seven steps, with a 20 s idle control; the `max(5, recoveryInterval)` bound **measured** at four consecutive 30 s refreshes | 6 |
 | **Accessibility grant survives a Developer ID rebuild** | ✅ CONFIRMED — designated requirements identical across 0.9.4 and the new build; the app's own `AXIsProcessTrusted()` read `granted` at first launch | 6 |
-| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
+| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. **Confirmed twice, on two rigs** — once synthesized (4K narrowed to 1280×720) and once occurring *spontaneously* on a portrait S2719DGF above the laptop, with the Accessibility grant verified live so the stand-down is attributable to geometry. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
 | **DK-NFR-001 idle cost, guard RELEASED** (R-015 control half) | ◐ PARTIAL — 0.0018% of one core over 600 s; `phys_footprint` **22.9 MB**, inside the <30 MB preferred budget (was UNKNOWN). 10 min not 24 h, and the armed half is still the open soak | 6 |
