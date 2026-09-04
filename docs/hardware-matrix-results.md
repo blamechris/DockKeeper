@@ -439,6 +439,233 @@ knowing which cell was being run, which is what makes this readable as evidence 
 and was *unset* before this session, so it was deleted rather than written `false`, and
 `com.apple.dock autohide` is back to `0`. Verified after the last relaunch.
 
+## Session 6 — 2026-09-04 (DK-FR-015's writer half, and §3d rows 5–8)
+
+**#96 is closed, and the poll-cadence bound it called "an argued figure and not a measured one" is now
+measured.** This session ran the new build as the real menu-bar app for the first time, which is the
+only way the app's own lifecycle wiring can be reached.
+
+**Rig.** Built-in + DELL G3223Q stacked with overhang, macOS **26.6.2 (25G83)**, Apple Silicon (M4 Max),
+build from **`9eb3599`**, Developer ID signed (`PG8VP4PTGV`). Installed at `/Applications/DockKeeper.app`,
+displacing 0.9.4. The bundle is stamped **0.1.0** — the repo default, left unstamped **on purpose**: it is
+not a release, and an unmistakably different version string is what makes "the new build is the one
+running" a one-glance check rather than an inference.
+
+**Measured arrangement — measured, not quoted.** #83 recorded ~748/~1364 and session 4 measured 478/1634;
+this session measured 478/1634 again. Only the total is invariant.
+
+| | CG frame (top-left origin) | |
+|---|---|---|
+| Built-in Retina Display (id 1) | `(0, 0) 1728×1117` | main, **preferred** |
+| DELL G3223Q (id 3) | `(−478, −2160) 3840×2160` | **guarded** (non-preferred) |
+
+Left overhang 478 + right overhang 1634 = **2112**, the invariant (`3840 − 1728`). The guarded display's
+`frame.maxY` is **0**, so `clampY = 0 − 3 = **−3**` and the clamp band is `y ∈ (−3, 0)` — negative, which
+inverts every sanity rule carried from a positive-`y` rig.
+
+**The aim point was derived from the predicate, not chosen.** `ClampZone.contains` accepts only
+`point.y > clampY && point.y < frame.maxY`, so every probe below aims at `y = −1` — inside a 3 pt window.
+The shared strip `x ∈ [0, 1728)` carries no zone and is therefore a **built-in control**: a probe there
+must come back unrewritten in every configuration, armed or not.
+
+### The Accessibility grant survived the rebuild, and that was checked before anything was run
+
+The seed's load-bearing precondition. Verified by comparing designated requirements rather than by
+trying it and hoping:
+
+```
+/Applications/DockKeeper.app (0.9.4)  designated => identifier "com.dockkeeper.app" and anchor apple generic
+  and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13]
+  and certificate leaf[subject.OU] = PG8VP4PTGV
+dist/DockKeeper.app (new build)       designated => ...identical...
+```
+
+Identity-based, no hash and no path, so the grant transfers. Confirmed empirically at first launch:
+`Accessibility: granted, as the running app sees it` — **the app's own answer**, not a shell's (#77).
+
+### Step 0 / #96 — the writer half  · **CONFIRMED ✅, all seven steps**
+
+Launched via `open`, i.e. through LaunchServices, never from the shell — a CLI launched from a terminal
+inherits the terminal's TCC grants and would have poisoned the permission verdict.
+
+| # | Step | Result |
+|---|---|---|
+| 1 | Quit installed 0.9.4, install signed build | `released` logged at 23:09:17.218 by pid 28571; exactly one bundle on disk |
+| 2 | `status --live` reports it live | ✅ `Live: yes — pid 94433`, `Bundle: /Applications/DockKeeper.app`, `Divergence: none`, `Tap: armed … over 2 span(s)` |
+| 3 | A real state change moves `stateChangedAt`, `Guard:`/`Tap:` follow | ✅ **with a control** — see below |
+| 4 | Armed heartbeat refreshes `observedAt` while `unchanged for` climbs | ✅ **and the 30 s bound is measured** — see below |
+| 5 | Menu Quit → retraction, exit 3 | ✅ `Live: no — no DockKeeper instance is running`, exit 3 |
+| 6 | `kill -9` → "killed rather than quit", exit 4 | ✅ `Live: no — the record names pid 48748, which is not running`, exit 4 |
+| 7 | Exactly one `com.dockkeeper.app` on disk | ✅ `dist/DockKeeper.app` deleted in the same sitting |
+
+Step 5 used the Quit Apple Event. That is **not** a weaker substitute for the menu item: `MenuBarContent.swift:123`
+is literally `Button("Quit DockKeeper") { NSApp.terminate(nil) }`, and the Quit Apple Event invokes
+`terminate:`. Both reach `applicationWillTerminate` by the same call. No scoping caveat is owed.
+
+**Step 3, with its control.** The control is the half that makes it a measurement rather than a coincidence:
+
+| | `unchanged for` | `Guard:` / `Tap:` |
+|---|---|---|
+| baseline | 6 s | guarding 1 display over 2 spans / armed |
+| **after 20 s idle** | **26 s** — did *not* reset | unchanged |
+| after a real change (edge → Left) | **3 s** — reset | `idle — only a bottom Dock is pointer-summoned` / `not armed` |
+| restored to Bottom | 3 s | guarding over 2 spans / armed |
+
+`stateChangedAt` does not drift on a no-op and does move on a real change, and the guard and tap rows
+follow it.
+
+### The poll-cadence bound, measured
+
+#96 recorded the `max(5, recoveryInterval)` freshness bound as argued. Sampling `status --live` every
+10 s for 130 s with the guard armed and otherwise idle:
+
+```
+t=010  Observed: 18s ago; unchanged for   48s
+t=020  Observed: 28s ago; unchanged for   58s
+t=030  Observed:  8s ago; unchanged for 1m 8s     <- refresh
+t=040  Observed: 18s ago; unchanged for 1m18s
+t=050  Observed: 28s ago; unchanged for 1m28s
+t=060  Observed:  8s ago; unchanged for 1m38s     <- refresh
+...  (sawtooth continues to t=120)
+```
+
+A clean sawtooth: refreshes at t = 22, 52, 82, 112 s — **four consecutive 30 s intervals**, matching
+`max(5, recoveryInterval)` with the 30 s default. `unchanged for` climbed monotonically 48 s → 2 m 38 s
+with no reset across the whole window, which is the `stateChangedAt` carry-forward working. `0 clamp(s)`
+throughout, so the window was also a clean zero baseline for the clamp probes.
+
+### The clamp, with its control  · **CONFIRMED ✅**
+
+Walked down into the band at five columns. `posted y = −1` in every case:
+
+| column | settled CG `y` | AppKit readback → CG | verdict |
+|---|---|---|---|
+| left overhang `x = −240` | −3.0 | −3.0 | **CLAMPED** |
+| **shared strip `x = 800`** | **−1.0** | **−1.0** | **free — the control** |
+| right overhang `x = 2545` | −3.0 | −3.0 | **CLAMPED** |
+| bottom-left corner `x = −477` | −3.0 | −3.0 | **CLAMPED** |
+| bottom-right corner `x = 3360` | −3.0 | −3.0 | **CLAMPED** |
+
+Two independent APIs agree in every row — `CGEvent(source: nil)!.location` and `NSEvent.mouseLocation`
+converted through the main display's height. Agreement across two APIs is what makes this a property of
+the pointer rather than one API echoing the caller.
+
+**The counter check is exact, not merely non-zero.** The walk has two in-band steps (`y = −2, −1`) and four
+guarded columns, so a working tap must record **exactly 8** clamps. `status --live` afterwards read
+`8 clamp(s)`, and the shared strip contributed none. That also confirms the tap's vitals reach the
+published record, and that a counter move forces an off-cadence write while `unchanged for` keeps climbing.
+
+### §3d row 8 — `kill -9` while armed  · **CONFIRMED ✅**
+
+| | probe at left overhang `x = −240`, `posted y = −1` |
+|---|---|
+| armed, before | `cg_y = −3.0` — **CLAMPED** |
+| `kill -9` | 23:21:16.476 |
+| immediately after | `cg_y = −1.0` — **FREE**, observation complete by 23:21:17.095 |
+
+**619 ms** from kill to a confirmed free pointer, and nothing persisted. An event tap is process-owned and
+dies with the process; there is no record and no launch repair, and this measures that claim rather than
+restating it. The same kill answered #96 step 6.
+
+### §3d row 6 — mirrored displays  · **CONFIRMED ✅, by a different code path than the row assumed**
+
+Driven with `CGConfigureDisplayMirrorOfDisplay` (`.forSession`), which is the same configuration change
+System Settings makes — the Arrange sheet on this macOS offers only an Option-drag, which is a canvas
+gesture and a far less precise instrument.
+
+The row's expectation holds: **the guard stands down and there is no band on the visible screen.** The
+pointer reached the visible display's bottom edge (`CG y = 1116`, re-derived for the mirrored geometry —
+the unmirrored aim of `y = −1` is off-screen once the DELL is gone) and came back unrewritten.
+
+**But the reason is `singleDisplay`, not `mirrorsPreferredDisplay`,** and that distinction is worth
+recording rather than smoothing over. Hardware mirroring collapses the mirror set to one active display:
+`CGGetActiveDisplayList` returned only id 1 and `NSScreen.screens.count` went 2 → 1, so `decide` exits at
+`snapshot.displays.count > 1` long before the mirror gate. The reported reason was
+`idle — needs a second display`.
+
+**`IdleReason.mirrorsPreferredDisplay` is therefore still unexercised on real hardware.** It defends the
+case where two displays are reported with *identical frames* — plausibly Sidecar/AirPlay or a transient
+reconfiguration — which this rig does not produce by mirroring. Recording row 6 as confirmed without this
+sentence would leave a shipped branch looking tested when it is not.
+
+Unmirroring restored the arrangement to exactly `(−478, −2160) 3840×2160` and the guard re-armed over 2 spans.
+
+### §3d row 5 — the stacked refusal  · **CONFIRMED ✅**
+
+This row had never been runnable, because the refusal needs the **guarded** display's bottom edge covered
+along its whole length and the 4K is wider than the built-in, so no arrangement of the two can cover it.
+The seed proposed putting the MacBook on top; that reaches the shape, but only if the *preferred* display
+is also swapped to the DELL, since the guard only ever guards the non-preferred display.
+
+Rather than rewrite the owner's stored preferred display, the rig was built the other way: the DELL was
+narrowed to a 1280×720 mode and placed flush **on top of** the built-in and fully inside its horizontal
+span — `CG (200, −720) 1280×720` against the built-in's `(0, 0) 1728×1117`. The DELL is then the
+non-preferred display, its bottom edge (`y = 0`, `x ∈ [200, 1480]`) is covered along its whole length, and
+the refusal is reachable **with DockKeeper's own settings untouched**.
+
+```
+Guard: idle — no guardable display (1 whose bottom edge is covered along its whole length by the
+       display(s) below; clamping a shared span would trap the pointer)
+Tap:   not armed
+```
+
+`--diagnostics`, re-deriving in a separate process, agreed. Re-derivation is not trustworthy for *tap
+state* (rule 1), but it is a legitimate second opinion on **geometry**, which is what this row turns on.
+
+**The sharp half.** If the refusal had failed, the DELL's band would have been `y ∈ (−3, 0)` — sitting
+exactly on the crossing boundary, which is the trapped-cursor failure this row exists to catch. Probing
+that precise point, and either side of it:
+
+| posted CG | settled | |
+|---|---|---|
+| `(800, −1)` — **the point a failed refusal would clamp** | `(800, −1.0)` | not rewritten |
+| `(800, −10)` — further into the upper display | `(800, −10.0)` | not rewritten |
+| `(800, 40)` — back down into the lower display | `(800, 40.0)` | not rewritten |
+
+The display is left unguarded entirely and the boundary is not held. The arrangement was then restored to
+the measured baseline and the guard re-armed over 2 spans.
+
+### §3d row 7 — bottom hot corners  · **reachability CONFIRMED ✅; the trigger half NOT run**
+
+Both bottom corners of the guarded display — `x = −477` in the left overhang and `x = 3360` in the right —
+are held at `clampY = −3`, so the pointer cannot reach the corner-most row. That is the mechanism the
+shipped disclosure rests on, and it is measured.
+
+**What is not measured is a hot corner configured there failing to fire.** Triggering a hot corner depends
+on a real pointer arriving and dwelling, and a posted `CGEvent` is not bounded by the constraints a hand
+obeys — the same limit that keeps synthetic input away from summon-by-dwell. The row is therefore recorded
+as **half run**: unreachable is confirmed, "and therefore the hot corner never fires" is still INFERRED,
+and no shipped disclosure may claim more than that until a hand has tried it.
+
+### Two defects found on the way past
+
+- **[#98](https://github.com/blamechris/DockKeeper/issues/98) — an unrelated CLI edit silently disarms the
+  guard, and clears the divergence that would have shown it.** `lockBottomDockToDisplay` is deliberately not
+  in `Settings.externallyObservedKeys`, so an external `defaults write` to it correctly diverges rather than
+  taking effect — `Divergence: bottom-guard: app=on disk=off`, the DK-FR-015 motivating case, confirmed here
+  against the **real running app** for the first time rather than a throwaway harness. But
+  `AppState.syncFromSettings()` syncs that key anyway, and only ever runs on a `.settingsChanged` event
+  raised by one of the three *observed* keys. So `dockkeeper lock left` swept it: `bottom-guard` went
+  `on → off`, the tap released, and `Divergence:` reported agreement at the same moment. Confirmed twice —
+  the mirror image (`app=off disk=on`, tap not armed, guard down while disk says on) held afterwards, and
+  the state self-healed on relaunch, which was also measured.
+- **[#87](https://github.com/blamechris/DockKeeper/issues/87) — first on-device reproduction.** The
+  transition-only arm line went stale *within one arm*: the log's last line read `armed over 1 span(s)`
+  while the live record read `armed 1m 16s ago over 2 span(s)`. `1m 16s` resolves to the same 23:27:05 arm
+  event, so one tap is being described by two instruments that disagree about what it holds, and the log is
+  the wrong one. The disagreement is only detectable because `status --live` exists; before #94 the log line
+  was the only span-count instrument on the machine and would have been believed.
+
+### Not run, and why
+
+- **§3d row 3 (revoke Accessibility while armed)** — the revoke is an authenticated System Settings action.
+  Entering the owner's credentials is not something this session may do, so the row needs the owner's own hand.
+- **§3d row 7, trigger half** — see above; needs a real hand.
+- **§3d row 2 / R-015 (24 h soak)** — needs the machine otherwise idle, so it is started last and read next
+  session. **Never drive it with synthetic `CGEvent.post`**: that measured 52 % against 2 % by hand.
+- **§3d row 4 (system disables the tap)** — unchanged; #61 tracks the unbounded re-enable.
+- **`IdleReason.mirrorsPreferredDisplay`** — unexercised, see row 6.
+
 ## Matrix cells
 
 | Cell | Result | Session |
@@ -468,7 +695,14 @@ and was *unset* before this session, so it was deleted rather than written `fals
 | **`applicationWillTerminate` / `SIGTERM` restore in the signed bundle** (DK-FR-013 S3) | ⏳ | — |
 | UUID stability across ports/adapters/reboot | ⏳ baseline recorded | — |
 | Sleep/wake with external connected | ⏳ | — |
-| Mirroring / clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
+| **Mirroring** (§3d row 6) | ✅ CONFIRMED — guard stands down, no band on the visible screen. Reached via `singleDisplay` (the mirror set collapses to one active display), **not** via `mirrorsPreferredDisplay`, which stays unexercised | 6 |
+| Clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
+| **DK-FR-015 writer half: publish, retract, armed heartbeat** (#96) | ✅ CONFIRMED — all seven steps, with a 20 s idle control; the `max(5, recoveryInterval)` bound **measured** at four consecutive 30 s refreshes | 6 |
+| **Accessibility grant survives a Developer ID rebuild** | ✅ CONFIRMED — designated requirements identical across 0.9.4 and the new build; the app's own `AXIsProcessTrusted()` read `granted` at first launch | 6 |
+| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten | 6 |
+| **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
+| **Bottom hot corners on a guarded display** (§3d row 7) | ◐ HALF — unreachable CONFIRMED (both corners held at `clampY = −3`); the hot-corner *trigger* is INFERRED, needs a hand | 6 |
+| **Revoke Accessibility while armed** (§3d row 3) | ⏳ needs the owner's own hand (authenticated action) | — |
 | Identical twin externals | n/a on this rig (different panels) | — |
 
 ---
