@@ -460,6 +460,7 @@ and was *unset* before this session, so it was deleted rather than written `fals
 | Live edge set + defaults write-through, 2 displays attached | ✅ CONFIRMED (re-ran the CoreDock spike with both displays: flicker-free set, write-through intact) | 1 |
 | Edge lock survives display events (2-display, app running) | ⏳ | — |
 | Unplug / replug drift presentation | ⏳ | — |
+| **Homebrew upgrade replaces a live copy cleanly** (the cask's `uninstall quit:` stanza, DK-FR-012 interaction) | ✅ CONFIRMED on the 0.9.3 → 0.9.4 upgrade — old copy logged `released` at 18:03:57.828 and the new copy `armed` at 18:03:58.258, so the single-instance guard never saw two live copies | 5 |
 | **A real capture flips `CGSIsScreenWatcherPresent`** (ADR-011's standing M6/M12 UNKNOWN) | ✅ CONFIRMED — flag fires < 0.5 s; hide ~2.5 s, restore ~1 s; a pre-existing user auto-hide is left untouched | 5 |
 | **Screen-capture hide: `kill -9` mid-capture → relaunch restores auto-hide** (DK-FR-013 S5, issue #29) | ✅ CONFIRMED — `(repaired)` on relaunch, record removed from the domain | — |
 | **Screen-capture hide: relaunch *during* a live capture adopts, Dock does not flash** (DK-FR-013 S6) | ✅ CONFIRMED as *no Dock write* — adopt issued none and auto-hide never went off; the far-end visual is still unobserved | — |
