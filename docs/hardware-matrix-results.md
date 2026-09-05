@@ -833,8 +833,18 @@ Every DockKeeper pid across the logout and the login that followed:
 |---|---|---|---|
 | 2743 | 17:49:58 | 17:50:01 | the pre-logout instance, quit by the logout |
 | 3958 | 17:51:20 | 17:51:33 | the **second user's** instance, in its own session |
-| 3969 | 17:51:25 | 17:51:25 | 55 ms — the second user's `--diagnostics` process, not a deflection |
+| 3969 | 17:51:25 | 17:51:25 | 55 ms, in the second user's session — a `--diagnostics` run (see note) |
 | **4363** | **17:51:45** | still running | **the login-item launch, and the only one** |
+
+**On pid 3969, because a 55 ms process is exactly what a deflection also looks like.** It is attributed to
+`--diagnostics` rather than to the guard on three grounds: it timestamps to within a second of where the
+capture script invokes `--diagnostics`; a diagnostics process demonstrably ran in that session, since its
+output is what reported `Other instances: pid 3958`; and it registered with LaunchServices before exiting,
+which the bundle binary does on any invocation. The `Duplicate launch` line that would settle it directly
+had already aged out. **It does not bear on row 2 either way** — 3969 is in the *second user's* session and
+predates the login-item launch at 17:51:45 by twenty seconds. Note also that the script invokes
+`--diagnostics` twice while only one such pid appears in the census, so the census is not a complete
+enumeration of short-lived processes; that is a limit of the record, not evidence about the guard.
 
 **Exactly one instance, and no self-deflection.** After the login at 17:51 the census shows a single pid,
 4363, alive continuously since. The no-deflection half is carried by this census rather than by the
