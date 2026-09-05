@@ -818,6 +818,79 @@ The memory figure is the one that carries further than the guard question, becau
 depends on whether the tap is armed: DK-NFR-001's memory target was recorded as **UNKNOWN** ("MenuBarExtra
 apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against it.
 
+### §3b row 2 — the login-item path  · **CONFIRMED ✅**
+
+Run **by accident**, and it is worth saying so: the owner logged out and back in while attempting §3b
+row 1, which is exactly the procedure row 2 specifies and the only way it can be exercised. The evidence
+below was captured after the fact from process-level log records rather than planned in advance.
+
+`Launch at Login: enabled` — the login item is registered, which is the row's precondition and not an
+assumption.
+
+Every DockKeeper pid across the logout and the login that followed:
+
+| pid | first seen | last seen | what it was |
+|---|---|---|---|
+| 2743 | 17:49:58 | 17:50:01 | the pre-logout instance, quit by the logout |
+| 3958 | 17:51:20 | 17:51:33 | the **second user's** instance, in its own session |
+| 3969 | 17:51:25 | 17:51:25 | 55 ms — the second user's `--diagnostics` process, not a deflection |
+| **4363** | **17:51:45** | still running | **the login-item launch, and the only one** |
+
+**Exactly one instance, and no self-deflection.** After the login at 17:51 the census shows a single pid,
+4363, alive continuously since. The no-deflection half is carried by this census rather than by the
+absence of a log line, deliberately: a self-deflection requires a **second process to start and exit**,
+and process-level records show no such process. That is a stronger instrument than grepping for
+`Duplicate launch`, for a reason recorded below.
+
+**The logout path itself, observed:**
+
+```
+17:50:01.582  RECEIVED:(aevt,quit) {aevt,quit target=loginwindow}
+17:50:01.583  Asking app delegate whether applicationShouldTerminate:
+17:50:01.583  replyToApplicationShouldTerminate:YES
+17:50:01.583  Termination commencing
+```
+
+The app is asked to quit by `loginwindow` and terminates through the normal AppKit path, so
+`applicationWillTerminate` — and therefore `prepareForTermination()` — is reached on a real logout. That
+is the mechanism ADR-013 declines to *depend* on but is glad to have.
+
+### §3b row 1 — still unrun, and the procedure as written cannot observe it
+
+Attempted twice and not achieved either time. Recorded as **deferred**, not failed. The row is explicitly
+downgraded and is not a v1.0 gate.
+
+The first attempt was invalidated by a machine restart at 17:44:43 that nobody had noticed mid-procedure.
+The second failed for a structural reason worth keeping: **the two instances never coexist.** macOS quits
+applications on session teardown, and DockKeeper is quit along with everything else.
+
+**The control is what makes that a fact about macOS rather than a suspicion about DockKeeper.** Fourteen
+processes received `aevt,quit` from `loginwindow` in the same instant — `Finder`, `ControlCenter`,
+`Spotlight`, `Siri`, `WindowManager`, `NotificationCenter`, `WallpaperAgent`, `iTerm2`, and `loginwindow`
+itself among them. DockKeeper is behaving exactly like every other app, and **this is not a defect.**
+Without that control the same observation reads as "DockKeeper dies on user switch", which is a bug report
+that would have been wrong, and it was one step from being filed.
+
+Observing this row therefore needs genuine fast user switching in which *both* sessions keep their agent
+alive — not the logout/login that happened here. [#101](https://github.com/blamechris/DockKeeper/issues/101)
+carries that, together with a second problem the attempt surfaced: the `(another user)` marker the row
+expects appears to be unreachable, because `otherRunningInstances` enumerates via `NSRunningApplication`,
+which is scoped to the current GUI login session.
+
+### An instrument limit: this app's own log lines are volatile
+
+`Log.app` messages emit at **info** level, which the unified log keeps in memory and drops quickly. A
+query for `subsystem == "com.dockkeeper.app"` that returned `DockMonitor started` at 17:54 returned
+**nothing at all** for the same window ~75 minutes later, through `--last`, `--start`, and
+`--start`+`--end` alike — while `process == "DockKeeper"` records from that same window were still
+retrievable, because the framework messages they carry are persisted.
+
+This matters because the unified log is the instrument this project trusts (rule 2), on the grounds that
+*silence is evidence* when a function logs on all its exit paths. That reasoning holds only inside the
+retention window. **Past it, silence means the instrument cannot see** — rule 5 — and a negative result
+gathered late is worth nothing. Evidence here was captured to a file as soon as its perishability was
+noticed, which is why the census above survives at all.
+
 ### Two defects found on the way past
 
 - **[#98](https://github.com/blamechris/DockKeeper/issues/98) — an unrelated CLI edit silently disarms the
@@ -889,6 +962,8 @@ apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
 | **DK-NFR-001 idle cost, guard RELEASED** (R-015 control half) | ◐ PARTIAL — 0.0018% of one core over 600 s; `phys_footprint` **22.9 MB**, inside the <30 MB preferred budget (was UNKNOWN). 10 min not 24 h, and the armed half is still the open soak | 6 |
+| **Login-item path: logout → login** (§3b row 2) | ✅ CONFIRMED — one instance (pid 4363), no second process started; logout reaches `applicationShouldTerminate:` | 6 |
+| **Second user / fast user switching** (§3b row 1) | ⏳ DEFERRED — instances never coexist (macOS session teardown, control: 14 apps quit together, **not** a DockKeeper defect); procedure cannot observe the row as written · [#101](https://github.com/blamechris/DockKeeper/issues/101) | 6 |
 | **Revoke Accessibility while armed** (§3d row 3) | ✅ CONFIRMED — fail-open; whole band swept free, caption asks for the permission, user's setting left on. Run by hand; macOS refuses synthetic clicks on TCC toggles | 6 |
 | Identical twin externals | n/a on this rig (different panels) | — |
 
