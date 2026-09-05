@@ -636,6 +636,58 @@ control), and row 5 inherits it rather than re-measuring it.
 
 The arrangement was then restored to the measured baseline and the guard re-armed over 2 spans.
 
+### §3d row 5 again, on hardware that produced the refusal by itself  · **CONFIRMED ✅ (second rig)**
+
+Later the same day the external display was swapped: the G3223Q was replaced by an **S2719DGF in
+portrait**, and the refusal appeared *without anyone building a rig for it*.
+
+| | CG frame (top-left origin) | |
+|---|---|---|
+| Built-in Retina Display (id 1) | `(0, 0) 1728×1117` | main, **preferred** |
+| S2719DGF, portrait (id 3) | `(130, −2560) 1440×2560` | non-preferred, directly above |
+
+A portrait 27" panel is **1440 pt wide against the laptop's 1728**, so it is genuinely narrower than the
+display beneath it and its span `x ∈ [130, 1570]` falls entirely inside `[0, 1728]`. Its whole bottom edge
+is covered, and the guard stood down on its own:
+
+```
+Guard: idle — no guardable display (1 whose bottom edge is covered along its whole length by the
+       display(s) below; clamping a shared span would trap the pointer)
+Tap:   not armed
+```
+
+**Why this is stronger than the first run, and worth its own entry.** The earlier confirmation needed the
+4K narrowed to a 1280×720 mode to reach the shape, which leaves a fair objection open: a synthesized
+display mode is not proof that the arrangement occurs. This one was **nobody's test rig** — it is a
+commonplace desk setup (a portrait secondary above a laptop), and it produced the refusal spontaneously.
+The safety branch is therefore not a defensive corner case; it is load-bearing on ordinary hardware.
+
+**The control that makes it readable.** A stood-down guard looks identical whether it refused on geometry
+or simply lacked permission — and this rig was measured *minutes after* the Accessibility grant was
+restored, which is exactly when that confusion is most likely. `Accessibility: granted, as the running app
+sees it` was read from the live record in the same breath as the reason string, so the refusal is
+attributable to geometry and nothing else. Without that line this observation would be worthless.
+
+Probing the boundary a failed refusal would have clamped — `y ∈ (−3, 0)` on the upper display, sitting
+exactly on the crossing — at `x = 800`, inside both displays' spans:
+
+| posted CG | settled (`CGEvent`) | settled (`NSEvent`→CG) | |
+|---|---|---|---|
+| `(800, −1)` — **the point a failed refusal would clamp** | `−1.0` | `−1.0` | not rewritten |
+| `(800, −10)` — further up into the covered display | `−10.0` | `−10.0` | not rewritten |
+| `(800, +40)` — back down into the lower display | `+40.0` | `+40.0` | not rewritten |
+
+Two independent APIs agree in every row. Scoped the same way as the first run: this proves the **absence
+of a clamp**, which is the half that could trap a cursor; the crossing half is inherited from session 4's
+row 9 rather than re-measured here.
+
+**One consequence worth stating plainly, because it is a product fact and not a test result:** on this
+arrangement DK-FR-014 does nothing at all. A user whose secondary display is narrower than the one below
+it gets the refusal permanently, and the feature is inert for them. That is the correct and safe outcome —
+clamping a fully-shared span would trap the pointer at the boundary — but it means the bottom-Dock guard
+has a real population it silently cannot help, which the Preferences caption does communicate
+(`no guardable display …`) and the requirement's Known cost does not mention.
+
 ### §3d row 3 — revoke Accessibility while armed  · **CONFIRMED ✅**
 
 The last unrun §3d safety row, and the one whose failure direction is a **trapped cursor**. Run by the
@@ -766,6 +818,89 @@ The memory figure is the one that carries further than the guard question, becau
 depends on whether the tap is armed: DK-NFR-001's memory target was recorded as **UNKNOWN** ("MenuBarExtra
 apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against it.
 
+### §3b row 2 — the login-item path  · **CONFIRMED ✅**
+
+Run **by accident**, and it is worth saying so: the owner logged out and back in while attempting §3b
+row 1, which is exactly the procedure row 2 specifies and the only way it can be exercised. The evidence
+below was captured after the fact from process-level log records rather than planned in advance.
+
+`Launch at Login: enabled` — the login item is registered, which is the row's precondition and not an
+assumption.
+
+Every DockKeeper pid across the logout and the login that followed:
+
+| pid | first seen | last seen | what it was |
+|---|---|---|---|
+| 2743 | 17:49:58 | 17:50:01 | the pre-logout instance, quit by the logout |
+| 3958 | 17:51:20 | 17:51:33 | the **second user's** instance, in its own session |
+| 3969 | 17:51:25 | 17:51:25 | 55 ms, in the second user's session — a `--diagnostics` run (see note) |
+| **4363** | **17:51:45** | still running | **the login-item launch, and the only one** |
+
+**On pid 3969, because a 55 ms process is exactly what a deflection also looks like.** It is attributed to
+`--diagnostics` rather than to the guard on three grounds: it timestamps to within a second of where the
+capture script invokes `--diagnostics`; a diagnostics process demonstrably ran in that session, since its
+output is what reported `Other instances: pid 3958`; and it registered with LaunchServices before exiting,
+which the bundle binary does on any invocation. The `Duplicate launch` line that would settle it directly
+had already aged out. **It does not bear on row 2 either way** — 3969 is in the *second user's* session and
+predates the login-item launch at 17:51:45 by twenty seconds. Note also that the script invokes
+`--diagnostics` twice while only one such pid appears in the census, so the census is not a complete
+enumeration of short-lived processes; that is a limit of the record, not evidence about the guard.
+
+**Exactly one instance, and no self-deflection.** After the login at 17:51 the census shows a single pid,
+4363, alive continuously since. The no-deflection half is carried by this census rather than by the
+absence of a log line, deliberately: a self-deflection requires a **second process to start and exit**,
+and process-level records show no such process. That is a stronger instrument than grepping for
+`Duplicate launch`, for a reason recorded below.
+
+**The logout path itself, observed:**
+
+```
+17:50:01.582  RECEIVED:(aevt,quit) {aevt,quit target=loginwindow}
+17:50:01.583  Asking app delegate whether applicationShouldTerminate:
+17:50:01.583  replyToApplicationShouldTerminate:YES
+17:50:01.583  Termination commencing
+```
+
+The app is asked to quit by `loginwindow` and terminates through the normal AppKit path, so
+`applicationWillTerminate` — and therefore `prepareForTermination()` — is reached on a real logout. That
+is the mechanism ADR-013 declines to *depend* on but is glad to have.
+
+### §3b row 1 — still unrun, and the procedure as written cannot observe it
+
+Attempted twice and not achieved either time. Recorded as **deferred**, not failed. The row is explicitly
+downgraded and is not a v1.0 gate.
+
+The first attempt was invalidated by a machine restart at 17:44:43 that nobody had noticed mid-procedure.
+The second failed for a structural reason worth keeping: **the two instances never coexist.** macOS quits
+applications on session teardown, and DockKeeper is quit along with everything else.
+
+**The control is what makes that a fact about macOS rather than a suspicion about DockKeeper.** Fourteen
+processes received `aevt,quit` from `loginwindow` in the same instant — `Finder`, `ControlCenter`,
+`Spotlight`, `Siri`, `WindowManager`, `NotificationCenter`, `WallpaperAgent`, `iTerm2`, and `loginwindow`
+itself among them. DockKeeper is behaving exactly like every other app, and **this is not a defect.**
+Without that control the same observation reads as "DockKeeper dies on user switch", which is a bug report
+that would have been wrong, and it was one step from being filed.
+
+Observing this row therefore needs genuine fast user switching in which *both* sessions keep their agent
+alive — not the logout/login that happened here. [#101](https://github.com/blamechris/DockKeeper/issues/101)
+carries that, together with a second problem the attempt surfaced: the `(another user)` marker the row
+expects appears to be unreachable, because `otherRunningInstances` enumerates via `NSRunningApplication`,
+which is scoped to the current GUI login session.
+
+### An instrument limit: this app's own log lines are volatile
+
+`Log.app` messages emit at **info** level, which the unified log keeps in memory and drops quickly. A
+query for `subsystem == "com.dockkeeper.app"` that returned `DockMonitor started` at 17:54 returned
+**nothing at all** for the same window ~75 minutes later, through `--last`, `--start`, and
+`--start`+`--end` alike — while `process == "DockKeeper"` records from that same window were still
+retrievable, because the framework messages they carry are persisted.
+
+This matters because the unified log is the instrument this project trusts (rule 2), on the grounds that
+*silence is evidence* when a function logs on all its exit paths. That reasoning holds only inside the
+retention window. **Past it, silence means the instrument cannot see** — rule 5 — and a negative result
+gathered late is worth nothing. Evidence here was captured to a file as soon as its perishability was
+noticed, which is why the census above survives at all.
+
 ### Two defects found on the way past
 
 - **[#98](https://github.com/blamechris/DockKeeper/issues/98) — an unrelated CLI edit silently disarms the
@@ -833,10 +968,12 @@ apps commonly 25–50 MB", R-009), and 22.9 MB is the first real reading against
 | Clamshell | ⏳ UNKNOWN behavior (open question #6) | — |
 | **DK-FR-015 writer half: publish, retract, armed heartbeat** (#96) | ✅ CONFIRMED — all seven steps, with a 20 s idle control; the `max(5, recoveryInterval)` bound **measured** at four consecutive 30 s refreshes | 6 |
 | **Accessibility grant survives a Developer ID rebuild** | ✅ CONFIRMED — designated requirements identical across 0.9.4 and the new build; the app's own `AXIsProcessTrusted()` read `granted` at first launch | 6 |
-| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
+| **Stacked refusal: a wholly-covered bottom edge is left unguarded** (§3d row 5) | ✅ CONFIRMED — first run of this row; the would-be band on the crossing boundary was not rewritten. **Confirmed twice, on two rigs** — once synthesized (4K narrowed to 1280×720) and once occurring *spontaneously* on a portrait S2719DGF above the laptop, with the Accessibility grant verified live so the stand-down is attributable to geometry. Scoped: this proves *absence of a clamp*, the half that could trap a cursor; the hand-crossing half is inherited from session 4's row 9 | 6 |
 | **`kill -9` while armed releases the pointer** (§3d row 8) | ✅ CONFIRMED — free within 619 ms, nothing persisted | 6 |
 | **Bottom hot corners on a guarded display** (§3d row 7) | ⚠️ RUN — **falsifies the shipped disclosure**. The pointer is correctly clamped to `y = −3`, but the hot-corner trigger region is taller than the 3 pt guard band, so the corner still fires. With a negative control and an instrument validation. [#99](https://github.com/blamechris/DockKeeper/issues/99) | 6 |
 | **DK-NFR-001 idle cost, guard RELEASED** (R-015 control half) | ◐ PARTIAL — 0.0018% of one core over 600 s; `phys_footprint` **22.9 MB**, inside the <30 MB preferred budget (was UNKNOWN). 10 min not 24 h, and the armed half is still the open soak | 6 |
+| **Login-item path: logout → login** (§3b row 2) | ✅ CONFIRMED — one instance (pid 4363), no second process started; logout reaches `applicationShouldTerminate:` | 6 |
+| **Second user / fast user switching** (§3b row 1) | ⏳ DEFERRED — instances never coexist (macOS session teardown, control: 14 apps quit together, **not** a DockKeeper defect); procedure cannot observe the row as written · [#101](https://github.com/blamechris/DockKeeper/issues/101) | 6 |
 | **Revoke Accessibility while armed** (§3d row 3) | ✅ CONFIRMED — fail-open; whole band swept free, caption asks for the permission, user's setting left on. Run by hand; macOS refuses synthetic clicks on TCC toggles | 6 |
 | Identical twin externals | n/a on this rig (different panels) | — |
 
