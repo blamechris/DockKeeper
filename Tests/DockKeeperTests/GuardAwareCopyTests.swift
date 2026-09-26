@@ -44,19 +44,23 @@ struct SeparateSpacesMenuCopyTests {
         #expect(lines.contains { $0.contains("can\u{2019}t move it back") })
     }
 
-    @Test("While guarding, the message says what DockKeeper is doing and does not offer it")
-    func guardingDoesNotContradictItself() {
+    @Test("While the decision is guarding, the message makes no active-protection claim")
+    func guardingIsDecisionOnly() {
+        // `.guarding` is the plan, not proof the tap is filtering, and a healthy
+        // guard still never sees where the Dock is. Exact string, so a claim
+        // appended or reworded into it fails here (coordinator review of #104).
         let message = PinOutcome.unsupportedSeparateSpaces.userMessage(guardDecision: guarding)
         #expect(message == "macOS can\u{2019}t pin a bottom Dock while \u{201C}Displays have separate Spaces\u{201D} is on.\n"
-            + "DockKeeper is keeping it on your preferred display by blocking the summon elsewhere.\n"
-            + "It can\u{2019}t move the Dock back if macOS has already moved it.")
+            + "\u{201C}Keep a bottom Dock on my preferred display\u{201D} is on \u{2014} its live status is in Preferences \u{203A} Advanced.\n"
+            + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back.\n"
+            + "Other options: a Left or Right edge, or turn that setting off.")
     }
 
-    @Test("While guarding only part of an edge, the message points at what is left open")
+    @Test("While guarding only part of an edge, the message says the Dock can still be summoned there")
     func partialGuardSaysSo() {
         let lines = PinOutcome.unsupportedSeparateSpaces.userMessageLines(guardDecision: guardingPartly)
-        #expect(lines.last == "Some bottom edges are left open \u{2014} see Preferences \u{203A} Advanced.")
-        #expect(!lines.contains { $0.contains(guardOffer) })
+        #expect(lines.contains("Some bottom edges are left open, so the Dock can still be summoned there."))
+        #expect(!lines.contains { $0.contains("turn on") })
     }
 
     @Test("With the guard on but idle, the message does not offer to turn it on")
@@ -65,18 +69,31 @@ struct SeparateSpacesMenuCopyTests {
                                                    .nothingToGuard(blockedDisplayIDs: [2])] {
             let lines = PinOutcome.unsupportedSeparateSpaces.userMessageLines(guardDecision: .idle(reason))
             #expect(!lines.contains { $0.contains("turn on") }, "\(reason): \(lines)")
-            #expect(lines.contains { $0.contains("on but inactive") }, "\(reason): \(lines)")
+            #expect(lines.contains { $0.contains("is on but inactive") }, "\(reason): \(lines)")
         }
     }
 
-    @Test("No claim that the Dock is pinned, and every line fits a menu item (#57)")
-    func everyVariantFitsAndStaysHonest() {
-        for decision in everyDecision {
+    @Test("With DockKeeper itself off, no stale advisory and no offer of the feature toggle")
+    func appDisabledSuppressesTheAdvisory() {
+        // The master switch is checked before the feature toggle, so this
+        // decision says nothing about that toggle — it may be on already.
+        #expect(PinOutcome.unsupportedSeparateSpaces.userMessage(guardDecision: .idle(.appDisabled)) == nil)
+        #expect(PinOutcome.unsupportedSeparateSpaces.userMessageLines(guardDecision: .idle(.appDisabled)).isEmpty)
+    }
+
+    @Test("No variant claims the Dock is pinned or being kept, every line fits the #57 bound, and the old remedies survive")
+    func everyVariantStaysHonest() {
+        for decision in everyDecision where decision != .idle(.appDisabled) {
             let lines = PinOutcome.unsupportedSeparateSpaces.userMessageLines(guardDecision: decision)
             #expect(lines.count > 1)
+            #expect(lines.contains { $0.contains("Left or Right") }, "\(decision): \(lines)")
             for line in lines {
+                // A character bound, not a rendering check: real-menu fit is
+                // verified by eye on the packaged build, not here.
                 #expect(line.count <= 110, "too long to render: \(line)")
-                #expect(!line.contains("is pinned"), "ADR-015: the guard does not pin: \(line)")
+                for claim in ["is pinned", "keeping it", "is keeping", "is blocking", "is holding"] {
+                    #expect(!line.contains(claim), "ADR-015 / no active claim: \(line)")
+                }
             }
         }
     }

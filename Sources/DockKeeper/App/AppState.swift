@@ -90,10 +90,10 @@ final class AppState: ObservableObject {
     /// Last pin result, surfaced to the UI (e.g. "separate Spaces is on").
     ///
     /// Derived rather than stored, from the outcome *and* the guard's current
-    /// decision: the separate-Spaces copy depends on whether the bottom-Dock
-    /// guard is holding (#79), and the guard can arm or release between pin
-    /// passes — a stored string would keep saying whatever was true at the
-    /// last pass.
+    /// decision: the separate-Spaces copy depends on the bottom-Dock guard's
+    /// decision (#79), which can change between pin passes — a stored string
+    /// would keep saying whatever was true at the last pass. The decision is
+    /// the plan, not the tap's live state, so that copy claims no protection.
     var lastPinMessage: String? {
         lastPinOutcome?.userMessage(guardDecision: bottomDockGuardDecision)
     }

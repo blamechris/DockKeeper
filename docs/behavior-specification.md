@@ -118,8 +118,11 @@ Given "Displays have separate Spaces" is ON and the lock edge is bottom
 When a pin would otherwise apply
 Then DockKeeper declines (unsupportedSeparateSpaces) and explains the
     remedies (left/right edge, turn the setting off, or turn on DK-FR-014's
-    guard) — and, while that guard is holding, says what it is doing instead
-    of offering it, never that the Dock is pinned              [#79]
+    guard). With that guard on it says so, what it does when active and
+    where its live status is, instead of offering it — never that the Dock is
+    pinned or is being kept, because the decision is not proof the tap is
+    filtering and the guard never observes where the Dock is. With DockKeeper
+    itself off, the advisory is not shown                        [#79]
 And edge locking continues to work         [Decision 2A, narrowed by ADR-009]
 
 S2b — Separate Spaces ON with a LEFT/RIGHT Dock
