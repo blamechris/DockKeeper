@@ -63,7 +63,8 @@ VERSION=0.9.5 Scripts/build-app.sh release
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/DockKeeper.app/Contents/Info.plist   # → 0.9.5
 /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion'            dist/DockKeeper.app/Contents/Info.plist   # → 0.9.5
 codesign --verify --strict --verbose=2 dist/DockKeeper.app                                              # → valid on disk / satisfies its Designated Requirement
-codesign -dv dist/DockKeeper.app 2>&1 | grep -E '^Authority=Developer ID Application|flags=.*runtime'   # → both lines present
+codesign -dv dist/DockKeeper.app 2>&1 | grep '^Authority=Developer ID Application' || echo "STOP: not Developer ID signed"
+codesign -dv dist/DockKeeper.app 2>&1 | grep 'flags=.*runtime' || echo "STOP: hardened runtime missing"
 
 # [2/4] notarize + staple the APP — before packaging; never re-run build-app.sh after this
 Scripts/notarize.sh dist/DockKeeper.app
