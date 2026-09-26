@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.9.5] — 2026-09-26
+
+Sixth public beta. It makes DockKeeper checkable: you can ask the copy running in your menu bar what it is actually holding. It also stops the app's own text contradicting the bottom-Dock guard.
 
 ### Added
 
@@ -16,12 +19,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 ### Fixed
 
 - **The menu no longer ignores the bottom-Dock guard.** With "Displays have separate Spaces" on, the menu offered only the two old remedies — a left/right edge, or turning the macOS setting off — and said a bottom Dock can't be kept, even with the guard turned on. It now names the guard as a third option when it is off. When it is on, the menu says so and points at its details in Preferences, without claiming the Dock is being kept there. Either way it still says plainly that the guard cannot move a Dock back once macOS has moved it. With DockKeeper itself turned off, the advisory is no longer shown. ([#79](https://github.com/blamechris/DockKeeper/issues/79))
-- **Preferences no longer says the bottom-Dock guard turns off your bottom hot corners.** Measured on a real display, they still fire while the guard is on, so the text overstated what the feature costs. That clause is gone. ([#99](https://github.com/blamechris/DockKeeper/issues/99))
-
+- **Preferences no longer says the bottom-Dock guard turns off your bottom hot corners.** On the one display measured, a guarded bottom corner still fired, so the text overstated what the feature costs. That clause is gone, rather than replaced with a promise the measurement cannot support. ([#99](https://github.com/blamechris/DockKeeper/issues/99))
 - **`dockkeeper status` no longer ignores a mistyped option.** Trailing arguments were discarded silently, so `dockkeeper status --liv` printed the ordinary configured-state block and exited `0` — a confident answer to a question you did not ask, on the one command people run when they are already unsure what is happening. An unrecognised option is now an error.
 
 ### Known beta limits
 
+- **The stacked-monitor Dock jump is not fixed by this release**, and has not been reproduced on a current build. Nothing in 0.9.5 targets it. If it happens with the guard on, run `--diagnostics` and `dockkeeper status --live` straight away and attach both to a new issue.
+- The Preferences caption under the bottom-Dock guard can say "Active — holding…" from DockKeeper's plan even when the pointer tap is not actually running. `dockkeeper status --live` reports the tap's real state ([#105](https://github.com/blamechris/DockKeeper/issues/105)).
+- 0.9.5 is published as a GitHub pre-release only. The Homebrew cask still installs 0.9.4.
 - The live record's clamp and re-enable counters are refreshed on DockKeeper's regular re-check — every 30 seconds by default — and not on every pointer event. That is deliberate: doing extra work on the pointer path is how macOS decides an event tap is too slow and switches it off. So those two counts can lag by up to that interval. Every reading is printed with its age, so a stale one is visibly stale.
 
 ## [0.9.4] — 2026-09-03
@@ -134,7 +139,8 @@ First public release: a free, open-source, native macOS utility that keeps your 
 - A bottom Dock can't be pinned while *separate Spaces* is on (macOS limitation — DockKeeper explains instead of fighting).
 - Shortcuts-app discovery of the intents lands in v1.1; the `dockkeeper://` URL scheme works today.
 
-[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/blamechris/DockKeeper/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/blamechris/DockKeeper/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/blamechris/DockKeeper/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/blamechris/DockKeeper/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/blamechris/DockKeeper/compare/v0.9.1...v0.9.2
