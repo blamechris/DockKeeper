@@ -509,8 +509,8 @@ repair**: kill the process by any route and the pointer moves normally.
 
 **Known costs**, all recorded rather than mitigated: the Dock cannot be
 summoned on a guarded span (the feature working; the bottom hot corners there
-were listed here too, and are **not** a cost — they still fire on device, §3d
-row 7, [#99](https://github.com/blamechris/DockKeeper/issues/99)); pause does **not** release the guard (pause
+were listed here too and are withdrawn — a guarded corner still fired on the one
+rig measured, §3d row 7, [#99](https://github.com/blamechris/DockKeeper/issues/99)); pause does **not** release the guard (pause
 suspends corrections, and prevention has no correction to resume — DK-FR-009 S2
 does not hold for a guarded display while this is on); and every pointer
 movement crosses the tap's callback on the main run loop while armed, which is
