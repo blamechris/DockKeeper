@@ -15,6 +15,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **The menu no longer says a bottom Dock can't be kept on a display while DockKeeper is keeping it there.** With "Displays have separate Spaces" on, the menu offered only the two old remedies — a left/right edge, or turning the macOS setting off — even while the bottom-Dock guard was on and holding. It now names the guard as a third option when it is off, says what it is doing while it is holding, and still says plainly that it cannot move a Dock back once macOS has moved it. ([#79](https://github.com/blamechris/DockKeeper/issues/79))
+- **Preferences no longer says the bottom-Dock guard turns off your bottom hot corners.** Measured on a real display, they still fire while the guard is on, so the text overstated what the feature costs. That clause is gone. ([#99](https://github.com/blamechris/DockKeeper/issues/99))
+
 - **`dockkeeper status` no longer ignores a mistyped option.** Trailing arguments were discarded silently, so `dockkeeper status --liv` printed the ordinary configured-state block and exited `0` — a confident answer to a question you did not ask, on the one command people run when they are already unsure what is happening. An unrecognised option is now an error.
 
 ### Known beta limits

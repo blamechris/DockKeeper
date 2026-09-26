@@ -507,8 +507,10 @@ trapped cursor, not an unguarded Dock. An event tap is process-owned, so unlike
 ADR-013's borrowed auto-hide there is **no persisted state and no launch
 repair**: kill the process by any route and the pointer moves normally.
 
-**Known costs**, all recorded rather than mitigated: the bottom hot corners on
-guarded displays stop working; pause does **not** release the guard (pause
+**Known costs**, all recorded rather than mitigated: the Dock cannot be
+summoned on a guarded span (the feature working; the bottom hot corners there
+were listed here too, and are **not** a cost — they still fire on device, §3d
+row 7, [#99](https://github.com/blamechris/DockKeeper/issues/99)); pause does **not** release the guard (pause
 suspends corrections, and prevention has no correction to resume — DK-FR-009 S2
 does not hold for a guarded display while this is on); and every pointer
 movement crosses the tap's callback on the main run loop while armed, which is

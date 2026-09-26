@@ -116,8 +116,10 @@ And the outcome is surfaced in the menu
 S2 — Separate Spaces ON with a BOTTOM Dock (macOS default setting)
 Given "Displays have separate Spaces" is ON and the lock edge is bottom
 When a pin would otherwise apply
-Then DockKeeper declines (unsupportedSeparateSpaces) and explains the two
-    remedies (left/right edge, or turn the setting off)
+Then DockKeeper declines (unsupportedSeparateSpaces) and explains the
+    remedies (left/right edge, turn the setting off, or turn on DK-FR-014's
+    guard) — and, while that guard is holding, says what it is doing instead
+    of offering it, never that the Dock is pinned              [#79]
 And edge locking continues to work         [Decision 2A, narrowed by ADR-009]
 
 S2b — Separate Spaces ON with a LEFT/RIGHT Dock
@@ -927,7 +929,7 @@ Then DockKeeper re-enables it and counts the event             [INFERRED — the
 
 **Failure behavior.** Every unmet precondition is a silent no-op with a stated reason in `--diagnostics` and under the Preferences toggle. A refused `CGEventTapCreate`, a revoked grant, or a system-disabled tap all end with normal pointer movement — the feature fails open, never closed, because a closed failure is a trapped cursor.
 
-**Known cost.** A guarded display's own Dock summon becomes unreachable while the guard is active. That is the feature working as specified — CONFIRMED with a control (§3d row 1, session 3). ⚠️ **The hot-corner half of this sentence is FALSIFIED on device** (2026-09-04, [session 6](hardware-matrix-results.md)): the pointer is correctly clamped to `clampY = −3`, but macOS's hot-corner trigger region is taller than the 3 pt guard band, so a bottom hot corner **still fires** while the guard is active. The requirement text and the matching Preferences string are corrected by [#99](https://github.com/blamechris/DockKeeper/issues/99); this note stands until that lands so the statement and its evidence cannot disagree, and the toggle's caption says so. On a display guarded over only part of its bottom edge ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it) amendment 2026-09-03), the cost is confined to the guarded spans: the shared strip keeps its hot corner and can still summon the Dock, which is the same reason it is left open — it is the route between the two screens.
+**Known cost.** A guarded display's own Dock summon becomes unreachable while the guard is active. That is the feature working as specified — CONFIRMED with a control (§3d row 1, session 3). **Bottom hot corners are not part of the cost.** This paragraph and the Preferences text used to say they become unreachable too; that is FALSIFIED on device (2026-09-04, [session 6](hardware-matrix-results.md)): the pointer is correctly clamped to `clampY = −3`, but macOS's hot-corner trigger region is taller than the 3 pt guard band, so a bottom hot corner **still fires** while the guard is active. Corrected by [#99](https://github.com/blamechris/DockKeeper/issues/99): the Preferences text no longer names the hot corners at all, rather than claiming they keep working, because that was measured on one corner of one rig. On a display guarded over only part of its bottom edge ([ADR-015](decision-log.md#adr-015-hold-a-bottom-dock-by-blocking-the-summon-never-by-relocating-it) amendment 2026-09-03), the cost is confined to the guarded spans: the shared strip keeps its hot corner and can still summon the Dock, which is the same reason it is left open — it is the route between the two screens.
 
 **The guard is not released while DockKeeper is paused**, and that is deliberate rather than an oversight: pause suspends *corrections*, and this feature has no correction to re-enforce afterwards — releasing it would be the one pause in the product that resume cannot undo, because relocation is impossible (ADR-015). DK-FR-009 S2's "the Dock may be moved freely" therefore does not hold for a bottom Dock on a guarded display while this feature is on. Precedent: DK-FR-011 likewise keeps mutating the Dock while paused.
 

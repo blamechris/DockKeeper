@@ -44,6 +44,25 @@ import Foundation
 /// there is anything that counts.
 extension BottomDockGuard {
 
+    /// The fixed description under the bottom-Dock toggle in Preferences.
+    ///
+    /// It states the mechanism, not an outcome. It used to add "While this is
+    /// on, the bottom hot corners on those displays stop working" — FALSIFIED
+    /// on device (§3d row 7, 2026-09-04): macOS's hot-corner trigger region is
+    /// taller than `guardBand`, so a guarded corner still fires (#99). That
+    /// clause overstated the cost of turning the feature on, and it is gone
+    /// rather than reversed: "they keep working" rests on one corner of one
+    /// rig. The cost that *is* confirmed — the Dock can't be summoned on those
+    /// displays — is the sentence before it.
+    public static let toggleDescription =
+        "Off by default. With \u{201C}Displays have separate Spaces\u{201D} on, macOS gives a "
+        + "bottom Dock to whichever display you push the pointer to. DockKeeper holds the pointer "
+        + "a few points clear of the bottom edge on your other displays, so the gesture that "
+        + "summons it there is not completed — it does not move the Dock back, which macOS does "
+        + "not allow. Where one display sits directly above another, the overlapping strip is "
+        + "left unguarded — that is the route your pointer takes between them — so the Dock can "
+        + "still be summoned there."
+
     /// The live status caption under the bottom-Dock toggle. Says what the
     /// guard is doing *right now* — the toggle can be on while every
     /// precondition is unmet, and silence there is what makes a feature feel
