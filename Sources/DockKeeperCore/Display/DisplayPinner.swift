@@ -77,6 +77,64 @@ public enum PinOutcome: Sendable, Equatable {
             return "Couldn't move the Dock to your preferred display."
         }
     }
+
+    /// The menu's message, given the bottom-Dock guard's current decision.
+    ///
+    /// `userMessage` alone cannot be right for `.unsupportedSeparateSpaces`
+    /// since the guard shipped (#79): it told a user a bottom Dock can't be kept
+    /// in this mode and never named the guard as a remedy. The wording keeps
+    /// ADR-015's binding distinction: the guard *prevents* a summon, it does not
+    /// pin the Dock and cannot move it back.
+    ///
+    /// **Decision-only, so it claims no active protection.** `.guarding` is the
+    /// geometry plan, not evidence the event tap is filtering: the tap can fail
+    /// to start or be disabled by the system after the decision is published,
+    /// and even a healthy guard never observes where the Dock currently is
+    /// (enabled after it already moved, or summoned through an open shared
+    /// strip). So the text says the feature is on, what it does when active,
+    /// and where its details are — never that the Dock *is* being kept. Not
+    /// "live status" either: that caption is decision-derived too (#105).
+    ///
+    /// One element per `\n` line, like `userMessage`, so no line is
+    /// middle-truncated in a menu item (#57). Every other outcome passes through.
+    public func userMessage(guardDecision: BottomDockGuard.Decision) -> String? {
+        guard self == .unsupportedSeparateSpaces else { return userMessage }
+        let toggleName = "\u{201C}Keep a bottom Dock on my preferred display\u{201D}"
+        switch guardDecision {
+        case .guarding(_, let skipped, let partial):
+            var message = "macOS can\u{2019}t pin a bottom Dock while \u{201C}Displays have "
+                + "separate Spaces\u{201D} is on.\n"
+                + "\(toggleName) is on \u{2014} details in Preferences \u{203A} Advanced.\n"
+                + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back."
+            if !skipped.isEmpty || !partial.isEmpty {
+                message += "\nSome bottom edges are left open, so the Dock can still be summoned there."
+            }
+            message += "\nOther options: a Left or Right edge, or turn that setting off."
+            return message
+        case .idle(.appDisabled):
+            // The master switch is off, and it is disqualified before the
+            // feature toggle, so this says nothing about that toggle — which
+            // may well be on. `lastPinOutcome` outlives the disable, so a
+            // separate-Spaces advisory here would be a stale one about a
+            // DockKeeper that is not running its checks. Suppressed.
+            return nil
+        case .idle(.featureDisabled):
+            return (userMessage ?? "") + "\n"
+                + "Or turn on \(toggleName) in Preferences \u{203A} Advanced.\n"
+                + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back."
+        case .idle:
+            // The user has turned the guard on, so offering it would be the
+            // same contradiction in a milder form. Its caption names the
+            // unmet condition; a menu line cannot hold every one of them.
+            return (userMessage ?? "") + "\n"
+                + "\(toggleName) is on but inactive \u{2014} see Preferences \u{203A} Advanced."
+        }
+    }
+
+    /// `userMessage(guardDecision:)` split for a menu, one element per line.
+    public func userMessageLines(guardDecision: BottomDockGuard.Decision) -> [String] {
+        (userMessage(guardDecision: guardDecision) ?? "").split(separator: "\n").map(String.init)
+    }
 }
 
 /// Abstraction over "keep the Dock on the user's preferred monitor". v1.0 has a

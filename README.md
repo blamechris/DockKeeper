@@ -90,8 +90,9 @@ restarts.
 > preferred display** (Preferences ▸ Advanced, off by default) does: it holds
 > the pointer a few points clear of the bottom edge on your *other* displays,
 > so the summon never completes. It needs Accessibility, at least two displays
-> and a bottom-edge lock; the bottom hot corners on the guarded displays stop
-> working while it is on; and where one screen sits above another it leaves the
+> and a bottom-edge lock; earlier builds said it switches off the bottom hot corners
+> there, but on the one rig measured a guarded corner still fired, so that claim
+> is withdrawn ([#99](https://github.com/blamechris/DockKeeper/issues/99)); and where one screen sits above another it leaves the
 > overlapping strip unguarded, because that strip is how your pointer travels
 > between them — the parts of the edge that overhang, with nothing beneath them,
 > are guarded normally. If you would rather not use it, a left/right edge or turning the macOS

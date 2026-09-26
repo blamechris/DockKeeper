@@ -88,10 +88,19 @@ final class AppState: ObservableObject {
     @Published private(set) var displays: [DisplayInfo] = []
 
     /// Last pin result, surfaced to the UI (e.g. "separate Spaces is on").
-    @Published private(set) var lastPinMessage: String?
+    ///
+    /// Derived rather than stored, from the outcome *and* the guard's current
+    /// decision: the separate-Spaces copy depends on the bottom-Dock guard's
+    /// decision (#79), which can change between pin passes — a stored string
+    /// would keep saying whatever was true at the last pass. The decision is
+    /// the plan, not the tap's live state, so that copy claims no protection.
+    var lastPinMessage: String? {
+        lastPinOutcome?.userMessage(guardDecision: bottomDockGuardDecision)
+    }
     /// Previous pin outcome, so the diagnostics log records transitions
-    /// rather than one line per reconcile pass (#44).
-    private var lastPinOutcome: PinOutcome?
+    /// rather than one line per reconcile pass (#44). Published because
+    /// `lastPinMessage` is derived from it.
+    @Published private(set) var lastPinOutcome: PinOutcome?
 
     /// Recovery-state note (degraded / preferred display missing / error);
     /// `nil` when everything is healthy.
@@ -301,7 +310,6 @@ final class AppState: ObservableObject {
                 FileDiagnostics.shared.note("pin", String(describing: outcome))
             }
             self.lastPinOutcome = outcome
-            self.lastPinMessage = outcome.userMessage
         }
 
         // Property observers don't fire from within init, so start explicitly.
