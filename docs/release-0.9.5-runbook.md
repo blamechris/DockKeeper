@@ -172,8 +172,9 @@ V=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$M/DockKeepe
 [ "$V" = "0.9.5" ] || { echo "REFUSING: the image holds $V, not 0.9.5."; exit 1; }
 xcrun stapler validate "$M/DockKeeper.app"
 [ -x "$M/dockkeeper" ] || { echo "REFUSING: no dockkeeper CLI in the image."; exit 1; }
-mv /Applications/DockKeeper.app "$BACKUP"
 printf '%s\n' "$BACKUP" >> ~/.dockkeeper-backups
+[ "$(tail -n 1 ~/.dockkeeper-backups)" = "$BACKUP" ] || { echo "REFUSING: could not record the backup path."; exit 1; }
+mv /Applications/DockKeeper.app "$BACKUP"
 ditto "$M/DockKeeper.app" /Applications/DockKeeper.app
 mkdir -p ~/.local/bin
 ditto "$M/dockkeeper" ~/.local/bin/dockkeeper-0.9.5
@@ -204,9 +205,9 @@ pgrep -lx DockKeeper | wc -l                         # → 1
 
 Expected from `status --live`: it names the running app's version **0.9.5** and install path `/Applications/DockKeeper.app`, and exits `0` (live and agreeing). Exit `6` means live but diverging: the report names the disagreement and says which side is in force. `3`/`4`/`5` mean no usable live record. Paste the whole output either way.
 
-Expected, and not a problem: `brew list --cask --versions dockkeeper` still shows the version from 5.1, because a manual install leaves Homebrew's record unchanged. Separately, the published cask is at 0.9.4, so a later `brew upgrade --cask dockkeeper` would replace 0.9.5 with 0.9.4. Don't run it on these Macs until the cask is promoted.
+Expected, and not a problem: `brew list --cask --versions dockkeeper` still shows the version from 5.1, because a manual install leaves Homebrew's record unchanged. The installed app (0.9.5) and Homebrew's recorded cask version are now two different things. The published cask is at 0.9.4, so `brew upgrade --cask dockkeeper` **may** replace the manual 0.9.5 build with 0.9.4 whenever Homebrew considers the recorded cask outdated (for example, on the work Mac if its record is older than 0.9.4). Don't run it on these Macs until the cask is promoted.
 
-Accessibility: an existing grant is **INFERRED** to carry over, because the grant is tied to the signing identity and bundle ID, and those do not change. If the Preferences caption says it is waiting for Accessibility, grant it in System Settings ▸ Privacy & Security ▸ Accessibility. For this guard, DockKeeper uses it to hold the pointer a few points clear of the bottom edge of your other displays, so a bottom Dock is not summoned there. One other optional feature uses the same permission: "Keep windows in place when pinning" (Preferences ▸ General), which moves windows back after a pin. Nothing leaves the Mac.
+Accessibility: an existing grant is **INFERRED** to carry over, because the grant is tied to the signing identity and bundle ID, and those do not change. If the Preferences caption says it is waiting for Accessibility, grant it in System Settings ▸ Privacy & Security ▸ Accessibility. For this guard, DockKeeper uses it to hold the pointer a few points clear of the bottom edge of your other displays, so a bottom Dock is not summoned there. One other optional feature uses the same permission: "Keep windows in place when pinning" (also in Preferences ▸ Advanced), which moves windows back after a pin. Nothing leaves the Mac.
 
 **5.6 Work Mac only — turn the guard on.** It is off by default, and the work Mac is probably coming from 0.9.0, which has no guard. With the external monitor attached:
 
