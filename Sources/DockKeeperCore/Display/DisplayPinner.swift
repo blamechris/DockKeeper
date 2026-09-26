@@ -92,7 +92,8 @@ public enum PinOutcome: Sendable, Equatable {
     /// and even a healthy guard never observes where the Dock currently is
     /// (enabled after it already moved, or summoned through an open shared
     /// strip). So the text says the feature is on, what it does when active,
-    /// and where its live status is — never that the Dock *is* being kept.
+    /// and where its details are — never that the Dock *is* being kept. Not
+    /// "live status" either: that caption is decision-derived too (#105).
     ///
     /// One element per `\n` line, like `userMessage`, so no line is
     /// middle-truncated in a menu item (#57). Every other outcome passes through.
@@ -103,7 +104,7 @@ public enum PinOutcome: Sendable, Equatable {
         case .guarding(_, let skipped, let partial):
             var message = "macOS can\u{2019}t pin a bottom Dock while \u{201C}Displays have "
                 + "separate Spaces\u{201D} is on.\n"
-                + "\(toggleName) is on \u{2014} its live status is in Preferences \u{203A} Advanced.\n"
+                + "\(toggleName) is on \u{2014} details in Preferences \u{203A} Advanced.\n"
                 + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back."
             if !skipped.isEmpty || !partial.isEmpty {
                 message += "\nSome bottom edges are left open, so the Dock can still be summoned there."
@@ -120,7 +121,7 @@ public enum PinOutcome: Sendable, Equatable {
         case .idle(.featureDisabled):
             return (userMessage ?? "") + "\n"
                 + "Or turn on \(toggleName) in Preferences \u{203A} Advanced.\n"
-                + "It stops macOS moving the Dock away, though it can\u{2019}t move it back."
+                + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back."
         case .idle:
             // The user has turned the guard on, so offering it would be the
             // same contradiction in a milder form. Its caption names the

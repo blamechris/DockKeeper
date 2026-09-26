@@ -41,7 +41,7 @@ struct SeparateSpacesMenuCopyTests {
         #expect(lines.contains { $0.contains("System Settings") })
         // ADR-015: prevent, never relocate. The offer must say it can't move
         // a Dock back.
-        #expect(lines.contains { $0.contains("can\u{2019}t move it back") })
+        #expect(lines.contains { $0.contains("can\u{2019}t move the Dock back") })
     }
 
     @Test("While the decision is guarding, the message makes no active-protection claim")
@@ -51,7 +51,7 @@ struct SeparateSpacesMenuCopyTests {
         // appended or reworded into it fails here (coordinator review of #104).
         let message = PinOutcome.unsupportedSeparateSpaces.userMessage(guardDecision: guarding)
         #expect(message == "macOS can\u{2019}t pin a bottom Dock while \u{201C}Displays have separate Spaces\u{201D} is on.\n"
-            + "\u{201C}Keep a bottom Dock on my preferred display\u{201D} is on \u{2014} its live status is in Preferences \u{203A} Advanced.\n"
+            + "\u{201C}Keep a bottom Dock on my preferred display\u{201D} is on \u{2014} details in Preferences \u{203A} Advanced.\n"
             + "When active, it blocks new summons on guarded edges; it can\u{2019}t move the Dock back.\n"
             + "Other options: a Left or Right edge, or turn that setting off.")
     }
@@ -91,7 +91,7 @@ struct SeparateSpacesMenuCopyTests {
                 // A character bound, not a rendering check: real-menu fit is
                 // verified by eye on the packaged build, not here.
                 #expect(line.count <= 110, "too long to render: \(line)")
-                for claim in ["is pinned", "keeping it", "is keeping", "is blocking", "is holding"] {
+                for claim in ["is pinned", "keeping it", "is keeping", "is blocking", "is holding", "live status", "is active"] {
                     #expect(!line.contains(claim), "ADR-015 / no active claim: \(line)")
                 }
             }
