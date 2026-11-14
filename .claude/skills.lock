@@ -157,8 +157,8 @@
       ]
     },
     "visual-brief": {
-      "hash": "a85c799",
-      "installed": "2026-07-30",
+      "hash": "4a39c94",
+      "installed": "2026-11-03",
       "profileHash": "138d576",
       "targets": [
         "claude",
