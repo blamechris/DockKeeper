@@ -62,7 +62,7 @@ Version is stamped, not bumped by a tool: `VERSION=x.y.z Scripts/build-app.sh re
 
 Generate the release notes for the changes since `--from` (default: previous release tag). **Prefer the `/changelog` skill** — invoke it for the range (`/changelog --from=<prev tag> --version=<new version>`) and use its rendered section as the release notes. If `/changelog` is not installed, fall back to generating notes directly from merged PR titles / commit subjects in range.
 
-Release notes live in the GitHub release body (there is no CHANGELOG.md). Use `/changelog` to draft it; user-facing behavior only, per checklist §2.
+Release notes live in the root `CHANGELOG.md` (Keep a Changelog): move *Unreleased* into a new dated `[x.y.z]` section and update the link-reference block at the foot of the file, per checklist §2. The GitHub release body draws from it; use `/changelog` to draft it. User-facing behavior only.
 
 ### 5. Build the release artifacts
 
@@ -102,6 +102,8 @@ If `--dry-run`, skip. Otherwise tag the exact released commit:
 
 - **Bump landed via PR:** the version bump is already in the release branch's history — create the annotated tag on that merged commit and push **only the tag**.
 - **Direct-push repos:** commit the version bump if the bump tool did not, create the annotated tag, and push the commit and the tag together.
+
+**Stage explicit paths.** When you commit the bump yourself, `git status --short` first and then `git add` the version files **by name** — a bump tool often leaves more in the tree than the version (a lockfile, a generated header), and the working copy is shared with concurrent sessions. Never `git add -A`, `git add .`, `git add -u`, `git add <dir>/`, or `git commit -a`; a release commit that carries someone else's file is published, tagged, and unfixable. `-u` is not the safe one: it restages every *tracked* file whose worktree copy differs, including files a clean/smudge filter rewrote without you touching them — that is how `git add -u` turned a tracked 21KB `.docx` into a git-lfs pointer and committed it as an edit. Re-check `git branch --show-current` against the release branch immediately before staging: HEAD is global to the working copy, so the checkout you made at step 1 proves nothing now.
 
 `origin main`. Direct pushes are allowed (no branch protection), but the working practice is branch + PR; push the tag once the release commit is on `main`.
 
