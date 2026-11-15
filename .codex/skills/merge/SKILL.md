@@ -118,13 +118,14 @@ assert_branch() {
   }
 }
 
-assert_branch || exit 1   # before the bump writes anything
-bash scripts/bump-version.sh
+assert_branch || exit 1   # before anything is written
+# No bump script exists. Edit by hand: Resources/Info.plist (CFBundleShortVersionString and
+# CFBundleVersion) and Casks/dockkeeper.rb (version and sha256 — release-checklist §2–§5 owns the values).
 
 assert_branch || exit 1   # again before staging
 git status --short
-git add [version files, named individually]
-NEXT=[read new version]
+git add Resources/Info.plist Casks/dockkeeper.rb
+NEXT=[the new CFBundleShortVersionString]
 git commit -m "chore: bump version to v${NEXT}"
 git push -u origin chore/bump-version
 gh pr create --title "chore: bump version to v${NEXT}" --body "Patch version bump."
@@ -163,8 +164,7 @@ git pull --ff-only origin main
 
 Verify local version matches the auto-versioned remote:
 ```bash
-# /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist
-echo "Local version: $(node -p \"require('./packages/server/package.json').version\")"
+echo "Local version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
 ```
 
 #### Step 3b–N: [Repo-specific build/deploy steps]
@@ -183,7 +183,7 @@ Report verified merged PRs and exact blockers from the ledger. For ordinary deve
 | #123 | feat: add feature | Merged |
 | #456 | fix: resolve crash | Skipped (conflict) |
 
-**Version:** v1.2.3 → v1.2.4
+**Version:** unchanged — merging bumps nothing (the version is set by hand at release time); report `vX → vY` only when the merged PR itself carried a version change
 **Post-merge:** `swift build -c release` + `swift test` + ad-hoc bundle assembly green on main
 ```
 
