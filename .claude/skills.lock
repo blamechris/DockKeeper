@@ -90,8 +90,8 @@
       ]
     },
     "merge": {
-      "hash": "2ea3022",
-      "installed": "2026-11-14",
+      "hash": "d34b05d",
+      "installed": "2026-07-25",
       "profileHash": "138d576",
       "targets": [
         "claude",
